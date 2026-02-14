@@ -10,13 +10,17 @@ from .lexer import (
     tokenize, Token,
     TOK_KEYWORD, TOK_IDENT, TOK_NUMBER, TOK_SYMBOL, TOK_ATTR, TOK_EOF,
 )
-from .parser import Parser, IdlFile, Method, Notification, Param
-from .emitter import emit_server_h, emit_server_cpp, emit_client_h, emit_client_cpp
+from .parser import (
+    Parser, IdlFile, Method, Notification, Param,
+    EnumValue, EnumDef, StructField, StructDef,
+)
+from .emitter import emit_server_h, emit_server_cpp, emit_client_h, emit_client_cpp, emit_types_h
 
 __all__ = [
     "TYPE_MAP", "cpp_type", "fnv1a_32",
     "tokenize", "Token",
     "TOK_KEYWORD", "TOK_IDENT", "TOK_NUMBER", "TOK_SYMBOL", "TOK_ATTR", "TOK_EOF",
     "Parser", "IdlFile", "Method", "Notification", "Param",
-    "emit_server_h", "emit_server_cpp", "emit_client_h", "emit_client_cpp",
+    "EnumValue", "EnumDef", "StructField", "StructDef",
+    "emit_server_h", "emit_server_cpp", "emit_client_h", "emit_client_cpp", "emit_types_h",
 ]

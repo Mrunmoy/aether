@@ -29,20 +29,20 @@ public:
     using ServiceBase::ServiceBase;
 
     // Expose sendNotify for testing notifications.
-    int testNotifyDeviceConnected(uint32_t deviceId)
+    int testNotifyDeviceConnected(DeviceInfo info)
     {
-        std::vector<uint8_t> payload(sizeof(deviceId));
-        std::memcpy(payload.data(), &deviceId, sizeof(deviceId));
-        return sendNotify(DeviceMonitor::kServiceId, 1, payload.data(),
-                          static_cast<uint32_t>(payload.size()));
+        std::vector<uint8_t> payload(sizeof(info));
+        std::memcpy(payload.data(), &info, sizeof(info));
+        return sendNotify(DeviceMonitor::kServiceId, DeviceMonitor::kDeviceConnected,
+                          payload.data(), static_cast<uint32_t>(payload.size()));
     }
 
     int testNotifyDeviceDisconnected(uint32_t deviceId)
     {
         std::vector<uint8_t> payload(sizeof(deviceId));
         std::memcpy(payload.data(), &deviceId, sizeof(deviceId));
-        return sendNotify(DeviceMonitor::kServiceId, 2, payload.data(),
-                          static_cast<uint32_t>(payload.size()));
+        return sendNotify(DeviceMonitor::kServiceId, DeviceMonitor::kDeviceDisconnected,
+                          payload.data(), static_cast<uint32_t>(payload.size()));
     }
 
 protected:
@@ -51,20 +51,24 @@ protected:
     {
         switch (messageId)
         {
-        case 1: // GetDeviceCount
+        case DeviceMonitor::kGetDeviceCount:
         {
             uint32_t count = 3;
             response->resize(sizeof(count));
             std::memcpy(response->data(), &count, sizeof(count));
             return IPC_SUCCESS;
         }
-        case 2: // GetDeviceStatus
+        case DeviceMonitor::kGetDeviceInfo:
         {
             uint32_t deviceId;
             std::memcpy(&deviceId, request.data(), sizeof(deviceId));
-            uint32_t status = (deviceId == 42) ? 1u : 0u;
-            response->resize(sizeof(status));
-            std::memcpy(response->data(), &status, sizeof(status));
+            DeviceInfo info{};
+            info.id = deviceId;
+            info.type = (deviceId == 42) ? USB : Unknown;
+            info.vendorId = 0x1234;
+            info.productId = 0x5678;
+            response->resize(sizeof(info));
+            std::memcpy(response->data(), &info, sizeof(info));
             return IPC_SUCCESS;
         }
         default:
@@ -83,16 +87,16 @@ public:
     std::mutex mtx;
     std::condition_variable cv;
 
-    uint32_t lastConnectedId = 0;
+    DeviceInfo lastConnectedInfo{};
     uint32_t lastDisconnectedId = 0;
     std::atomic<int> connectCount{0};
     std::atomic<int> disconnectCount{0};
 
 protected:
-    void onDeviceConnected(uint32_t deviceId) override
+    void onDeviceConnected(DeviceInfo info) override
     {
         std::lock_guard<std::mutex> lock(mtx);
-        lastConnectedId = deviceId;
+        lastConnectedInfo = info;
         connectCount++;
         cv.notify_all();
     }
@@ -148,10 +152,10 @@ TEST(CodeGenClientTest, GetDeviceCount)
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// GetDeviceStatus — typed client call with [in] and [out]
+// GetDeviceInfo — typed client call with [in] and [out] struct
 // ═════════════════════════════════════════════════════════════════════
 
-TEST(CodeGenClientTest, GetDeviceStatus)
+TEST(CodeGenClientTest, GetDeviceInfo)
 {
     DeviceMonitorStub svc(SVC_NAME);
     ASSERT_TRUE(svc.start());
@@ -161,23 +165,27 @@ TEST(CodeGenClientTest, GetDeviceStatus)
     ASSERT_TRUE(client.connect());
     settle();
 
-    uint32_t status = 0;
-    int rc = client.GetDeviceStatus(42, &status);
+    DeviceInfo info{};
+    int rc = client.GetDeviceInfo(42, &info);
 
     ASSERT_EQ(rc, IPC_SUCCESS);
-    EXPECT_EQ(status, 1u);
+    EXPECT_EQ(info.id, 42u);
+    EXPECT_EQ(info.type, USB);
+    EXPECT_EQ(info.vendorId, 0x1234u);
+    EXPECT_EQ(info.productId, 0x5678u);
 
     // Unknown device
-    rc = client.GetDeviceStatus(99, &status);
+    rc = client.GetDeviceInfo(99, &info);
     ASSERT_EQ(rc, IPC_SUCCESS);
-    EXPECT_EQ(status, 0u);
+    EXPECT_EQ(info.id, 99u);
+    EXPECT_EQ(info.type, Unknown);
 
     client.disconnect();
     svc.stop();
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// DeviceConnected notification via typed callback
+// DeviceConnected notification via typed callback (struct payload)
 // ═════════════════════════════════════════════════════════════════════
 
 TEST(CodeGenClientTest, DeviceConnectedNotification)
@@ -190,7 +198,8 @@ TEST(CodeGenClientTest, DeviceConnectedNotification)
     ASSERT_TRUE(client.connect());
     settle();
 
-    ASSERT_EQ(svc.testNotifyDeviceConnected(7), IPC_SUCCESS);
+    DeviceInfo info{7, USB, 0x1111, 0x2222};
+    ASSERT_EQ(svc.testNotifyDeviceConnected(info), IPC_SUCCESS);
 
     {
         std::unique_lock<std::mutex> lock(client.mtx);
@@ -198,7 +207,8 @@ TEST(CodeGenClientTest, DeviceConnectedNotification)
                                         [&] { return client.connectCount > 0; }));
     }
 
-    EXPECT_EQ(client.lastConnectedId, 7u);
+    EXPECT_EQ(client.lastConnectedInfo.id, 7u);
+    EXPECT_EQ(client.lastConnectedInfo.type, USB);
 
     client.disconnect();
     svc.stop();

@@ -31,6 +31,20 @@ class TestServerEmitter:
         expected = f"0x{fnv1a_32('DeviceMonitor'):08x}u"
         assert expected in h
 
+    def test_method_enum(self, idl):
+        """Header contains MethodId enum with correct entries."""
+        h = emit_server_h(idl)
+        assert "enum MethodId : uint32_t" in h
+        assert "kGetDeviceCount = 1," in h
+        assert "kGetDeviceStatus = 2," in h
+
+    def test_notify_enum(self, idl):
+        """Header contains NotifyId enum with correct entries."""
+        h = emit_server_h(idl)
+        assert "enum NotifyId : uint32_t" in h
+        assert "kDeviceConnected = 1," in h
+        assert "kDeviceDisconnected = 2," in h
+
     def test_handler_signatures(self, idl):
         """Pure virtual handler methods have correct signatures."""
         h = emit_server_h(idl)
@@ -53,10 +67,10 @@ class TestServerEmitter:
         """Implementation has correct switch cases and marshal/unmarshal."""
         cpp = emit_server_cpp(idl)
 
-        # Switch on messageId with correct case labels.
+        # Switch on messageId with enum case labels.
         assert "switch (messageId)" in cpp
-        assert "case 1: // GetDeviceCount" in cpp
-        assert "case 2: // GetDeviceStatus" in cpp
+        assert "case DeviceMonitor::kGetDeviceCount:" in cpp
+        assert "case DeviceMonitor::kGetDeviceStatus:" in cpp
         assert "return IPC_ERR_INVALID_METHOD;" in cpp
 
         # GetDeviceCount: no [in] unmarshal, calls handler, marshals [out].
@@ -70,6 +84,6 @@ class TestServerEmitter:
         # Uses _rc to avoid name collision with user params.
         assert "int _rc = " in cpp
 
-        # Notification senders use sendNotify.
-        assert "sendNotify(kServiceId, 1," in cpp
-        assert "sendNotify(kServiceId, 2," in cpp
+        # Notification senders use enum names in sendNotify.
+        assert "sendNotify(kServiceId, DeviceMonitor::kDeviceConnected," in cpp
+        assert "sendNotify(kServiceId, DeviceMonitor::kDeviceDisconnected," in cpp

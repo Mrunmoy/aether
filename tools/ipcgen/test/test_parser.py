@@ -208,3 +208,147 @@ class TestParser:
                     int Get([in] uint32 val)
                 };
             """)
+
+    # ── Enum / struct parsing ────────────────────────────────────────
+
+    def test_enum_basic(self):
+        """Enum with explicit values parses correctly."""
+        idl = parse("""
+            enum DeviceType {
+                Unknown = 0,
+                USB = 1,
+                Bluetooth = 2,
+            };
+            service Foo {
+                [method=1]
+                int Get([in] uint32 x);
+            };
+        """)
+        assert len(idl.enums) == 1
+        e = idl.enums[0]
+        assert e.name == "DeviceType"
+        assert len(e.values) == 3
+        assert e.values[0].name == "Unknown"
+        assert e.values[0].value == 0
+        assert e.values[2].name == "Bluetooth"
+        assert e.values[2].value == 2
+
+    def test_struct_basic(self):
+        """Struct with scalar fields parses correctly."""
+        idl = parse("""
+            struct Point {
+                uint32 x;
+                uint32 y;
+            };
+            service Foo {
+                [method=1]
+                int Get([in] uint32 x);
+            };
+        """)
+        assert len(idl.structs) == 1
+        s = idl.structs[0]
+        assert s.name == "Point"
+        assert len(s.fields) == 2
+        assert s.fields[0].type_name == "uint32"
+        assert s.fields[0].name == "x"
+
+    def test_struct_with_enum_field(self):
+        """Struct can reference a previously defined enum."""
+        idl = parse("""
+            enum Color { Red = 0, Green = 1, Blue = 2, };
+            struct Pixel {
+                uint32 x;
+                uint32 y;
+                Color color;
+            };
+            service Foo {
+                [method=1]
+                int Get([in] uint32 x);
+            };
+        """)
+        assert idl.structs[0].fields[2].type_name == "Color"
+
+    def test_struct_with_struct_field(self):
+        """Struct can contain another struct (nested POD)."""
+        idl = parse("""
+            struct Point { uint32 x; uint32 y; };
+            struct Rect { Point topLeft; Point bottomRight; };
+            service Foo {
+                [method=1]
+                int Get([in] uint32 x);
+            };
+        """)
+        assert idl.structs[1].fields[0].type_name == "Point"
+
+    def test_enum_used_as_param(self):
+        """Enum type can be used as a method parameter."""
+        idl = parse("""
+            enum Color { Red = 0, Blue = 1, };
+            service Foo {
+                [method=1]
+                int SetColor([in] Color c);
+            };
+        """)
+        assert idl.methods[0].params[0].type_name == "Color"
+
+    def test_struct_used_as_out_param(self):
+        """Struct type can be used as an [out] pointer param."""
+        idl = parse("""
+            struct Info { uint32 id; uint32 status; };
+            service Foo {
+                [method=1]
+                int GetInfo([in] uint32 id, [out] Info* info);
+            };
+        """)
+        p = idl.methods[0].params[1]
+        assert p.type_name == "Info"
+        assert p.is_pointer is True
+        assert p.direction == "out"
+
+    def test_struct_in_notification(self):
+        """Struct type can be used as a notification [in] param."""
+        idl = parse("""
+            struct Info { uint32 id; uint32 status; };
+            service Foo {
+                [method=1]
+                int Get([in] uint32 x);
+            };
+            notifications Foo {
+                [notify=1]
+                void InfoChanged([in] Info info);
+            };
+        """)
+        assert idl.notifications[0].params[0].type_name == "Info"
+
+    def test_unknown_struct_field_type(self):
+        """Struct field with undefined type raises SyntaxError."""
+        with pytest.raises(SyntaxError, match="unknown type"):
+            parse("""
+                struct Bad { FakeType x; };
+                service Foo { [method=1] int Get([in] uint32 x); };
+            """)
+
+    def test_duplicate_type_name(self):
+        """Defining two enums with the same name raises SyntaxError."""
+        with pytest.raises(SyntaxError, match="already defined"):
+            parse("""
+                enum Foo { A = 0, };
+                enum Foo { B = 1, };
+                service Bar { [method=1] int Get([in] uint32 x); };
+            """)
+
+    def test_type_name_shadows_builtin(self):
+        """User type name matching a built-in type raises SyntaxError."""
+        with pytest.raises(SyntaxError, match="already defined"):
+            parse("""
+                enum uint32 { A = 0, };
+                service Foo { [method=1] int Get([in] uint32 x); };
+            """)
+
+    def test_empty_struct_rejected(self):
+        """Struct with no fields raises SyntaxError."""
+        with pytest.raises(SyntaxError, match="no fields"):
+            parse("""
+                struct Empty {};
+                service Foo { [method=1] int Get([in] uint32 x); };
+            """)

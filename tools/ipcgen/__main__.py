@@ -10,7 +10,7 @@ import os
 
 from .lexer import tokenize
 from .parser import Parser
-from .emitter import emit_server_h, emit_server_cpp, emit_client_h, emit_client_cpp
+from .emitter import emit_server_h, emit_server_cpp, emit_client_h, emit_client_cpp, emit_types_h
 from .types import fnv1a_32
 
 
@@ -32,12 +32,17 @@ def main():
     os.makedirs(server_dir, exist_ok=True)
     os.makedirs(client_dir, exist_ok=True)
 
-    files = [
+    files = []
+
+    if idl.enums or idl.structs:
+        files.append((args.outdir, f"{name}Types.h", emit_types_h(idl)))
+
+    files.extend([
         (server_dir, f"{name}.h",   emit_server_h(idl)),
         (server_dir, f"{name}.cpp", emit_server_cpp(idl)),
         (client_dir, f"{name}.h",   emit_client_h(idl)),
         (client_dir, f"{name}.cpp", emit_client_cpp(idl)),
-    ]
+    ])
 
     for directory, filename, content in files:
         path = os.path.join(directory, filename)

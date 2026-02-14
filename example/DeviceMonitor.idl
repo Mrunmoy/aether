@@ -1,16 +1,32 @@
+enum DeviceType
+{
+    Unknown = 0,
+    USB = 1,
+    Bluetooth = 2,
+    Network = 3,
+};
+
+struct DeviceInfo
+{
+    uint32 id;
+    DeviceType type;
+    uint32 vendorId;
+    uint32 productId;
+};
+
 service DeviceMonitor
 {
     [method=1]
     int GetDeviceCount([out] uint32* count);
 
     [method=2]
-    int GetDeviceStatus([in] uint32 deviceId, [out] uint32* status);
+    int GetDeviceInfo([in] uint32 deviceId, [out] DeviceInfo* info);
 };
 
 notifications DeviceMonitor
 {
     [notify=1]
-    void DeviceConnected([in] uint32 deviceId);
+    void DeviceConnected([in] DeviceInfo info);
 
     [notify=2]
     void DeviceDisconnected([in] uint32 deviceId);

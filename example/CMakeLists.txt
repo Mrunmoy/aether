@@ -15,6 +15,7 @@ add_executable(codegen_server_tests
 )
 target_include_directories(codegen_server_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/gen/server
+    ${CMAKE_CURRENT_SOURCE_DIR}/gen
 )
 target_link_libraries(codegen_server_tests PRIVATE ms-ipc GTest::gtest_main pthread)
 
@@ -24,6 +25,7 @@ add_executable(codegen_client_tests
 )
 target_include_directories(codegen_client_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/gen/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/gen
 )
 target_link_libraries(codegen_client_tests PRIVATE ms-ipc GTest::gtest_main pthread)
 

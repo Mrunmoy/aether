@@ -6,11 +6,35 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from .lexer import Token, TOK_KEYWORD, TOK_IDENT, TOK_SYMBOL, TOK_ATTR, TOK_EOF
+from .lexer import Token, TOK_KEYWORD, TOK_IDENT, TOK_NUMBER, TOK_SYMBOL, TOK_ATTR, TOK_EOF
 from .types import TYPE_MAP
 
 
 # ── AST nodes ────────────────────────────────────────────────────────
+
+@dataclass
+class EnumValue:
+    name: str
+    value: int
+
+
+@dataclass
+class EnumDef:
+    name: str
+    values: List['EnumValue']
+
+
+@dataclass
+class StructField:
+    type_name: str   # IDL type (e.g. "uint32", "DeviceType")
+    name: str
+
+
+@dataclass
+class StructDef:
+    name: str
+    fields: List['StructField']
+
 
 @dataclass
 class Param:
@@ -37,6 +61,8 @@ class Notification:
 @dataclass
 class IdlFile:
     service_name: str
+    enums: List[EnumDef] = field(default_factory=list)
+    structs: List[StructDef] = field(default_factory=list)
     methods: List[Method] = field(default_factory=list)
     notifications: List[Notification] = field(default_factory=list)
 
@@ -54,6 +80,7 @@ class Parser:
     def __init__(self, tokens: List[Token]):
         self.tokens = tokens
         self.pos = 0
+        self._user_types: set = set()
 
     # ── Token helpers ────────────────────────────────────────────────
 
@@ -83,14 +110,18 @@ class Parser:
 
         while self.peek().kind != TOK_EOF:
             tok = self.peek()
-            if tok.kind == TOK_KEYWORD and tok.value == "service":
+            if tok.kind == TOK_KEYWORD and tok.value == "enum":
+                idl.enums.append(self._parse_enum())
+            elif tok.kind == TOK_KEYWORD and tok.value == "struct":
+                idl.structs.append(self._parse_struct())
+            elif tok.kind == TOK_KEYWORD and tok.value == "service":
                 self._parse_service(idl)
             elif tok.kind == TOK_KEYWORD and tok.value == "notifications":
                 self._parse_notifications(idl)
             else:
                 raise SyntaxError(
-                    f"Line {tok.line}: expected 'service' or 'notifications', "
-                    f"got {tok.value!r}")
+                    f"Line {tok.line}: expected 'enum', 'struct', 'service', "
+                    f"or 'notifications', got {tok.value!r}")
 
         if not idl.service_name:
             raise SyntaxError("No service block found")
@@ -128,6 +159,61 @@ class Parser:
             idl.notifications.append(self._parse_notification())
         self.expect(TOK_SYMBOL, "}")
         self.expect(TOK_SYMBOL, ";")
+
+    # ── Enum / struct ──────────────────────────────────────────────────
+
+    def _parse_enum(self) -> EnumDef:
+        self.expect(TOK_KEYWORD, "enum")
+        name_tok = self.expect(TOK_IDENT)
+
+        if name_tok.value in self._user_types or name_tok.value in TYPE_MAP:
+            raise SyntaxError(
+                f"Line {name_tok.line}: type {name_tok.value!r} already defined")
+
+        self.expect(TOK_SYMBOL, "{")
+        values: List[EnumValue] = []
+        while self.peek().value != "}":
+            val_name_tok = self.expect(TOK_IDENT)
+            self.expect(TOK_SYMBOL, "=")
+            val_num_tok = self.expect(TOK_NUMBER)
+            values.append(EnumValue(name=val_name_tok.value,
+                                    value=int(val_num_tok.value)))
+            if self.peek().value == ",":
+                self.advance()  # consume optional trailing comma
+        self.expect(TOK_SYMBOL, "}")
+        self.expect(TOK_SYMBOL, ";")
+
+        self._user_types.add(name_tok.value)
+        return EnumDef(name=name_tok.value, values=values)
+
+    def _parse_struct(self) -> StructDef:
+        self.expect(TOK_KEYWORD, "struct")
+        name_tok = self.expect(TOK_IDENT)
+
+        if name_tok.value in self._user_types or name_tok.value in TYPE_MAP:
+            raise SyntaxError(
+                f"Line {name_tok.line}: type {name_tok.value!r} already defined")
+
+        self.expect(TOK_SYMBOL, "{")
+        fields: List[StructField] = []
+        while self.peek().value != "}":
+            type_tok = self.advance()
+            if type_tok.value not in TYPE_MAP and type_tok.value not in self._user_types:
+                raise SyntaxError(
+                    f"Line {type_tok.line}: unknown type {type_tok.value!r}")
+            field_name_tok = self.expect(TOK_IDENT)
+            self.expect(TOK_SYMBOL, ";")
+            fields.append(StructField(type_name=type_tok.value,
+                                      name=field_name_tok.value))
+        self.expect(TOK_SYMBOL, "}")
+        self.expect(TOK_SYMBOL, ";")
+
+        if not fields:
+            raise SyntaxError(
+                f"Line {name_tok.line}: struct {name_tok.value!r} has no fields")
+
+        self._user_types.add(name_tok.value)
+        return StructDef(name=name_tok.value, fields=fields)
 
     # ── Methods / notifications ──────────────────────────────────────
 
@@ -186,7 +272,7 @@ class Parser:
                 f"Line {attr_tok.line}: expected [in] or [out], got [{direction}]")
 
         type_tok = self.advance()
-        if type_tok.value not in TYPE_MAP:
+        if type_tok.value not in TYPE_MAP and type_tok.value not in self._user_types:
             raise SyntaxError(
                 f"Line {type_tok.line}: unknown type {type_tok.value!r}")
 

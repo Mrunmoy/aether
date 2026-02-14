@@ -30,6 +30,20 @@ class TestClientEmitter:
         assert "int GetDeviceCount(uint32_t *count, uint32_t timeoutMs = 2000);" in h
         assert "int GetDeviceStatus(uint32_t deviceId, uint32_t *status, uint32_t timeoutMs = 2000);" in h
 
+    def test_method_enum(self, idl):
+        """Header contains MethodId enum with correct entries."""
+        h = emit_client_h(idl)
+        assert "enum MethodId : uint32_t" in h
+        assert "kGetDeviceCount = 1," in h
+        assert "kGetDeviceStatus = 2," in h
+
+    def test_notify_enum(self, idl):
+        """Header contains NotifyId enum with correct entries."""
+        h = emit_client_h(idl)
+        assert "enum NotifyId : uint32_t" in h
+        assert "kDeviceConnected = 1," in h
+        assert "kDeviceDisconnected = 2," in h
+
     def test_notification_callbacks(self, idl):
         """Virtual notification callbacks with empty default body."""
         h = emit_client_h(idl)
@@ -48,12 +62,12 @@ class TestClientEmitter:
 
         # GetDeviceCount: empty request (no [in] params), unmarshals count.
         assert "std::vector<uint8_t> request;" in cpp
-        assert "call(kServiceId, 1, request," in cpp
+        assert "call(kServiceId, DeviceMonitor::kGetDeviceCount, request," in cpp
         assert "std::memcpy(count, response.data()," in cpp
 
         # GetDeviceStatus: marshals deviceId, unmarshals status.
         assert "std::memcpy(request.data(), &deviceId," in cpp
-        assert "call(kServiceId, 2, request," in cpp
+        assert "call(kServiceId, DeviceMonitor::kGetDeviceStatus, request," in cpp
 
         # Uses _rc to avoid name collision.
         assert "int _rc = call(" in cpp
@@ -63,7 +77,7 @@ class TestClientEmitter:
         cpp = emit_client_cpp(idl)
 
         assert "if (serviceId != kServiceId) return;" in cpp
-        assert "case 1: // DeviceConnected" in cpp
-        assert "case 2: // DeviceDisconnected" in cpp
+        assert "case DeviceMonitor::kDeviceConnected:" in cpp
+        assert "case DeviceMonitor::kDeviceDisconnected:" in cpp
         assert "onDeviceConnected(deviceId);" in cpp
         assert "onDeviceDisconnected(deviceId);" in cpp

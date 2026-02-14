@@ -87,6 +87,22 @@ class TestLexer:
         with pytest.raises(SyntaxError, match="unterminated attribute"):
             tokenize("[method=1")
 
+    def test_enum_struct_keywords(self):
+        """New keywords 'enum' and 'struct' are recognized."""
+        tokens = tokenize("enum struct")
+        kinds = [t.kind for t in tokens if t.kind != TOK_EOF]
+        assert kinds == [TOK_KEYWORD, TOK_KEYWORD]
+        values = [t.value for t in tokens if t.kind != TOK_EOF]
+        assert values == ["enum", "struct"]
+
+    def test_equals_symbol(self):
+        """Equals sign is recognized as a symbol."""
+        tokens = tokenize("Unknown = 0")
+        assert tokens[0].kind == TOK_IDENT
+        assert tokens[1].kind == TOK_SYMBOL
+        assert tokens[1].value == "="
+        assert tokens[2].kind == TOK_NUMBER
+
     def test_unexpected_character(self):
         """Unexpected characters raise SyntaxError."""
         with pytest.raises(SyntaxError, match="unexpected character"):

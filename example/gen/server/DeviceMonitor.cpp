@@ -10,7 +10,7 @@ int DeviceMonitor::onRequest(uint32_t messageId,
 {
     switch (messageId)
     {
-    case 1: // GetDeviceCount
+    case DeviceMonitor::kGetDeviceCount:
     {
         uint32_t count;
         int _rc = handleGetDeviceCount(&count);
@@ -18,14 +18,14 @@ int DeviceMonitor::onRequest(uint32_t messageId,
         std::memcpy(response->data(), &count, sizeof(count));
         return _rc;
     }
-    case 2: // GetDeviceStatus
+    case DeviceMonitor::kGetDeviceInfo:
     {
         uint32_t deviceId;
         std::memcpy(&deviceId, request.data() + 0, sizeof(deviceId));
-        uint32_t status;
-        int _rc = handleGetDeviceStatus(deviceId, &status);
-        response->resize(sizeof(status));
-        std::memcpy(response->data(), &status, sizeof(status));
+        DeviceInfo info;
+        int _rc = handleGetDeviceInfo(deviceId, &info);
+        response->resize(sizeof(info));
+        std::memcpy(response->data(), &info, sizeof(info));
         return _rc;
     }
     default:
@@ -33,11 +33,11 @@ int DeviceMonitor::onRequest(uint32_t messageId,
     }
 }
 
-int DeviceMonitor::notifyDeviceConnected(uint32_t deviceId)
+int DeviceMonitor::notifyDeviceConnected(DeviceInfo info)
 {
-    std::vector<uint8_t> payload(sizeof(deviceId));
-    std::memcpy(payload.data(), &deviceId, sizeof(deviceId));
-    return sendNotify(kServiceId, 1, payload.data(),
+    std::vector<uint8_t> payload(sizeof(info));
+    std::memcpy(payload.data(), &info, sizeof(info));
+    return sendNotify(kServiceId, DeviceMonitor::kDeviceConnected, payload.data(),
                       static_cast<uint32_t>(payload.size()));
 }
 
@@ -45,7 +45,7 @@ int DeviceMonitor::notifyDeviceDisconnected(uint32_t deviceId)
 {
     std::vector<uint8_t> payload(sizeof(deviceId));
     std::memcpy(payload.data(), &deviceId, sizeof(deviceId));
-    return sendNotify(kServiceId, 2, payload.data(),
+    return sendNotify(kServiceId, DeviceMonitor::kDeviceDisconnected, payload.data(),
                       static_cast<uint32_t>(payload.size()));
 }
 

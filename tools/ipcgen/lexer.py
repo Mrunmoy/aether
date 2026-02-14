@@ -14,7 +14,7 @@ TOK_ATTR    = "ATTR"     # e.g. [method=1], [in], [out], [notify=2]
 TOK_EOF     = "EOF"
 
 # Words treated as keywords by the parser.
-KEYWORDS = {"service", "notifications", "int", "void"}
+KEYWORDS = {"service", "notifications", "int", "void", "enum", "struct"}
 
 
 @dataclass
@@ -74,7 +74,7 @@ def tokenize(text: str) -> List[Token]:
             continue
 
         # Symbols
-        if text[i] in "{}();,*":
+        if text[i] in "{}();,*=":
             tokens.append(Token(TOK_SYMBOL, text[i], line))
             i += 1
             continue

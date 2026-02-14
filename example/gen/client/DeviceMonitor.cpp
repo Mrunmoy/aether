@@ -9,7 +9,7 @@ int DeviceMonitor::GetDeviceCount(uint32_t *count, uint32_t timeoutMs)
     std::vector<uint8_t> request;
 
     std::vector<uint8_t> response;
-    int _rc = call(kServiceId, 1, request, &response, timeoutMs);
+    int _rc = call(kServiceId, DeviceMonitor::kGetDeviceCount, request, &response, timeoutMs);
 
     if (_rc == IPC_SUCCESS && response.size() >= sizeof(*count))
     {
@@ -19,18 +19,18 @@ int DeviceMonitor::GetDeviceCount(uint32_t *count, uint32_t timeoutMs)
     return _rc;
 }
 
-int DeviceMonitor::GetDeviceStatus(uint32_t deviceId, uint32_t *status, uint32_t timeoutMs)
+int DeviceMonitor::GetDeviceInfo(uint32_t deviceId, DeviceInfo *info, uint32_t timeoutMs)
 {
     std::vector<uint8_t> request(sizeof(deviceId));
     std::memcpy(request.data(), &deviceId, sizeof(deviceId));
 
     std::vector<uint8_t> response;
-    int _rc = call(kServiceId, 2, request, &response, timeoutMs);
+    int _rc = call(kServiceId, DeviceMonitor::kGetDeviceInfo, request, &response, timeoutMs);
 
-    if (_rc == IPC_SUCCESS && response.size() >= sizeof(*status))
+    if (_rc == IPC_SUCCESS && response.size() >= sizeof(*info))
     {
-        if (status)
-            std::memcpy(status, response.data(), sizeof(*status));
+        if (info)
+            std::memcpy(info, response.data(), sizeof(*info));
     }
     return _rc;
 }
@@ -42,14 +42,14 @@ void DeviceMonitor::onNotification(uint32_t serviceId, uint32_t messageId,
 
     switch (messageId)
     {
-    case 1: // DeviceConnected
+    case DeviceMonitor::kDeviceConnected:
     {
-        uint32_t deviceId;
-        std::memcpy(&deviceId, payload.data(), sizeof(deviceId));
-        onDeviceConnected(deviceId);
+        DeviceInfo info;
+        std::memcpy(&info, payload.data(), sizeof(info));
+        onDeviceConnected(info);
         break;
     }
-    case 2: // DeviceDisconnected
+    case DeviceMonitor::kDeviceDisconnected:
     {
         uint32_t deviceId;
         std::memcpy(&deviceId, payload.data(), sizeof(deviceId));

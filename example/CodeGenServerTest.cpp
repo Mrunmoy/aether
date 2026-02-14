@@ -34,9 +34,12 @@ protected:
         return IPC_SUCCESS;
     }
 
-    int handleGetDeviceStatus(uint32_t deviceId, uint32_t *status) override
+    int handleGetDeviceInfo(uint32_t deviceId, DeviceInfo *info) override
     {
-        *status = (deviceId == 42) ? 1u : 0u;
+        info->id = deviceId;
+        info->type = (deviceId == 42) ? USB : Unknown;
+        info->vendorId = 0x1234;
+        info->productId = 0x5678;
         return IPC_SUCCESS;
     }
 };
@@ -75,7 +78,7 @@ TEST(CodeGenServerTest, GetDeviceCount)
     // Empty request for GetDeviceCount (no [in] params)
     std::vector<uint8_t> request;
     std::vector<uint8_t> response;
-    int rc = client.call(DeviceMonitor::kServiceId, 1, request, &response);
+    int rc = client.call(DeviceMonitor::kServiceId, DeviceMonitor::kGetDeviceCount, request, &response);
 
     ASSERT_EQ(rc, IPC_SUCCESS);
     ASSERT_EQ(response.size(), sizeof(uint32_t));
@@ -89,10 +92,10 @@ TEST(CodeGenServerTest, GetDeviceCount)
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// GetDeviceStatus — raw client sends deviceId=42, gets status=1
+// GetDeviceInfo — raw client sends deviceId=42, gets DeviceInfo back
 // ═════════════════════════════════════════════════════════════════════
 
-TEST(CodeGenServerTest, GetDeviceStatus)
+TEST(CodeGenServerTest, GetDeviceInfo)
 {
     TestDeviceMonitor svc(SVC_NAME);
     ASSERT_TRUE(svc.start());
@@ -108,14 +111,17 @@ TEST(CodeGenServerTest, GetDeviceStatus)
     std::memcpy(request.data(), &deviceId, sizeof(deviceId));
 
     std::vector<uint8_t> response;
-    int rc = client.call(DeviceMonitor::kServiceId, 2, request, &response);
+    int rc = client.call(DeviceMonitor::kServiceId, DeviceMonitor::kGetDeviceInfo, request, &response);
 
     ASSERT_EQ(rc, IPC_SUCCESS);
-    ASSERT_EQ(response.size(), sizeof(uint32_t));
+    ASSERT_EQ(response.size(), sizeof(DeviceInfo));
 
-    uint32_t status;
-    std::memcpy(&status, response.data(), sizeof(status));
-    EXPECT_EQ(status, 1u);
+    DeviceInfo info;
+    std::memcpy(&info, response.data(), sizeof(info));
+    EXPECT_EQ(info.id, 42u);
+    EXPECT_EQ(info.type, USB);
+    EXPECT_EQ(info.vendorId, 0x1234u);
+    EXPECT_EQ(info.productId, 0x5678u);
 
     client.disconnect();
     svc.stop();
@@ -160,7 +166,8 @@ TEST(CodeGenServerTest, DeviceConnectedNotification)
     ASSERT_TRUE(client.connect());
     settle();
 
-    ASSERT_EQ(svc.notifyDeviceConnected(7), IPC_SUCCESS);
+    DeviceInfo info{7, USB, 0x1111, 0x2222};
+    ASSERT_EQ(svc.notifyDeviceConnected(info), IPC_SUCCESS);
 
     {
         std::unique_lock<std::mutex> lock(client.mtx);
@@ -169,12 +176,13 @@ TEST(CodeGenServerTest, DeviceConnectedNotification)
     }
 
     EXPECT_EQ(client.lastServiceId, DeviceMonitor::kServiceId);
-    EXPECT_EQ(client.lastMessageId, 1u);
-    ASSERT_EQ(client.lastPayload.size(), sizeof(uint32_t));
+    EXPECT_EQ(client.lastMessageId, DeviceMonitor::kDeviceConnected);
+    ASSERT_EQ(client.lastPayload.size(), sizeof(DeviceInfo));
 
-    uint32_t deviceId;
-    std::memcpy(&deviceId, client.lastPayload.data(), sizeof(deviceId));
-    EXPECT_EQ(deviceId, 7u);
+    DeviceInfo received;
+    std::memcpy(&received, client.lastPayload.data(), sizeof(received));
+    EXPECT_EQ(received.id, 7u);
+    EXPECT_EQ(received.type, USB);
 
     client.disconnect();
     svc.stop();
@@ -202,7 +210,7 @@ TEST(CodeGenServerTest, DeviceDisconnectedNotification)
                                         [&] { return client.notifyCount > 0; }));
     }
 
-    EXPECT_EQ(client.lastMessageId, 2u);
+    EXPECT_EQ(client.lastMessageId, DeviceMonitor::kDeviceDisconnected);
 
     uint32_t deviceId;
     std::memcpy(&deviceId, client.lastPayload.data(), sizeof(deviceId));
@@ -258,7 +266,7 @@ TEST(CodeGenServerTest, RunLoop_Dispatch)
     // GetDeviceCount via RunLoop-driven server
     std::vector<uint8_t> request;
     std::vector<uint8_t> response;
-    int rc = client.call(DeviceMonitor::kServiceId, 1, request, &response);
+    int rc = client.call(DeviceMonitor::kServiceId, DeviceMonitor::kGetDeviceCount, request, &response);
 
     ASSERT_EQ(rc, IPC_SUCCESS);
     ASSERT_EQ(response.size(), sizeof(uint32_t));
