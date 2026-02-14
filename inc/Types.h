@@ -3,51 +3,55 @@
 #include <cstdint>
 #include <spsc/RingBuffer.h>
 
-namespace ms::ipc {
+namespace ms::ipc
+{
 
-// ── Protocol ────────────────────────────────────────────────────
+    // ── Protocol ────────────────────────────────────────────────────
 
-constexpr uint16_t kProtocolVersion = 1;
-constexpr uint32_t kRingSize = 256 * 1024;  // 256KB per direction
+    constexpr uint16_t kProtocolVersion = 1;
+    constexpr uint32_t kRingSize = 256 * 1024; // 256KB per direction
 
-// Ring buffer type used for IPC data plane.
-using IpcRing = ms::spsc::ByteRingBuffer<kRingSize>;
+    // Ring buffer type used for IPC data plane.
+    using IpcRing = ms::spsc::ByteRingBuffer<kRingSize>;
 
-// ── Error Codes ─────────────────────────────────────────────────
-// Negative = framework, 0 = success, positive = user-defined.
+    // ── Error Codes ─────────────────────────────────────────────────
+    // Negative = framework, 0 = success, positive = user-defined.
 
-enum IpcError : int {
-    IPC_SUCCESS              =  0,
-    IPC_ERR_DISCONNECTED     = -1,
-    IPC_ERR_TIMEOUT          = -2,
-    IPC_ERR_INVALID_SERVICE  = -3,
-    IPC_ERR_INVALID_METHOD   = -4,
-    IPC_ERR_VERSION_MISMATCH = -5,
-    IPC_ERR_RING_FULL        = -6,
-    IPC_ERR_STOPPED          = -7,
-};
+    enum IpcError : int
+    {
+        IPC_SUCCESS = 0,
+        IPC_ERR_DISCONNECTED = -1,
+        IPC_ERR_TIMEOUT = -2,
+        IPC_ERR_INVALID_SERVICE = -3,
+        IPC_ERR_INVALID_METHOD = -4,
+        IPC_ERR_VERSION_MISMATCH = -5,
+        IPC_ERR_RING_FULL = -6,
+        IPC_ERR_STOPPED = -7,
+    };
 
-// ── Frame Header (24 bytes) ─────────────────────────────────────
-// All multi-byte fields are little-endian on the wire.
+    // ── Frame Header (24 bytes) ─────────────────────────────────────
+    // All multi-byte fields are little-endian on the wire.
 
-struct FrameHeader {
-    uint16_t version;
-    uint16_t flags;
-    uint32_t serviceId;
-    uint32_t messageId;
-    uint32_t seq;
-    uint32_t payloadBytes;
-    uint32_t aux;
-};
+    struct FrameHeader
+    {
+        uint16_t version;
+        uint16_t flags;
+        uint32_t serviceId;
+        uint32_t messageId;
+        uint32_t seq;
+        uint32_t payloadBytes;
+        uint32_t aux;
+    };
 
-static_assert(sizeof(FrameHeader) == 24, "FrameHeader must be 24 bytes");
+    static_assert(sizeof(FrameHeader) == 24, "FrameHeader must be 24 bytes");
 
-// ── Frame Flags ─────────────────────────────────────────────────
+    // ── Frame Flags ─────────────────────────────────────────────────
 
-enum FrameFlags : uint16_t {
-    FRAME_REQUEST  = 0x0001,
-    FRAME_RESPONSE = 0x0002,
-    FRAME_NOTIFY   = 0x0004,
-};
+    enum FrameFlags : uint16_t
+    {
+        FRAME_REQUEST = 0x0001,
+        FRAME_RESPONSE = 0x0002,
+        FRAME_NOTIFY = 0x0004,
+    };
 
 } // namespace ms::ipc

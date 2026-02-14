@@ -21,8 +21,7 @@ struct AcceptThread
 
     explicit AcceptThread(int fd) : listenFd(fd)
     {
-        thread = std::thread([this]
-                             { conn = acceptConnection(listenFd); });
+        thread = std::thread([this] { conn = acceptConnection(listenFd); });
     }
 
     void join()
@@ -117,8 +116,7 @@ TEST(ConnectionTest, VersionMismatch)
 
     // Server accept thread
     Connection serverConn;
-    std::thread serverThread([&]
-                             { serverConn = acceptConnection(srv); });
+    std::thread serverThread([&] { serverConn = acceptConnection(srv); });
 
     // Manual client handshake with wrong version.
     int clientFd = clientSocket(SVC_NAME);
@@ -156,8 +154,7 @@ TEST(ConnectionTest, MultipleClients)
 
     for (int i = 0; i < N; ++i)
     {
-        std::thread serverThread([&, i]
-                                 { serverConns[i] = acceptConnection(srv); });
+        std::thread serverThread([&, i] { serverConns[i] = acceptConnection(srv); });
 
         clientConns[i] = connectToServer(SVC_NAME);
         serverThread.join();

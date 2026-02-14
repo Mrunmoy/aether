@@ -60,8 +60,7 @@ namespace ms::ipc
         }
 
         // 3. mmap the shared memory.
-        conn.shmBase = mmap(nullptr, kShmSize, PROT_READ | PROT_WRITE,
-                            MAP_SHARED, conn.shmFd, 0);
+        conn.shmBase = mmap(nullptr, kShmSize, PROT_READ | PROT_WRITE, MAP_SHARED, conn.shmFd, 0);
         if (conn.shmBase == MAP_FAILED)
         {
             conn.shmBase = nullptr;
@@ -123,7 +122,9 @@ namespace ms::ipc
         }
 
         // 4. Determine shared memory size via fstat.
-        struct stat st{};
+        struct stat st
+        {
+        };
         if (fstat(conn.shmFd, &st) != 0 || st.st_size < static_cast<off_t>(kShmSize))
         {
             conn.close();
@@ -131,8 +132,7 @@ namespace ms::ipc
         }
 
         // 5. mmap the shared memory.
-        conn.shmBase = mmap(nullptr, kShmSize, PROT_READ | PROT_WRITE,
-                            MAP_SHARED, conn.shmFd, 0);
+        conn.shmBase = mmap(nullptr, kShmSize, PROT_READ | PROT_WRITE, MAP_SHARED, conn.shmFd, 0);
         if (conn.shmBase == MAP_FAILED)
         {
             conn.shmBase = nullptr;

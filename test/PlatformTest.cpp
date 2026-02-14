@@ -15,13 +15,15 @@ using namespace ms::ipc::platform;
 // UDS Tests
 // ═════════════════════════════════════════════════════════════════════
 
-TEST(PlatformTest, ServerSocketCreation) {
+TEST(PlatformTest, ServerSocketCreation)
+{
     int fd = serverSocket(SOCK_NAME);
     ASSERT_GE(fd, 0);
     closeFd(fd);
 }
 
-TEST(PlatformTest, ClientConnects) {
+TEST(PlatformTest, ClientConnects)
+{
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
@@ -32,7 +34,8 @@ TEST(PlatformTest, ClientConnects) {
     closeFd(srv);
 }
 
-TEST(PlatformTest, AcceptClient) {
+TEST(PlatformTest, AcceptClient)
+{
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
@@ -47,7 +50,8 @@ TEST(PlatformTest, AcceptClient) {
     closeFd(srv);
 }
 
-TEST(PlatformTest, SendRecvSignal) {
+TEST(PlatformTest, SendRecvSignal)
+{
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
@@ -70,7 +74,8 @@ TEST(PlatformTest, SendRecvSignal) {
     closeFd(srv);
 }
 
-TEST(PlatformTest, SendRecvFd) {
+TEST(PlatformTest, SendRecvFd)
+{
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
@@ -84,8 +89,7 @@ TEST(PlatformTest, SendRecvFd) {
     int shmFd = shmCreate(4096);
     ASSERT_GE(shmFd, 0);
 
-    void* writerMap = mmap(nullptr, 4096, PROT_READ | PROT_WRITE,
-                           MAP_SHARED, shmFd, 0);
+    void *writerMap = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
     ASSERT_NE(writerMap, MAP_FAILED);
     uint32_t magic = 0xDEADBEEF;
     std::memcpy(writerMap, &magic, sizeof(magic));
@@ -103,7 +107,7 @@ TEST(PlatformTest, SendRecvFd) {
     EXPECT_EQ(receivedVersion, 42);
 
     // mmap the received FD and verify the magic value is there.
-    void* readerMap = mmap(nullptr, 4096, PROT_READ, MAP_SHARED, receivedFd, 0);
+    void *readerMap = mmap(nullptr, 4096, PROT_READ, MAP_SHARED, receivedFd, 0);
     ASSERT_NE(readerMap, MAP_FAILED);
     uint32_t readMagic = 0;
     std::memcpy(&readMagic, readerMap, sizeof(readMagic));
@@ -118,7 +122,8 @@ TEST(PlatformTest, SendRecvFd) {
     closeFd(srv);
 }
 
-TEST(PlatformTest, SendRecvFdNoAncillaryData) {
+TEST(PlatformTest, SendRecvFdNoAncillaryData)
+{
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
@@ -146,7 +151,8 @@ TEST(PlatformTest, SendRecvFdNoAncillaryData) {
     closeFd(srv);
 }
 
-TEST(PlatformTest, ConnectToNonexistent) {
+TEST(PlatformTest, ConnectToNonexistent)
+{
     int fd = clientSocket("no_such_service_exists");
     EXPECT_EQ(fd, -1);
 }
@@ -155,18 +161,19 @@ TEST(PlatformTest, ConnectToNonexistent) {
 // Shared Memory Tests
 // ═════════════════════════════════════════════════════════════════════
 
-TEST(PlatformTest, ShmCreate) {
+TEST(PlatformTest, ShmCreate)
+{
     int fd = shmCreate(4096);
     ASSERT_GE(fd, 0);
     closeFd(fd);
 }
 
-TEST(PlatformTest, ShmWriteAndMmap) {
+TEST(PlatformTest, ShmWriteAndMmap)
+{
     int fd = shmCreate(4096);
     ASSERT_GE(fd, 0);
 
-    void* ptr = mmap(nullptr, 4096, PROT_READ | PROT_WRITE,
-                     MAP_SHARED, fd, 0);
+    void *ptr = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     ASSERT_NE(ptr, MAP_FAILED);
 
     // Write a pattern, read it back.
@@ -181,7 +188,8 @@ TEST(PlatformTest, ShmWriteAndMmap) {
     closeFd(fd);
 }
 
-TEST(PlatformTest, ShmZeroSize) {
+TEST(PlatformTest, ShmZeroSize)
+{
     // memfd_create with ftruncate(0) should succeed — valid but empty region.
     int fd = shmCreate(0);
     ASSERT_GE(fd, 0);
@@ -192,7 +200,8 @@ TEST(PlatformTest, ShmZeroSize) {
 // Close Tests
 // ═════════════════════════════════════════════════════════════════════
 
-TEST(PlatformTest, CloseFdNegativeOne) {
+TEST(PlatformTest, CloseFdNegativeOne)
+{
     // Should not crash or fail.
     closeFd(-1);
 }
