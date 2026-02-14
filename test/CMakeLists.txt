@@ -14,6 +14,7 @@ add_subdirectory(vendor/googletest)
 add_executable(ipc_tests
     PlatformTest.cpp
     ConnectionTest.cpp
+    FrameIOTest.cpp
 )
 target_link_libraries(ipc_tests PRIVATE ms-ipc GTest::gtest_main pthread)
 

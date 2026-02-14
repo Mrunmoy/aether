@@ -12,6 +12,7 @@ event dispatch.
 ```
 Platform        UDS sockets, shared memory, FD passing (OS abstraction)
 Connection      Handshake, shared memory setup, bidirectional ring buffers
+Frame I/O       Read/write framed messages through ring buffers
 Service         (planned) Connection management, frame dispatch, call/notify
 Generated code  (planned) IDL-driven skeletons and client stubs
 ```
@@ -22,8 +23,9 @@ Generated code  (planned) IDL-driven skeletons and client stubs
 - Lock-free SPSC ring buffers in shared memory (zero-copy data plane)
 - FD passing via `SCM_RIGHTS` for shared memory handshake
 - Abstract namespace sockets (no filesystem cleanup)
+- Framed message protocol: 24-byte header + payload
 - Embedded-friendly: no `std::string`, no heap allocations in platform layer
-- 16 unit tests
+- 25 unit tests
 
 ## Dependencies
 
@@ -65,8 +67,10 @@ ctest --test-dir build --output-on-failure
 inc/Platform.h          OS-agnostic platform API
 inc/Types.h             Error codes, frame header, protocol constants
 inc/Connection.h        Connection struct + handshake (internal)
+inc/FrameIO.h           Frame read/write through ring buffers
 src/PlatformLinux.cpp   Linux platform backend
 src/Connection.cpp      Handshake implementation
+src/FrameIO.cpp         readFrameAlloc (vector-based convenience read)
 deps/ms-ringbuffer/     SPSC ring buffer (submodule)
 test/                   Unit tests (see test/README.md)
 doc/                    Design walkthroughs
@@ -76,6 +80,7 @@ doc/                    Design walkthroughs
 
 - [Platform layer](doc/Platform.md) — UDS, shared memory, FD passing
 - [Connection handshake](doc/Connection.md) — how two peers establish shared ring buffers
+- [Frame I/O](doc/FrameIO.md) — reading and writing framed messages
 
 ## Further reading
 

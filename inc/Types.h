@@ -30,7 +30,7 @@ namespace ms::ipc
     };
 
     // ── Frame Header (24 bytes) ─────────────────────────────────────
-    // All multi-byte fields are little-endian on the wire.
+    // Native endian (same-machine IPC via shared memory).
 
     struct FrameHeader
     {

@@ -27,3 +27,4 @@ ctest --test-dir build --output-on-failure
 |------|---------------|
 | `PlatformTest.cpp` | Platform layer: UDS socket creation, client connect, accept, signal byte round-trip, FD passing via SCM_RIGHTS with shared memory verification, shared memory create/mmap, edge cases (connect to nonexistent, zero-size shm, close -1). 11 tests. |
 | `ConnectionTest.cpp` | Connection handshake: basic handshake (both sides valid), bidirectional ring buffer data flow, protocol version mismatch rejection, multiple independent clients, connection cleanup. 5 tests. |
+| `FrameIOTest.cpp` | Frame I/O: write/read round-trip with all header fields, peek without consuming, ring-full detection, empty-ring errors, multiple frames in sequence, zero-payload frames, vector-based read, large (~200KB) payload, undersized buffer error recovery. 9 tests. |

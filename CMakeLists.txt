@@ -12,6 +12,7 @@ add_subdirectory(deps/ms-ringbuffer)
 add_library(ms-ipc
     src/PlatformLinux.cpp
     src/Connection.cpp
+    src/FrameIO.cpp
 )
 target_include_directories(ms-ipc PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
