@@ -5,12 +5,26 @@ FooSkeleton classes inherit from it and implement `onRequest()` as a
 switch on messageId. User code inherits from FooSkeleton and provides
 the concrete handler methods.
 
-```
-ServiceBase              ← this layer
-  ↑
-FooSkeleton : ServiceBase   (generated, future)
-  ↑
-FooService : FooSkeleton    (user code, future)
+```mermaid
+classDiagram
+    class ServiceBase {
+        <<abstract>>
+        +start() bool
+        +stop() void
+        #onRequest()* int
+        #sendNotify() int
+    }
+    class FooSkeleton {
+        <<generated, future>>
+        #onRequest() int
+    }
+    class FooService {
+        <<user code, future>>
+        +handleMethod1()
+        +handleMethod2()
+    }
+    ServiceBase <|-- FooSkeleton
+    FooSkeleton <|-- FooService
 ```
 
 ## Files
@@ -24,23 +38,19 @@ FooService : FooSkeleton    (user code, future)
 
 ServiceBase uses internal threads — no RunLoop dependency.
 
-```
-┌─────────────┐
-│ Accept      │ ← blocks on acceptConnection(m_listenFd)
-│ Thread      │   spawns a receiver thread per new client
-└──────┬──────┘
-       │ new client
-       ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Receiver    │  │ Receiver    │  │ Receiver    │
-│ Thread 1    │  │ Thread 2    │  │ Thread N    │
-└─────────────┘  └─────────────┘  └─────────────┘
-  ↕ per client     ↕ per client     ↕ per client
-  recvSignal()     recvSignal()     recvSignal()
-  readFrameAlloc   readFrameAlloc   readFrameAlloc
-  onRequest()      onRequest()      onRequest()
-  writeFrame()     writeFrame()     writeFrame()
-  sendSignal()     sendSignal()     sendSignal()
+```mermaid
+graph TD
+    START["svc.start()"] --> AT["Accept Thread\nblocks on acceptConnection()"]
+
+    AT -->|"new client"| RT1["Receiver Thread 1"]
+    AT -->|"new client"| RT2["Receiver Thread 2"]
+    AT -->|"new client"| RTN["Receiver Thread N"]
+
+    RT1 --> LOOP1["recvSignal()\n→ readFrameAlloc()\n→ onRequest()\n→ writeFrame()\n→ sendSignal()"]
+    LOOP1 -->|"loop"| RT1
+
+    RT2 --> LOOP2["recvSignal()\n→ readFrameAlloc()\n→ onRequest()\n→ writeFrame()\n→ sendSignal()"]
+    LOOP2 -->|"loop"| RT2
 ```
 
 Each receiver thread:
@@ -68,11 +78,23 @@ UDS socket, then spawns the accept loop on a dedicated thread.
 svc.stop();
 ```
 
-1. **Phase 1** — `shutdown(m_listenFd, SHUT_RDWR)` unblocks the accept
-   thread's `acceptConnection()` call. Join the accept thread.
-2. **Phase 2** — `shutdown()` each client socket to unblock receiver
-   threads' `recvSignal()`. Join all receiver threads, close connections,
-   clear the client list.
+```mermaid
+sequenceDiagram
+    participant Caller as svc.stop()
+    participant AT as Accept Thread
+    participant RT as Receiver Threads
+
+    Note over Caller: Phase 1
+    Caller->>AT: shutdown(listenFd)
+    Note over AT: acceptConnection() fails → exits loop
+    Caller->>AT: join()
+
+    Note over Caller: Phase 2
+    Caller->>RT: shutdown() each client socket
+    Note over RT: recvSignal() returns -1 → exits loop
+    Caller->>RT: join() all threads
+    Note over Caller: close() connections, clear vector
+```
 
 The destructor calls `stop()` automatically.
 
@@ -104,6 +126,22 @@ int sendNotify(uint32_t serviceId, uint32_t messageId,
 ```
 
 ## Notification broadcast
+
+```mermaid
+sequenceDiagram
+    participant S as Service code
+    participant SB as sendNotify()
+    participant C1 as Client 1
+    participant C2 as Client 2
+    participant C3 as Client 3
+
+    S->>SB: sendNotify(serviceId, msgId, payload)
+    Note over SB: lock(m_clientsMutex)
+    SB->>C1: writeFrame(FRAME_NOTIFY) + sendSignal()
+    SB->>C2: writeFrame(FRAME_NOTIFY) + sendSignal()
+    SB->>C3: writeFrame(FRAME_NOTIFY) + sendSignal()
+    Note over SB: unlock
+```
 
 `sendNotify()` iterates all connected clients under a mutex, writing
 a `FRAME_NOTIFY` frame to each client's tx ring and signaling the socket.

@@ -35,14 +35,21 @@ region containing two ring buffers (for bidirectional data transfer).
 The shared memory region contains two `ByteRingBuffer<256KB>` instances
 laid out contiguously:
 
-```
-Offset 0                          Offset sizeof(IpcRing)
-┌─────────────────────────────┬─────────────────────────────┐
-│   Ring 0: client → server   │   Ring 1: server → client   │
-│                             │                             │
-│   Client writes here        │   Server writes here        │
-│   Server reads here         │   Client reads here         │
-└─────────────────────────────┴─────────────────────────────┘
+```mermaid
+graph LR
+    subgraph "Shared Memory (memfd, ~512 KB)"
+        subgraph "Ring 0"
+            R0["client → server"]
+        end
+        subgraph "Ring 1"
+            R1["server → client"]
+        end
+    end
+
+    C["Client"] -- "tx (write)" --> R0
+    R0 -- "rx (read)" --> S["Server"]
+    S -- "tx (write)" --> R1
+    R1 -- "rx (read)" --> C
 ```
 
 Each side gets opposite tx/rx assignments:
@@ -55,27 +62,30 @@ Total shared memory size = `2 * sizeof(IpcRing)` (~512 KB + control blocks).
 
 ### Step by step
 
-```
-  CLIENT                                          SERVER
-  ══════                                          ══════
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
 
-  1. clientSocket(name)  ──── UDS connect ────▶  acceptClient(listenFd)
+    C->>S: clientSocket(name) → UDS connect
+    Note over S: acceptClient(listenFd)
 
-  2. shmCreate(size)
-     mmap shared memory
-     placement-new two IpcRings
+    Note over C: shmCreate(size)
+    Note over C: mmap shared memory
+    Note over C: placement-new 2x IpcRing
 
-  3. sendFd(socket, shmFd,   ──── SCM_RIGHTS ────▶  recvFd(socket, &shmFd,
-           &version, 2)         + version                &version, 2)
+    C->>S: sendFd(shmFd, version) — SCM_RIGHTS
+    Note over S: recvFd(&shmFd, &version)
+    Note over S: Validate version
+    Note over S: fstat → get shm size
+    Note over S: mmap shared memory
+    Note over S: rx=Ring0, tx=Ring1
 
-                                                  4. Validate version
-                                                     fstat to get shm size
-                                                     mmap shared memory
-                                                     Set rx=Ring0, tx=Ring1
+    S->>C: sendSignal() — ACK byte
+    Note over C: recvSignal() — unblocks
+    Note over C: tx=Ring0, rx=Ring1
 
-  5. recvSignal(socket)  ◀──── ACK byte ─────────  sendSignal(socket)
-
-  Connection established.                         Connection established.
+    Note over C,S: Connection established
 ```
 
 ### Key details
@@ -107,6 +117,33 @@ Both `connectToServer` and `acceptConnection` clean up on any failure:
 Callers check `conn.valid()` to know if the handshake succeeded.
 
 ## Multi-client isolation
+
+```mermaid
+graph TD
+    S["Server"]
+
+    subgraph "Client 1 — independent"
+        C1["Client 1"]
+        S1["UDS Socket 1"]
+        M1["Shared Memory 1\n(2x IpcRing)"]
+    end
+
+    subgraph "Client 2 — independent"
+        C2["Client 2"]
+        S2["UDS Socket 2"]
+        M2["Shared Memory 2\n(2x IpcRing)"]
+    end
+
+    C1 --- S1
+    S1 --- S
+    C1 --- M1
+    M1 --- S
+
+    C2 --- S2
+    S2 --- S
+    C2 --- M2
+    M2 --- S
+```
 
 Each client-server pair gets its own:
 - UDS socket

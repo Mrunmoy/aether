@@ -93,6 +93,49 @@ Convenience wrapper that resizes the vector to fit the payload. Useful
 when the caller doesn't know payload size in advance. Defined in
 `FrameIO.cpp` to keep the header lightweight.
 
+## Write/read flow
+
+```mermaid
+sequenceDiagram
+    participant W as Writer
+    participant Ring as Ring Buffer
+    participant R as Reader
+
+    W->>Ring: writeFrame(header + payload)
+    Note over Ring: [FrameHeader][Payload....]
+    W->>R: sendSignal() — wake reader
+
+    Note over R: recvSignal() — unblocks
+    R->>Ring: peekFrameHeader() — learn payloadBytes
+    R->>Ring: readFrameAlloc() — consume header + payload
+    Note over Ring: (empty)
+```
+
+## writeFrame — atomic check
+
+```mermaid
+flowchart TD
+    A["writeFrame(ring, header, payload, len)"] --> B{"writeAvailable() >=\nsizeof(header) + len?"}
+    B -- Yes --> C["ring.write(header)"]
+    C --> D["ring.write(payload)"]
+    D --> E["return IPC_SUCCESS"]
+    B -- No --> F["return IPC_ERR_RING_FULL\n(ring unchanged)"]
+```
+
+## readFrame — non-destructive error recovery
+
+```mermaid
+flowchart TD
+    A["readFrame(ring, header, buf, bufSize)"] --> B["peekFrameHeader()"]
+    B -- "no header" --> C["return IPC_ERR_DISCONNECTED"]
+    B -- "header found" --> D{"readAvailable() >=\nfull frame?"}
+    D -- No --> C
+    D -- Yes --> E{"payload fits in\nbufSize?"}
+    E -- No --> F["return IPC_ERR_RING_FULL\n(frame stays in ring)"]
+    E -- Yes --> G["skip(header)\nread(payload)"]
+    G --> H["return IPC_SUCCESS"]
+```
+
 ## Typical usage pattern
 
 ```cpp

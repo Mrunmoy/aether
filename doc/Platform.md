@@ -11,6 +11,29 @@ The IPC framework needs three OS primitives:
 2. **Shared memory** — for zero-copy data transfer
 3. **FD passing** — to share the memory region between processes
 
+```mermaid
+graph TD
+    subgraph "Platform API (inc/Platform.h)"
+        UDS["UDS Sockets\nserverSocket / clientSocket\nacceptClient"]
+        FDP["FD Passing\nsendFd / recvFd"]
+        SIG["Signal Byte\nsendSignal / recvSignal"]
+        SHM["Shared Memory\nshmCreate"]
+        CL["Cleanup\ncloseFd"]
+    end
+
+    subgraph "Linux (src/PlatformLinux.cpp)"
+        L1["SOCK_SEQPACKET\nabstract namespace"]
+        L2["sendmsg / recvmsg\nSCM_RIGHTS"]
+        L3["send / recv\n1-byte wakeup"]
+        L4["memfd_create\nftruncate"]
+    end
+
+    UDS --> L1
+    FDP --> L2
+    SIG --> L3
+    SHM --> L4
+```
+
 Each of these has different APIs on Linux vs macOS. The platform layer
 hides those differences behind a single header.
 

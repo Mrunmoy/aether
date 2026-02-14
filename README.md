@@ -9,14 +9,39 @@ event dispatch.
 
 ## Architecture
 
+```mermaid
+graph TD
+    subgraph "User / Generated (future)"
+        GEN["FooSkeleton / FooClient\n(generated from IDL)"]
+    end
+
+    subgraph "Service Layer"
+        SB["ServiceBase\naccept, dispatch, notify"]
+        CB["ClientBase (planned)\nconnect, call, notifications"]
+    end
+
+    subgraph "Frame I/O"
+        FIO["writeFrame / readFrame\n24-byte header + payload"]
+    end
+
+    subgraph "Connection"
+        CON["Handshake + shared memory\n2x SPSC ring buffers per client"]
+    end
+
+    subgraph "Platform"
+        PLAT["UDS sockets · FD passing\nshared memory · signaling"]
+    end
+
+    GEN --> SB
+    GEN --> CB
+    SB --> FIO
+    CB --> FIO
+    FIO --> CON
+    CON --> PLAT
 ```
-Platform        UDS sockets, shared memory, FD passing (OS abstraction)
-Connection      Handshake, shared memory setup, bidirectional ring buffers
-Frame I/O       Read/write framed messages through ring buffers
-ServiceBase     Server-side base class: accept, dispatch, notify
-Client          (planned) Client-side connect, sync call, notification callbacks
-Generated code  (planned) IDL-driven skeletons and client stubs
-```
+
+See [doc/architecture.md](doc/architecture.md) for detailed diagrams including
+data flow, sequence diagrams, class hierarchy, and threading model.
 
 ## Features
 
@@ -83,6 +108,7 @@ doc/                    Design walkthroughs
 
 ## Walkthroughs
 
+- [Architecture overview](doc/architecture.md) — layer stack, data flow, class hierarchy, threading
 - [Platform layer](doc/Platform.md) — UDS, shared memory, FD passing
 - [Connection handshake](doc/Connection.md) — how two peers establish shared ring buffers
 - [Frame I/O](doc/FrameIO.md) — reading and writing framed messages
