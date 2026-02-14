@@ -16,6 +16,7 @@ add_executable(ipc_tests
     ConnectionTest.cpp
     FrameIOTest.cpp
     ServiceBaseTest.cpp
+    ClientBaseTest.cpp
 )
 target_link_libraries(ipc_tests PRIVATE ms-ipc GTest::gtest_main pthread)
 

@@ -17,7 +17,7 @@ graph TD
 
     subgraph "Service Layer"
         SB["ServiceBase\naccept, dispatch, notify"]
-        CB["ClientBase (planned)\nconnect, call, notifications"]
+        CB["ClientBase\nconnect, sync call, notifications"]
     end
 
     subgraph "Frame I/O"
@@ -51,9 +51,11 @@ data flow, sequence diagrams, class hierarchy, and threading model.
 - Abstract namespace sockets (no filesystem cleanup)
 - Framed message protocol: 24-byte header + payload
 - Server-side ServiceBase with accept thread + per-client receiver threads
+- Client-side ClientBase with sync RPC (condition_variable + timeout)
 - Virtual dispatch for request handling, broadcast notifications
+- Virtual notification callbacks on client side
 - Embedded-friendly: no `std::string`, no heap allocations in platform layer
-- 33 unit tests
+- 42 unit tests
 
 ## Dependencies
 
@@ -97,10 +99,12 @@ inc/Types.h             Error codes, frame header, protocol constants
 inc/Connection.h        Connection struct + handshake (internal)
 inc/FrameIO.h           Frame read/write through ring buffers
 inc/ServiceBase.h       Server-side service base class
+inc/ClientBase.h        Client-side RPC base class
 src/PlatformLinux.cpp   Linux platform backend
 src/Connection.cpp      Handshake implementation
 src/FrameIO.cpp         readFrameAlloc (vector-based convenience read)
 src/ServiceBase.cpp     Service lifecycle, threading, dispatch
+src/ClientBase.cpp      Client connect, sync call, notifications
 deps/ms-ringbuffer/     SPSC ring buffer (submodule)
 test/                   Unit tests (see test/README.md)
 doc/                    Design walkthroughs
@@ -113,6 +117,7 @@ doc/                    Design walkthroughs
 - [Connection handshake](doc/Connection.md) — how two peers establish shared ring buffers
 - [Frame I/O](doc/FrameIO.md) — reading and writing framed messages
 - [ServiceBase](doc/ServiceBase.md) — server-side service base class and threading model
+- [ClientBase](doc/ClientBase.md) — client-side sync RPC and notification callbacks
 
 ## Further reading
 

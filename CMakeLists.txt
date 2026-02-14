@@ -14,6 +14,7 @@ add_library(ms-ipc
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
+    src/ClientBase.cpp
 )
 target_include_directories(ms-ipc PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>

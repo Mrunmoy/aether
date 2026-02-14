@@ -257,8 +257,7 @@ TEST(ServiceBaseTest, NotifyBroadcast)
     ASSERT_EQ(svc.testNotify(77, payload, sizeof(payload)), IPC_SUCCESS);
 
     // Both clients should receive the notification.
-    auto readNotify = [](Connection &c) -> FrameHeader
-    {
+    auto readNotify = [](Connection &c) -> FrameHeader {
         recvSignal(c.socketFd);
         FrameHeader hdr{};
         std::vector<uint8_t> p;

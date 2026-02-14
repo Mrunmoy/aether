@@ -5,7 +5,7 @@
 ```
 User code (generated FooSkeleton / FooClient)
   ↓
-Service layer (manages connections, dispatches messages)    ← Phase 3b (done)
+Service / Client layer (dispatch, sync RPC, notifications)  ← Phase 3b+3c (done)
   ↓
 Frame I/O (read/write framed messages through ring buffers) ← Phase 3a (done)
   ↓
@@ -138,13 +138,44 @@ instantiate ServiceBase directly.
 7. StopCleansUpConnections — client detects disconnect after stop
 8. ClientDisconnectDoesNotCrash — service continues after client disconnect
 
-## Phase 3c: ClientBase — PLANNED
+## Phase 3c: ClientBase — DONE
 
-- `ClientBase` with `connect()` / `disconnect()`
-- `call()` — synchronous RPC (condition_variable wait with timeout)
-- Internal receiver thread for responses and notifications
-- Virtual notification callbacks
-- Base class that generated FooClient will inherit from
+**Files:** `inc/ClientBase.h`, `src/ClientBase.cpp`, `test/ClientBaseTest.cpp`
+**Namespace:** `ms::ipc`
+**Tests:** 9 passing (42 total)
+
+Client-side base class for IPC services. Generated FooClient inherits from
+ClientBase and provides typed call wrappers and virtual notification callbacks.
+
+### Threading model
+- **Receiver thread** — blocks on `recvSignal()`, drains frames, dispatches
+  `FRAME_RESPONSE` to matching PendingCall, `FRAME_NOTIFY` to virtual callback
+
+### API
+- `connect()` — handshake via `connectToServer()`, spawns receiver thread
+- `disconnect()` — shutdown socket, join receiver, fail pending calls, cleanup
+- `isConnected()` — atomic running flag
+- `call(serviceId, messageId, request, response, timeoutMs)` — synchronous RPC
+  with condition_variable wait and timeout
+- `onNotification(serviceId, messageId, payload)` — virtual callback (default no-op)
+
+### Sync RPC mechanism
+- Atomic sequence counter correlates requests to responses
+- `PendingCall` struct with condition_variable, done flag, status, response
+- `unordered_map<seq, shared_ptr<PendingCall>>` tracks in-flight calls
+- Receiver thread sets `done=true` and notifies when response arrives
+- Caller blocks on `cv.wait_for()` with configurable timeout
+
+### ClientBase tests
+1. ConnectAndDisconnect — lifecycle works
+2. SingleCall — echo RPC round-trip, response matches
+3. InvalidMethodReturnsError — unknown messageId returns error
+4. MultipleCalls — 3 sequential calls, correct responses
+5. CallTimeout — no response within timeout returns IPC_ERR_TIMEOUT
+6. DisconnectFailsPendingCalls — in-flight call fails on disconnect
+7. ReceiveNotification — service notification arrives via onNotification
+8. CallAfterDisconnect — returns IPC_ERR_DISCONNECTED
+9. ServerStopDisconnectsClient — client detects server shutdown
 
 ---
 
@@ -156,4 +187,4 @@ git submodule update --init --recursive
 python3 build.py -c -t
 ```
 
-33 tests passing (11 platform + 5 connection + 9 frame I/O + 8 service base).
+42 tests passing (11 platform + 5 connection + 9 frame I/O + 8 service base + 9 client base).

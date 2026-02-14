@@ -16,7 +16,7 @@ graph TD
 
     subgraph "Service layer"
         SB["ServiceBase"]
-        CB["ClientBase (planned)"]
+        CB["ClientBase"]
     end
 
     subgraph "Frame I/O"
@@ -267,11 +267,17 @@ classDiagram
     FooSkeleton <|-- FooService : inherits
 
     class ClientBase {
-        <<planned>>
-        +connect(name) bool
+        +connect() bool
         +disconnect() void
-        +call(messageId, request, response, timeout) int
-        #onNotification(messageId, payload)* void
+        +isConnected() bool
+        +call(serviceId, messageId, request, response, timeout) int
+        #onNotification(serviceId, messageId, payload) void
+        -receiverLoop() void
+        -m_conn : Connection
+        -m_running : atomic~bool~
+        -m_nextSeq : atomic~uint32_t~
+        -m_pendingMutex : mutex
+        -m_pending : map~uint32_t, PendingCall~
     }
 
     class FooClient {
@@ -342,6 +348,48 @@ graph LR
     E0 --- EU
 ```
 
+## ClientBase sync RPC flow
+
+```mermaid
+sequenceDiagram
+    participant App as Caller thread
+    participant CB as ClientBase.call()
+    participant TX as tx ring (shm)
+    participant SRV as Server
+    participant RX as rx ring (shm)
+    participant RT as Receiver thread
+
+    App->>CB: call(serviceId, messageId, request)
+    Note over CB: seq = m_nextSeq++
+    CB->>TX: writeFrame(FRAME_REQUEST, seq)
+    Note over CB: m_pending[seq] = PendingCall
+    CB->>SRV: sendSignal()
+    Note over App: cv.wait_for(timeout)
+
+    SRV->>RX: writeFrame(FRAME_RESPONSE, seq)
+    SRV->>RT: sendSignal()
+    RT->>RX: readFrameAlloc()
+    Note over RT: m_pending[seq].done = true
+    RT->>App: cv.notify_one()
+    Note over App: wake, return status + response
+```
+
+## ClientBase disconnect
+
+```mermaid
+sequenceDiagram
+    participant App as disconnect()
+    participant RT as Receiver Thread
+    participant PC as Pending Calls
+
+    App->>RT: shutdown(socketFd)
+    Note over RT: recvSignal() fails, loop exits
+    App->>RT: join()
+    App->>PC: Fail all with IPC_ERR_DISCONNECTED
+    App->>PC: notify_one() each, clear map
+    Note over App: conn.close()
+```
+
 ## What's built vs planned
 
 ```mermaid
@@ -365,10 +413,11 @@ timeline
                     : Virtual dispatch
                     : Notification broadcast
                     : 8 tests
-    Phase 3c (planned) : ClientBase
-                       : connect / disconnect
-                       : Sync call with timeout
-                       : Notification callbacks
+    Phase 3c (done) : ClientBase
+                    : connect / disconnect
+                    : Sync call with timeout
+                    : Notification callbacks
+                    : 9 tests
     Future : Code generation
            : IDL → FooSkeleton + FooClient
            : End-to-end RPC
