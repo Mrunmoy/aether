@@ -6,7 +6,8 @@ Usage:
   python build.py              # build only
   python build.py -c           # clean build
   python build.py -t           # build + run tests
-  python build.py -c -t        # clean build + tests
+  python build.py -e           # build + examples
+  python build.py -c -t -e     # clean build + tests + examples
 """
 
 import argparse
@@ -32,13 +33,16 @@ def clean():
         shutil.rmtree(BUILD_DIR)
 
 
-def configure():
+def configure(examples=False):
     os.makedirs(BUILD_DIR, exist_ok=True)
-    run(["cmake", "-B", BUILD_DIR, "-DCMAKE_BUILD_TYPE=Release"], cwd=ROOT)
+    cmd = ["cmake", "-B", BUILD_DIR, "-DCMAKE_BUILD_TYPE=Release"]
+    if examples:
+        cmd.append("-DMS_IPC_BUILD_EXAMPLES=ON")
+    run(cmd, cwd=ROOT)
 
 
-def build():
-    configure()
+def build(examples=False):
+    configure(examples=examples)
     run(["cmake", "--build", BUILD_DIR, f"-j{os.cpu_count()}"], cwd=ROOT)
 
 
@@ -50,12 +54,13 @@ def main():
     parser = argparse.ArgumentParser(description="Build ms-ipc")
     parser.add_argument("-c", "--clean", action="store_true", help="clean before building")
     parser.add_argument("-t", "--test", action="store_true", help="run tests after building")
+    parser.add_argument("-e", "--examples", action="store_true", help="build examples")
     args = parser.parse_args()
 
     if args.clean:
         clean()
 
-    build()
+    build(examples=args.examples)
 
     if args.test:
         test()
