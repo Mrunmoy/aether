@@ -57,5 +57,11 @@ compile_commands.json
 lcov.info
 coverage/
 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
 # Valgrind
 vgcore.*

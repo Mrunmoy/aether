@@ -1,0 +1,208 @@
+"""
+Parser: recursive-descent parser that builds an AST from a token stream.
+"""
+
+import re
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+from .lexer import Token, TOK_KEYWORD, TOK_IDENT, TOK_SYMBOL, TOK_ATTR, TOK_EOF
+from .types import TYPE_MAP
+
+
+# ── AST nodes ────────────────────────────────────────────────────────
+
+@dataclass
+class Param:
+    direction: str   # "in" or "out"
+    type_name: str   # IDL type (e.g. "uint32")
+    name: str
+    is_pointer: bool # True for [out] params
+
+
+@dataclass
+class Method:
+    name: str
+    method_id: int
+    params: List[Param]
+
+
+@dataclass
+class Notification:
+    name: str
+    notify_id: int
+    params: List[Param]
+
+
+@dataclass
+class IdlFile:
+    service_name: str
+    methods: List[Method] = field(default_factory=list)
+    notifications: List[Notification] = field(default_factory=list)
+
+
+# ── Parser ───────────────────────────────────────────────────────────
+
+class Parser:
+    """
+    Recursive-descent parser for the ms-ipc IDL.
+
+    Expects a token list produced by ``tokenize()``.  Builds an ``IdlFile``
+    AST containing ``Method`` and ``Notification`` nodes.
+    """
+
+    def __init__(self, tokens: List[Token]):
+        self.tokens = tokens
+        self.pos = 0
+
+    # ── Token helpers ────────────────────────────────────────────────
+
+    def peek(self) -> Token:
+        return self.tokens[self.pos]
+
+    def advance(self) -> Token:
+        tok = self.tokens[self.pos]
+        self.pos += 1
+        return tok
+
+    def expect(self, kind: str, value: Optional[str] = None) -> Token:
+        tok = self.advance()
+        if tok.kind != kind:
+            raise SyntaxError(
+                f"Line {tok.line}: expected {kind}"
+                f"{f' {value!r}' if value else ''}, got {tok.kind} {tok.value!r}")
+        if value is not None and tok.value != value:
+            raise SyntaxError(
+                f"Line {tok.line}: expected {value!r}, got {tok.value!r}")
+        return tok
+
+    # ── Top-level ────────────────────────────────────────────────────
+
+    def parse(self) -> IdlFile:
+        idl = IdlFile(service_name="")
+
+        while self.peek().kind != TOK_EOF:
+            tok = self.peek()
+            if tok.kind == TOK_KEYWORD and tok.value == "service":
+                self._parse_service(idl)
+            elif tok.kind == TOK_KEYWORD and tok.value == "notifications":
+                self._parse_notifications(idl)
+            else:
+                raise SyntaxError(
+                    f"Line {tok.line}: expected 'service' or 'notifications', "
+                    f"got {tok.value!r}")
+
+        if not idl.service_name:
+            raise SyntaxError("No service block found")
+
+        return idl
+
+    # ── Blocks ───────────────────────────────────────────────────────
+
+    def _parse_service(self, idl: IdlFile):
+        self.expect(TOK_KEYWORD, "service")
+        name_tok = self.expect(TOK_IDENT)
+        if idl.service_name and idl.service_name != name_tok.value:
+            raise SyntaxError(
+                f"Line {name_tok.line}: service name mismatch: "
+                f"{name_tok.value!r} vs {idl.service_name!r}")
+        idl.service_name = name_tok.value
+
+        self.expect(TOK_SYMBOL, "{")
+        while self.peek().value != "}":
+            idl.methods.append(self._parse_method())
+        self.expect(TOK_SYMBOL, "}")
+        self.expect(TOK_SYMBOL, ";")
+
+    def _parse_notifications(self, idl: IdlFile):
+        self.expect(TOK_KEYWORD, "notifications")
+        name_tok = self.expect(TOK_IDENT)
+        if idl.service_name and idl.service_name != name_tok.value:
+            raise SyntaxError(
+                f"Line {name_tok.line}: notifications name mismatch: "
+                f"{name_tok.value!r} vs {idl.service_name!r}")
+        idl.service_name = name_tok.value
+
+        self.expect(TOK_SYMBOL, "{")
+        while self.peek().value != "}":
+            idl.notifications.append(self._parse_notification())
+        self.expect(TOK_SYMBOL, "}")
+        self.expect(TOK_SYMBOL, ";")
+
+    # ── Methods / notifications ──────────────────────────────────────
+
+    def _parse_method(self) -> Method:
+        attr_tok = self.expect(TOK_ATTR)
+        m = re.match(r"method\s*=\s*(\d+)", attr_tok.value)
+        if not m:
+            raise SyntaxError(
+                f"Line {attr_tok.line}: expected [method=N], got [{attr_tok.value}]")
+
+        self.expect(TOK_KEYWORD, "int")
+        name_tok = self.expect(TOK_IDENT)
+        params = self._parse_params()
+        self.expect(TOK_SYMBOL, ";")
+
+        return Method(name=name_tok.value, method_id=int(m.group(1)), params=params)
+
+    def _parse_notification(self) -> Notification:
+        attr_tok = self.expect(TOK_ATTR)
+        m = re.match(r"notify\s*=\s*(\d+)", attr_tok.value)
+        if not m:
+            raise SyntaxError(
+                f"Line {attr_tok.line}: expected [notify=N], got [{attr_tok.value}]")
+
+        self.expect(TOK_KEYWORD, "void")
+        name_tok = self.expect(TOK_IDENT)
+        params = self._parse_params()
+        self.expect(TOK_SYMBOL, ";")
+
+        for p in params:
+            if p.direction != "in":
+                raise SyntaxError(
+                    f"Line {attr_tok.line}: notification params must be [in]")
+
+        return Notification(name=name_tok.value, notify_id=int(m.group(1)),
+                            params=params)
+
+    # ── Parameters ───────────────────────────────────────────────────
+
+    def _parse_params(self) -> List[Param]:
+        self.expect(TOK_SYMBOL, "(")
+        params: List[Param] = []
+        if self.peek().value != ")":
+            params.append(self._parse_param())
+            while self.peek().value == ",":
+                self.advance()
+                params.append(self._parse_param())
+        self.expect(TOK_SYMBOL, ")")
+        return params
+
+    def _parse_param(self) -> Param:
+        attr_tok = self.expect(TOK_ATTR)
+        direction = attr_tok.value.strip()
+        if direction not in ("in", "out"):
+            raise SyntaxError(
+                f"Line {attr_tok.line}: expected [in] or [out], got [{direction}]")
+
+        type_tok = self.advance()
+        if type_tok.value not in TYPE_MAP:
+            raise SyntaxError(
+                f"Line {type_tok.line}: unknown type {type_tok.value!r}")
+
+        is_pointer = False
+        if self.peek().value == "*":
+            self.advance()
+            is_pointer = True
+
+        name_tok = self.expect(TOK_IDENT)
+
+        if direction == "out" and not is_pointer:
+            raise SyntaxError(
+                f"Line {name_tok.line}: [out] param '{name_tok.value}' must be a pointer")
+        if direction == "in" and is_pointer:
+            raise SyntaxError(
+                f"Line {name_tok.line}: [in] param '{name_tok.value}' must not be a pointer")
+
+        return Param(direction=direction, type_name=type_tok.value,
+                     name=name_tok.value, is_pointer=is_pointer)

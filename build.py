@@ -47,7 +47,10 @@ def build(examples=False):
 
 
 def test():
+    # C++ tests (core + codegen examples)
     run(["ctest", "--test-dir", BUILD_DIR, "--output-on-failure"], cwd=ROOT)
+    # Python tests for the code generator
+    run([sys.executable, "-m", "pytest", "tools/ipcgen/test/", "-v"], cwd=ROOT)
 
 
 def main():
@@ -60,7 +63,8 @@ def main():
     if args.clean:
         clean()
 
-    build(examples=args.examples)
+    # When testing, always build examples (codegen tests live there).
+    build(examples=args.examples or args.test)
 
     if args.test:
         test()
