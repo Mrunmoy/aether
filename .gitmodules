@@ -4,3 +4,6 @@
 [submodule "deps/ms-ringbuffer"]
 	path = deps/ms-ringbuffer
 	url = https://github.com/Mrunmoy/ms-ringbuffer.git
+[submodule "deps/ms-runloop"]
+	path = deps/ms-runloop
+	url = https://github.com/Mrunmoy/ms-runloop.git

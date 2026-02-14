@@ -7,6 +7,7 @@ project(ms-ipc
 
 # ── Dependencies ─────────────────────────────────────────────────────
 add_subdirectory(deps/ms-ringbuffer)
+add_subdirectory(deps/ms-runloop)
 
 # ── Library ──────────────────────────────────────────────────────────
 add_library(ms-ipc
@@ -21,7 +22,7 @@ target_include_directories(ms-ipc PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_features(ms-ipc PUBLIC cxx_std_17)
-target_link_libraries(ms-ipc PUBLIC ms-ringbuffer PRIVATE pthread)
+target_link_libraries(ms-ipc PUBLIC ms-ringbuffer ms-runloop PRIVATE pthread)
 
 # ── Tests (only when building standalone) ────────────────────────────
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
