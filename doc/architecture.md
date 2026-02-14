@@ -86,8 +86,8 @@ graph LR
     R1 -. "zero-copy" .-> CRX
     CRX -- "read response" --> CA
 
-    CA -- "sendSignal()" -->|"UDS socket\n(1 byte)"| SA
-    SA -- "sendSignal()" -->|"UDS socket\n(1 byte)"| CA
+    CA -- "sendSignal() · UDS 1 byte" --> SA
+    SA -- "sendSignal() · UDS 1 byte" --> CA
 ```
 
 ## Connection establishment
