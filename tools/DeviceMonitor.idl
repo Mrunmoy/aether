@@ -1,0 +1,17 @@
+service DeviceMonitor
+{
+    [method=1]
+    int GetDeviceCount([out] uint32* count);
+
+    [method=2]
+    int GetDeviceStatus([in] uint32 deviceId, [out] uint32* status);
+};
+
+notifications DeviceMonitor
+{
+    [notify=1]
+    void DeviceConnected([in] uint32 deviceId);
+
+    [notify=2]
+    void DeviceDisconnected([in] uint32 deviceId);
+};
