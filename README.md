@@ -13,7 +13,8 @@ event dispatch.
 Platform        UDS sockets, shared memory, FD passing (OS abstraction)
 Connection      Handshake, shared memory setup, bidirectional ring buffers
 Frame I/O       Read/write framed messages through ring buffers
-Service         (planned) Connection management, frame dispatch, call/notify
+ServiceBase     Server-side base class: accept, dispatch, notify
+Client          (planned) Client-side connect, sync call, notification callbacks
 Generated code  (planned) IDL-driven skeletons and client stubs
 ```
 
@@ -24,8 +25,10 @@ Generated code  (planned) IDL-driven skeletons and client stubs
 - FD passing via `SCM_RIGHTS` for shared memory handshake
 - Abstract namespace sockets (no filesystem cleanup)
 - Framed message protocol: 24-byte header + payload
+- Server-side ServiceBase with accept thread + per-client receiver threads
+- Virtual dispatch for request handling, broadcast notifications
 - Embedded-friendly: no `std::string`, no heap allocations in platform layer
-- 25 unit tests
+- 33 unit tests
 
 ## Dependencies
 
@@ -68,9 +71,11 @@ inc/Platform.h          OS-agnostic platform API
 inc/Types.h             Error codes, frame header, protocol constants
 inc/Connection.h        Connection struct + handshake (internal)
 inc/FrameIO.h           Frame read/write through ring buffers
+inc/ServiceBase.h       Server-side service base class
 src/PlatformLinux.cpp   Linux platform backend
 src/Connection.cpp      Handshake implementation
 src/FrameIO.cpp         readFrameAlloc (vector-based convenience read)
+src/ServiceBase.cpp     Service lifecycle, threading, dispatch
 deps/ms-ringbuffer/     SPSC ring buffer (submodule)
 test/                   Unit tests (see test/README.md)
 doc/                    Design walkthroughs
@@ -81,6 +86,7 @@ doc/                    Design walkthroughs
 - [Platform layer](doc/Platform.md) — UDS, shared memory, FD passing
 - [Connection handshake](doc/Connection.md) — how two peers establish shared ring buffers
 - [Frame I/O](doc/FrameIO.md) — reading and writing framed messages
+- [ServiceBase](doc/ServiceBase.md) — server-side service base class and threading model
 
 ## Further reading
 

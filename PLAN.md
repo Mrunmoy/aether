@@ -5,7 +5,7 @@
 ```
 User code (generated FooSkeleton / FooClient)
   ↓
-Service layer (manages connections, dispatches messages)    ← Phase 3b (next)
+Service layer (manages connections, dispatches messages)    ← Phase 3b (done)
   ↓
 Frame I/O (read/write framed messages through ring buffers) ← Phase 3a (done)
   ↓
@@ -103,14 +103,40 @@ No endian conversion — same-machine IPC via shared memory.
 
 ---
 
-## Phase 3b: ServiceBase — NEXT
+## Phase 3b: ServiceBase — DONE
 
-- Add `ms-runloop` as submodule dependency
-- Internal threads (accept + per-connection receiver), optional RunLoop posting
-- `ServiceBase` class with `start()` / `stop()` — manages listening socket,
-  accepts connections, dispatches incoming frames to virtual handler
-- `notify()` — broadcast to all connected clients
-- Base class that generated FooSkeleton will inherit from
+**Files:** `inc/ServiceBase.h`, `src/ServiceBase.cpp`, `test/ServiceBaseTest.cpp`
+**Namespace:** `ms::ipc`
+**Tests:** 8 passing (33 total)
+
+Server-side base class for IPC services. Generated FooSkeleton inherits from
+ServiceBase and implements `onRequest()` as a switch on messageId. Users never
+instantiate ServiceBase directly.
+
+### Threading model
+- **Accept thread** — blocks on `acceptConnection(m_listenFd)`, spawns a
+  receiver thread per client
+- **Receiver thread (per client)** — blocks on `recvSignal()`, drains frames,
+  dispatches `FRAME_REQUEST` via virtual `onRequest()`, sends `FRAME_RESPONSE`
+
+### API
+- `start()` — creates listening socket, spawns accept thread
+- `stop()` — two-phase shutdown: (1) close listen socket, join accept thread;
+  (2) shutdown all client sockets, join receiver threads, cleanup
+- `isRunning()` — atomic running flag
+- `onRequest(messageId, request, response)` — pure virtual dispatch point
+- `sendNotify(serviceId, messageId, payload, len)` — broadcast FRAME_NOTIFY
+  to all connected clients
+
+### ServiceBase tests
+1. StartAndStop — lifecycle works without connections
+2. SingleRequestResponse — echo request, verify response matches
+3. InvalidMethodReturnsError — unknown messageId returns error in aux
+4. MultipleRequestsOnSameConnection — 3 sequential requests, correct seq
+5. MultipleClients — 2 clients get independent correct responses
+6. NotifyBroadcast — 2 clients both receive notification
+7. StopCleansUpConnections — client detects disconnect after stop
+8. ClientDisconnectDoesNotCrash — service continues after client disconnect
 
 ## Phase 3c: ClientBase — PLANNED
 
@@ -130,4 +156,4 @@ git submodule update --init --recursive
 python3 build.py -c -t
 ```
 
-25 tests passing (11 platform + 5 connection + 9 frame I/O).
+33 tests passing (11 platform + 5 connection + 9 frame I/O + 8 service base).
