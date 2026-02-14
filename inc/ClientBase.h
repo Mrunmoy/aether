@@ -4,6 +4,8 @@
 #include "FrameIO.h"
 #include "Types.h"
 
+#include <RunLoop.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -32,7 +34,7 @@ namespace ms::ipc
     class ClientBase
     {
     public:
-        explicit ClientBase(const char *serviceName);
+        explicit ClientBase(const char *serviceName, ms::RunLoop *loop = nullptr);
         virtual ~ClientBase();
 
         ClientBase(const ClientBase &) = delete;
@@ -73,13 +75,16 @@ namespace ms::ipc
         };
 
         void receiverLoop();
+        void onDataReady();
 
         std::string m_serviceName;
+        ms::RunLoop *m_loop = nullptr;
         Connection m_conn;
         std::atomic<bool> m_running{false};
         std::atomic<uint32_t> m_nextSeq{1};
         std::thread m_receiverThread;
 
+        std::mutex m_handlerMutex; // guards RunLoop handler execution
         std::mutex m_pendingMutex;
         std::unordered_map<uint32_t, std::shared_ptr<PendingCall>> m_pending;
     };

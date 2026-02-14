@@ -4,6 +4,8 @@
 #include "FrameIO.h"
 #include "Types.h"
 
+#include <RunLoop.h>
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -29,7 +31,7 @@ namespace ms::ipc
     class ServiceBase
     {
     public:
-        explicit ServiceBase(const char *serviceName);
+        explicit ServiceBase(const char *serviceName, ms::RunLoop *loop = nullptr);
         virtual ~ServiceBase();
 
         ServiceBase(const ServiceBase &) = delete;
@@ -61,12 +63,18 @@ namespace ms::ipc
         {
             Connection conn;
             std::thread thread;
+            std::mutex handlerMutex; // guards RunLoop handler execution
         };
 
         void acceptLoop();
         void receiverLoop(ClientConn *client);
 
+        void onAcceptReady();
+        void onClientReady(ClientConn *client);
+        void removeClient(ClientConn *client);
+
         std::string m_serviceName;
+        ms::RunLoop *m_loop = nullptr;
         int m_listenFd = -1;
 
         std::atomic<bool> m_running{false};

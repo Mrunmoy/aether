@@ -1,6 +1,7 @@
 #include "ServiceBase.h"
 #include "Platform.h"
 
+#include <algorithm>
 #include <sys/socket.h>
 
 namespace ms::ipc
@@ -8,7 +9,10 @@ namespace ms::ipc
 
     // ── Constructor / Destructor ─────────────────────────────────────
 
-    ServiceBase::ServiceBase(const char *serviceName) : m_serviceName(serviceName) {}
+    ServiceBase::ServiceBase(const char *serviceName, ms::RunLoop *loop)
+        : m_serviceName(serviceName), m_loop(loop)
+    {
+    }
 
     ServiceBase::~ServiceBase() { stop(); }
 
@@ -23,7 +27,15 @@ namespace ms::ipc
         }
 
         m_running.store(true, std::memory_order_release);
-        m_acceptThread = std::thread([this] { acceptLoop(); });
+
+        if (m_loop)
+        {
+            m_loop->addSource(m_listenFd, [this] { onAcceptReady(); });
+        }
+        else
+        {
+            m_acceptThread = std::thread([this] { acceptLoop(); });
+        }
         return true;
     }
 
@@ -34,37 +46,72 @@ namespace ms::ipc
             return;
         }
 
-        // Phase 1: Unblock accept thread.
-        if (m_listenFd >= 0)
+        if (m_loop)
         {
-            shutdown(m_listenFd, SHUT_RDWR);
-            platform::closeFd(m_listenFd);
-            m_listenFd = -1;
-        }
-
-        if (m_acceptThread.joinable())
-        {
-            m_acceptThread.join();
-        }
-
-        // Phase 2: Unblock all receiver threads, then join and cleanup.
-        std::lock_guard<std::mutex> lock(m_clientsMutex);
-        for (auto &c : m_clients)
-        {
-            if (c->conn.socketFd >= 0)
+            // Remove listen source.
+            if (m_listenFd >= 0)
             {
-                shutdown(c->conn.socketFd, SHUT_RDWR);
+                m_loop->removeSource(m_listenFd);
+                platform::closeFd(m_listenFd);
+                m_listenFd = -1;
             }
-        }
-        for (auto &c : m_clients)
-        {
-            if (c->thread.joinable())
+
+            // Snapshot client list and remove sources (under lock).
+            std::vector<ClientConn *> snapshot;
             {
-                c->thread.join();
+                std::lock_guard<std::mutex> lock(m_clientsMutex);
+                for (auto &c : m_clients)
+                {
+                    m_loop->removeSource(c->conn.socketFd);
+                    snapshot.push_back(c.get());
+                }
             }
-            c->conn.close();
+
+            // Wait for in-flight handlers and close (without m_clientsMutex).
+            for (auto *c : snapshot)
+            {
+                std::lock_guard<std::mutex> hlock(c->handlerMutex);
+                c->conn.close();
+            }
+
+            // Clear the list.
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            m_clients.clear();
         }
-        m_clients.clear();
+        else
+        {
+            // Phase 1: Unblock accept thread.
+            if (m_listenFd >= 0)
+            {
+                shutdown(m_listenFd, SHUT_RDWR);
+                platform::closeFd(m_listenFd);
+                m_listenFd = -1;
+            }
+
+            if (m_acceptThread.joinable())
+            {
+                m_acceptThread.join();
+            }
+
+            // Phase 2: Unblock all receiver threads, then join and cleanup.
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            for (auto &c : m_clients)
+            {
+                if (c->conn.socketFd >= 0)
+                {
+                    shutdown(c->conn.socketFd, SHUT_RDWR);
+                }
+            }
+            for (auto &c : m_clients)
+            {
+                if (c->thread.joinable())
+                {
+                    c->thread.join();
+                }
+                c->conn.close();
+            }
+            m_clients.clear();
+        }
     }
 
     bool ServiceBase::isRunning() const { return m_running.load(std::memory_order_acquire); }
@@ -95,6 +142,99 @@ namespace ms::ipc
 
             std::lock_guard<std::mutex> lock(m_clientsMutex);
             m_clients.push_back(std::move(client));
+        }
+    }
+
+    // ── RunLoop Handlers ────────────────────────────────────────────
+
+    void ServiceBase::onAcceptReady()
+    {
+        Connection conn = acceptConnection(m_listenFd);
+        if (!conn.valid())
+        {
+            return;
+        }
+
+        auto client = std::make_unique<ClientConn>();
+        client->conn = conn;
+
+        // Zero out local so it doesn't appear to own the fds.
+        conn.socketFd = -1;
+        conn.shmFd = -1;
+        conn.shmBase = nullptr;
+        conn.txRing = nullptr;
+        conn.rxRing = nullptr;
+
+        ClientConn *ptr = client.get();
+        m_loop->addSource(ptr->conn.socketFd, [this, ptr] { onClientReady(ptr); });
+
+        std::lock_guard<std::mutex> lock(m_clientsMutex);
+        m_clients.push_back(std::move(client));
+    }
+
+    void ServiceBase::onClientReady(ClientConn *client)
+    {
+        std::lock_guard<std::mutex> lock(client->handlerMutex);
+
+        if (!m_running.load(std::memory_order_acquire))
+        {
+            return;
+        }
+
+        // Drain the signal byte (epoll told us it's readable, won't block).
+        if (platform::recvSignal(client->conn.socketFd) != 0)
+        {
+            removeClient(client);
+            return;
+        }
+
+        // Drain all available frames.
+        while (true)
+        {
+            FrameHeader header{};
+            std::vector<uint8_t> payload;
+            if (readFrameAlloc(client->conn.rxRing, &header, &payload) != IPC_SUCCESS)
+            {
+                break;
+            }
+
+            if (!(header.flags & FRAME_REQUEST))
+            {
+                continue;
+            }
+
+            // Dispatch to subclass.
+            std::vector<uint8_t> responsePayload;
+            int status = onRequest(header.messageId, payload, &responsePayload);
+
+            // Build and send response.
+            FrameHeader response{};
+            response.version = kProtocolVersion;
+            response.flags = FRAME_RESPONSE;
+            response.serviceId = header.serviceId;
+            response.messageId = header.messageId;
+            response.seq = header.seq;
+            response.payloadBytes = static_cast<uint32_t>(responsePayload.size());
+            response.aux = static_cast<uint32_t>(status);
+
+            writeFrame(client->conn.txRing, response, responsePayload.data(),
+                       response.payloadBytes);
+            platform::sendSignal(client->conn.socketFd);
+        }
+    }
+
+    void ServiceBase::removeClient(ClientConn *client)
+    {
+        m_loop->removeSource(client->conn.socketFd);
+        client->conn.close();
+
+        // During shutdown (m_running == false), stop() will clear the list.
+        if (m_running.load(std::memory_order_acquire))
+        {
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            m_clients.erase(std::remove_if(m_clients.begin(), m_clients.end(),
+                                           [client](const auto &c) { return c.get() == client; }),
+                            m_clients.end());
         }
     }
 

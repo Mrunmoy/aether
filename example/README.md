@@ -133,6 +133,30 @@ connection. Also called automatically by the destructor.
 
 ---
 
+## RunLoop mode
+
+Both ServiceBase and ClientBase accept an optional `ms::RunLoop*` parameter.
+When provided, they register their fds on the RunLoop instead of spawning
+internal threads. This is useful when integrating into an event-driven
+application where a single RunLoop drives everything.
+
+```cpp
+ms::RunLoop loop;
+loop.init("app");
+
+EchoService service("echo", &loop);
+service.start();  // no threads — listenFd registered on RunLoop
+
+// Run the loop on a background thread (or the main thread).
+std::thread loopThread([&loop] { loop.run(); });
+
+// ... clients can connect and call from other threads ...
+
+service.stop();
+loop.stop();
+loopThread.join();
+```
+
 ## When to use this pattern
 
 This pattern — ServiceBase subclass on the server, ClientBase on the client —

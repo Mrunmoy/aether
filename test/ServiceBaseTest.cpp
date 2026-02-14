@@ -3,6 +3,7 @@
 #include "Connection.h"
 #include "FrameIO.h"
 #include "Platform.h"
+#include "RunLoop.h"
 
 #include <chrono>
 #include <cstring>
@@ -335,4 +336,171 @@ TEST(ServiceBaseTest, ClientDisconnectDoesNotCrash)
 
     client2.close();
     svc.stop();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RunLoop-mode tests
+// ═══════════════════════════════════════════════════════════════════════
+
+// Helper: run loop in background, auto-stop on scope exit.
+struct RunLoopGuard
+{
+    ms::RunLoop &loop;
+    std::thread thread;
+
+    explicit RunLoopGuard(ms::RunLoop &l) : loop(l), thread([&l] { l.run(); }) {}
+
+    ~RunLoopGuard()
+    {
+        loop.stop();
+        if (thread.joinable())
+            thread.join();
+    }
+};
+
+// ═════════════════════════════════════════════════════════════════════
+// Service on RunLoop: accept and respond to echo request
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, RunLoop_AcceptAndRespond)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRL");
+
+    EchoService svc(SVC_NAME, &loop);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    const uint8_t payload[] = "Hello, RunLoop!";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    int rc = sendAndRecv(client, 1, 42, payload, sizeof(payload), &respHdr, &respPayload);
+
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(respHdr.flags, FRAME_RESPONSE);
+    EXPECT_EQ(respHdr.seq, 42u);
+    EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    ASSERT_EQ(respPayload.size(), sizeof(payload));
+    EXPECT_EQ(std::memcmp(respPayload.data(), payload, sizeof(payload)), 0);
+
+    client.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Service on RunLoop: multiple clients get independent responses
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, RunLoop_MultipleClients)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLMulti");
+
+    EchoService svc(SVC_NAME, &loop);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    Connection client1 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client1.valid());
+    Connection client2 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    const uint8_t p1[] = "client1";
+    const uint8_t p2[] = "client2";
+    FrameHeader h1{}, h2{};
+    std::vector<uint8_t> r1, r2;
+
+    ASSERT_EQ(sendAndRecv(client1, 1, 10, p1, sizeof(p1), &h1, &r1), IPC_SUCCESS);
+    ASSERT_EQ(sendAndRecv(client2, 1, 20, p2, sizeof(p2), &h2, &r2), IPC_SUCCESS);
+
+    EXPECT_EQ(h1.seq, 10u);
+    EXPECT_EQ(h2.seq, 20u);
+    ASSERT_EQ(r1.size(), sizeof(p1));
+    ASSERT_EQ(r2.size(), sizeof(p2));
+    EXPECT_EQ(std::memcmp(r1.data(), p1, sizeof(p1)), 0);
+    EXPECT_EQ(std::memcmp(r2.data(), p2, sizeof(p2)), 0);
+
+    client1.close();
+    client2.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Service on RunLoop: client disconnect does not crash
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, RunLoop_ClientDisconnect)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLDisc");
+
+    EchoService svc(SVC_NAME, &loop);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    // Connect and immediately disconnect.
+    {
+        Connection client1 = connectToServer(SVC_NAME);
+        ASSERT_TRUE(client1.valid());
+        settle();
+        client1.close();
+    }
+
+    settle();
+
+    // Service should still work for a new client.
+    Connection client2 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    const uint8_t payload[] = "still alive";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    int rc = sendAndRecv(client2, 1, 1, payload, sizeof(payload), &respHdr, &respPayload);
+
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    ASSERT_EQ(respPayload.size(), sizeof(payload));
+    EXPECT_EQ(std::memcmp(respPayload.data(), payload, sizeof(payload)), 0);
+
+    client2.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Service on RunLoop: stop cleans up — client detects disconnect
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, RunLoop_StopCleansUp)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLStop");
+
+    EchoService svc(SVC_NAME, &loop);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    svc.stop();
+
+    // Client should detect disconnect.
+    EXPECT_NE(recvSignal(client.socketFd), 0);
+
+    client.close();
 }

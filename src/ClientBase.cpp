@@ -8,7 +8,10 @@ namespace ms::ipc
 
     // ── Constructor / Destructor ─────────────────────────────────────
 
-    ClientBase::ClientBase(const char *serviceName) : m_serviceName(serviceName) {}
+    ClientBase::ClientBase(const char *serviceName, ms::RunLoop *loop)
+        : m_serviceName(serviceName), m_loop(loop)
+    {
+    }
 
     ClientBase::~ClientBase() { disconnect(); }
 
@@ -23,7 +26,15 @@ namespace ms::ipc
         }
 
         m_running.store(true, std::memory_order_release);
-        m_receiverThread = std::thread([this] { receiverLoop(); });
+
+        if (m_loop)
+        {
+            m_loop->addSource(m_conn.socketFd, [this] { onDataReady(); });
+        }
+        else
+        {
+            m_receiverThread = std::thread([this] { receiverLoop(); });
+        }
         return true;
     }
 
@@ -34,15 +45,24 @@ namespace ms::ipc
             return;
         }
 
-        // Unblock receiver thread.
-        if (m_conn.socketFd >= 0)
+        if (m_loop)
         {
-            shutdown(m_conn.socketFd, SHUT_RDWR);
+            m_loop->removeSource(m_conn.socketFd);
+            // Wait for any in-flight handler to finish.
+            std::lock_guard<std::mutex> lock(m_handlerMutex);
         }
-
-        if (m_receiverThread.joinable())
+        else
         {
-            m_receiverThread.join();
+            // Unblock receiver thread.
+            if (m_conn.socketFd >= 0)
+            {
+                shutdown(m_conn.socketFd, SHUT_RDWR);
+            }
+
+            if (m_receiverThread.joinable())
+            {
+                m_receiverThread.join();
+            }
         }
 
         // Fail all pending calls.
@@ -178,6 +198,63 @@ namespace ms::ipc
             pending->status = IPC_ERR_DISCONNECTED;
             pending->done = true;
             pending->cv.notify_one();
+        }
+    }
+
+    // ── RunLoop Handler ────────────────────────────────────────────
+
+    void ClientBase::onDataReady()
+    {
+        std::lock_guard<std::mutex> lock(m_handlerMutex);
+
+        if (!m_running.load(std::memory_order_acquire))
+        {
+            return;
+        }
+
+        // Drain the signal byte (epoll told us it's readable, won't block).
+        if (platform::recvSignal(m_conn.socketFd) != 0)
+        {
+            m_loop->removeSource(m_conn.socketFd);
+            m_running.store(false, std::memory_order_release);
+
+            // Fail pending calls.
+            std::lock_guard<std::mutex> lock(m_pendingMutex);
+            for (auto &[_, pending] : m_pending)
+            {
+                pending->status = IPC_ERR_DISCONNECTED;
+                pending->done = true;
+                pending->cv.notify_one();
+            }
+            return;
+        }
+
+        // Drain all available frames.
+        while (true)
+        {
+            FrameHeader header{};
+            std::vector<uint8_t> payload;
+            if (readFrameAlloc(m_conn.rxRing, &header, &payload) != IPC_SUCCESS)
+            {
+                break;
+            }
+
+            if (header.flags & FRAME_RESPONSE)
+            {
+                std::lock_guard<std::mutex> lock(m_pendingMutex);
+                auto it = m_pending.find(header.seq);
+                if (it != m_pending.end())
+                {
+                    it->second->status = static_cast<int>(header.aux);
+                    it->second->response = std::move(payload);
+                    it->second->done = true;
+                    it->second->cv.notify_one();
+                }
+            }
+            else if (header.flags & FRAME_NOTIFY)
+            {
+                onNotification(header.serviceId, header.messageId, payload);
+            }
         }
     }
 

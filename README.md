@@ -52,10 +52,11 @@ data flow, sequence diagrams, class hierarchy, and threading model.
 - Framed message protocol: 24-byte header + payload
 - Server-side ServiceBase with accept thread + per-client receiver threads
 - Client-side ClientBase with sync RPC (condition_variable + timeout)
+- Optional [ms-runloop](https://github.com/Mrunmoy/ms-runloop) integration — zero internal threads when using a shared RunLoop
 - Virtual dispatch for request handling, broadcast notifications
 - Virtual notification callbacks on client side
 - Embedded-friendly: no `std::string`, no heap allocations in platform layer
-- 42 unit tests
+- 50 unit tests
 
 ## Dependencies
 
@@ -65,6 +66,7 @@ data flow, sequence diagrams, class hierarchy, and threading model.
 - **Python 3** (for build script, optional)
 - **Google Test** v1.14.0 (bundled as submodule, tests only)
 - **ms-ringbuffer** (bundled as submodule under `deps/`)
+- **ms-runloop** (bundled as submodule under `deps/`)
 
 ## Building
 
@@ -103,9 +105,10 @@ inc/ClientBase.h        Client-side RPC base class
 src/PlatformLinux.cpp   Linux platform backend
 src/Connection.cpp      Handshake implementation
 src/FrameIO.cpp         readFrameAlloc (vector-based convenience read)
-src/ServiceBase.cpp     Service lifecycle, threading, dispatch
-src/ClientBase.cpp      Client connect, sync call, notifications
+src/ServiceBase.cpp     Service lifecycle, threading, RunLoop dispatch
+src/ClientBase.cpp      Client connect, sync call, RunLoop dispatch
 deps/ms-ringbuffer/     SPSC ring buffer (submodule)
+deps/ms-runloop/        Event loop for fd watching (submodule)
 test/                   Unit tests (see test/README.md)
 doc/                    Design walkthroughs
 ```
@@ -122,7 +125,6 @@ doc/                    Design walkthroughs
 ## Further reading
 
 - [test/README.md](test/README.md) — test organization and how to run
-- [PLAN.md](PLAN.md) — implementation progress and roadmap
 
 ## License
 

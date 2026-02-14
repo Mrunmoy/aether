@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "ClientBase.h"
 #include "ServiceBase.h"
+#include "RunLoop.h"
 
 #include <chrono>
 #include <cstring>
@@ -355,4 +356,154 @@ TEST(ClientBaseTest, ServerStopDisconnectsClient)
     EXPECT_NE(rc, IPC_SUCCESS);
 
     client.disconnect();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RunLoop-mode tests
+// ═══════════════════════════════════════════════════════════════════════
+
+// Helper: run loop in background, auto-stop on scope exit.
+struct RunLoopGuard
+{
+    ms::RunLoop &loop;
+    std::thread thread;
+
+    explicit RunLoopGuard(ms::RunLoop &l) : loop(l), thread([&l] { l.run(); }) {}
+
+    ~RunLoopGuard()
+    {
+        loop.stop();
+        if (thread.joinable())
+            thread.join();
+    }
+};
+
+// ═════════════════════════════════════════════════════════════════════
+// Client on RunLoop: echo call and response
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, RunLoop_CallAndResponse)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRL");
+
+    ClientBase client(SVC_NAME, &loop);
+    ASSERT_TRUE(client.connect());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    // call() from a non-RunLoop thread (this thread).
+    const std::vector<uint8_t> request = {'H', 'e', 'l', 'l', 'o'};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response);
+
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(response, request);
+
+    client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Client on RunLoop: notification delivered
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, RunLoop_Notification)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRLNotify");
+
+    TestClient client(SVC_NAME, &loop);
+    ASSERT_TRUE(client.connect());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    const uint8_t payload[] = "notification";
+    ASSERT_EQ(svc.testNotify(77, payload, sizeof(payload)), IPC_SUCCESS);
+
+    // Wait for the notification to arrive.
+    {
+        std::unique_lock<std::mutex> lock(client.notifyMutex);
+        ASSERT_TRUE(client.notifyCv.wait_for(lock, std::chrono::milliseconds(500),
+                                             [&] { return !client.notifications.empty(); }));
+    }
+
+    ASSERT_EQ(client.notifications.size(), 1u);
+    EXPECT_EQ(client.notifications[0].messageId, 77u);
+    ASSERT_EQ(client.notifications[0].payload.size(), sizeof(payload));
+    EXPECT_EQ(std::memcmp(client.notifications[0].payload.data(), payload, sizeof(payload)), 0);
+
+    client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Client on RunLoop: clean disconnect
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, RunLoop_Disconnect)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRLDisc");
+
+    ClientBase client(SVC_NAME, &loop);
+    ASSERT_TRUE(client.connect());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    EXPECT_TRUE(client.isConnected());
+
+    client.disconnect();
+    EXPECT_FALSE(client.isConnected());
+
+    // Call after disconnect should fail.
+    const std::vector<uint8_t> request = {1};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response);
+    EXPECT_EQ(rc, IPC_ERR_DISCONNECTED);
+
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Both service and client on the SAME RunLoop
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, RunLoop_BothOnSameRunLoop)
+{
+    ms::RunLoop loop;
+    loop.init("BothRL");
+
+    EchoService svc(SVC_NAME, &loop);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    ClientBase client(SVC_NAME, &loop);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    // call() from this thread (not the RunLoop thread).
+    const std::vector<uint8_t> request = {'B', 'o', 't', 'h'};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response);
+
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(response, request);
+
+    client.disconnect();
+    svc.stop();
 }

@@ -17,6 +17,7 @@ graph TD
     subgraph "Service layer"
         SB["ServiceBase"]
         CB["ClientBase"]
+        RL["RunLoop (optional)"]
     end
 
     subgraph "Frame I/O"
@@ -49,6 +50,8 @@ graph TD
     CB --> SIG
     SB --> CON
     CB --> CON
+    RL --> SB
+    RL --> CB
 ```
 
 ## Data plane vs control plane
@@ -180,6 +183,11 @@ sequenceDiagram
 
 ## ServiceBase threading model
 
+Both ServiceBase and ClientBase support two modes: **threaded** (default,
+`loop = nullptr`) and **RunLoop** (pass a `ms::RunLoop*`).
+
+### Threaded mode
+
 ```mermaid
 graph TD
     START["svc.start()"] --> AT["Accept Thread"]
@@ -205,7 +213,23 @@ graph TD
     JOIN_RT --> CLEANUP["close() + clear"]
 ```
 
-## Two-phase shutdown
+### RunLoop mode
+
+```mermaid
+graph TD
+    START["svc.start()"] --> RL["RunLoop thread\nepoll_wait()"]
+    RL -->|"listenFd readable"| ACCEPT["onAcceptReady()\nacceptConnection()\naddSource(clientFd)"]
+    RL -->|"clientFd readable"| CLIENT["onClientReady()\nrecvSignal()\ndrain frames\nonRequest()\nwriteFrame()\nsendSignal()"]
+
+    STOP["svc.stop()"] --> RM["removeSource(listenFd)\nremoveSource(clientFd) × N"]
+    RM --> WAIT["Wait for handlerMutex per client"]
+    WAIT --> CLOSE["close() connections, clear"]
+```
+
+Zero internal threads — listen fd and all client fds are RunLoop sources.
+Multiple services and clients can share the same RunLoop.
+
+## Two-phase shutdown (threaded mode)
 
 ```mermaid
 sequenceDiagram
@@ -243,7 +267,11 @@ classDiagram
         #sendNotify(serviceId, messageId, payload, len) int
         -acceptLoop() void
         -receiverLoop(client) void
+        -onAcceptReady() void
+        -onClientReady(client) void
+        -removeClient(client) void
         -m_serviceName : string
+        -m_loop : RunLoop*
         -m_listenFd : int
         -m_running : atomic~bool~
         -m_acceptThread : thread
@@ -273,9 +301,12 @@ classDiagram
         +call(serviceId, messageId, request, response, timeout) int
         #onNotification(serviceId, messageId, payload) void
         -receiverLoop() void
+        -onDataReady() void
         -m_conn : Connection
+        -m_loop : RunLoop*
         -m_running : atomic~bool~
         -m_nextSeq : atomic~uint32_t~
+        -m_handlerMutex : mutex
         -m_pendingMutex : mutex
         -m_pending : map~uint32_t, PendingCall~
     }
@@ -376,6 +407,8 @@ sequenceDiagram
 
 ## ClientBase disconnect
 
+### Threaded mode
+
 ```mermaid
 sequenceDiagram
     participant App as disconnect()
@@ -385,6 +418,21 @@ sequenceDiagram
     App->>RT: shutdown(socketFd)
     Note over RT: recvSignal() fails, loop exits
     App->>RT: join()
+    App->>PC: Fail all with IPC_ERR_DISCONNECTED
+    App->>PC: notify_one() each, clear map
+    Note over App: conn.close()
+```
+
+### RunLoop mode
+
+```mermaid
+sequenceDiagram
+    participant App as disconnect()
+    participant RL as RunLoop
+    participant PC as Pending Calls
+
+    App->>RL: removeSource(socketFd)
+    Note over App: Wait for m_handlerMutex
     App->>PC: Fail all with IPC_ERR_DISCONNECTED
     App->>PC: notify_one() each, clear map
     Note over App: conn.close()
@@ -412,12 +460,16 @@ timeline
                     : Accept + receiver threads
                     : Virtual dispatch
                     : Notification broadcast
-                    : 8 tests
+                    : 12 tests
     Phase 3c (done) : ClientBase
                     : connect / disconnect
                     : Sync call with timeout
                     : Notification callbacks
-                    : 9 tests
+                    : 13 tests
+    Phase 3d (done) : RunLoop integration
+                    : Optional RunLoop mode
+                    : Zero internal threads
+                    : Handler mutex safety
     Future : Code generation
            : IDL → FooSkeleton + FooClient
            : End-to-end RPC

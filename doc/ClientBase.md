@@ -13,7 +13,9 @@ classDiagram
         +call(serviceId, messageId, request, response, timeout) int
         #onNotification(serviceId, messageId, payload) void
         -receiverLoop() void
+        -onDataReady() void
         -m_conn : Connection
+        -m_loop : RunLoop*
         -m_running : atomic~bool~
         -m_nextSeq : atomic~uint32_t~
         -m_pending : map~seq, PendingCall~
@@ -39,8 +41,15 @@ classDiagram
 ### Connecting
 
 ```cpp
+// Threaded mode (default):
 ClientBase client("my-service");
 client.connect();  // handshake + spawn receiver thread
+
+// RunLoop mode:
+ms::RunLoop loop;
+loop.init("cli");
+ClientBase client("my-service", &loop);
+client.connect();  // handshake + register fd on RunLoop
 ```
 
 ```mermaid
@@ -52,13 +61,18 @@ sequenceDiagram
     App->>CB: connect()
     CB->>S: connectToServer(name) — full handshake
     Note over CB,S: Shared memory established
-    Note over CB: Spawn receiver thread
+    alt Threaded mode
+        Note over CB: Spawn receiver thread
+    else RunLoop mode
+        Note over CB: addSource(socketFd) on RunLoop
+    end
     CB-->>App: return true
 ```
 
 `connect()` calls `connectToServer()` from Connection.h — creates shared
-memory, sends the FD to the server, waits for ACK. On success, spawns
-the receiver thread.
+memory, sends the FD to the server, waits for ACK. In threaded mode, it
+spawns a receiver thread. In RunLoop mode, it registers the socket fd
+as a RunLoop source — responses and notifications arrive via `onDataReady()`.
 
 ### Disconnecting
 
@@ -66,20 +80,33 @@ the receiver thread.
 client.disconnect();
 ```
 
+#### Threaded mode
+
 ```mermaid
 sequenceDiagram
-    participant App as Application
-    participant CB as disconnect()
+    participant App as disconnect()
     participant RT as Receiver Thread
     participant PC as Pending Calls
 
-    App->>CB: disconnect()
-    CB->>RT: shutdown(socketFd, SHUT_RDWR)
+    App->>RT: shutdown(socketFd, SHUT_RDWR)
     Note over RT: recvSignal() returns -1, exits loop
-    CB->>RT: join()
-    CB->>PC: Set all status = IPC_ERR_DISCONNECTED
-    CB->>PC: notify_one() on each, clear map
-    Note over CB: conn.close()
+    App->>RT: join()
+    App->>PC: Fail all with IPC_ERR_DISCONNECTED
+    Note over App: conn.close()
+```
+
+#### RunLoop mode
+
+```mermaid
+sequenceDiagram
+    participant App as disconnect()
+    participant RL as RunLoop
+    participant PC as Pending Calls
+
+    App->>RL: removeSource(socketFd)
+    Note over App: Wait for handlerMutex (in-flight handler)
+    App->>PC: Fail all with IPC_ERR_DISCONNECTED
+    Note over App: conn.close()
 ```
 
 The destructor calls `disconnect()` automatically.
@@ -163,24 +190,30 @@ caller.
 | `IPC_ERR_RING_FULL` (-3) | Ring buffer full (request too large) |
 | Server status (from aux) | Server-returned error code |
 
-## Receiver thread
+## Receiving frames
+
+Both threaded mode (`receiverLoop()`) and RunLoop mode (`onDataReady()`)
+use the same logic to process incoming frames:
 
 ```mermaid
 graph TD
-    START["receiverLoop()"] --> WAIT["recvSignal()"]
-    WAIT -->|"signal received"| DRAIN["Drain rx ring"]
+    START["Signal received"] --> DRAIN["Drain rx ring"]
     DRAIN --> CHECK{"Frame type?"}
     CHECK -->|"FRAME_RESPONSE"| RESP["Find PendingCall by seq\nSet status + response\ndone = true\ncv.notify_one()"]
     CHECK -->|"FRAME_NOTIFY"| NOTIFY["onNotification(\nserviceId, messageId, payload)"]
     RESP --> DRAIN
     NOTIFY --> DRAIN
-    DRAIN -->|"no more frames"| WAIT
-    WAIT -->|"error / shutdown"| EXIT["Fail remaining pending calls\nwith IPC_ERR_DISCONNECTED"]
+    DRAIN -->|"no more frames"| DONE["Return / wait for next signal"]
 ```
 
-The receiver thread handles two frame types:
+Two frame types are handled:
 - **FRAME_RESPONSE** — matches to a pending `call()` by sequence number
 - **FRAME_NOTIFY** — dispatched to virtual `onNotification()`
+
+In threaded mode, `receiverLoop()` blocks on `recvSignal()` in a loop.
+In RunLoop mode, `onDataReady()` is called by the RunLoop when the socket
+becomes readable; a `m_handlerMutex` prevents `disconnect()` from closing
+the connection while the handler is executing.
 
 ## Notification callbacks
 
@@ -197,7 +230,7 @@ calling typed virtual methods like `onTemperatureChanged(payload)`.
 ## Typical usage
 
 ```cpp
-// Direct usage (without generated code):
+// Threaded mode (default):
 ClientBase client("echo-service");
 client.connect();
 
@@ -211,20 +244,45 @@ if (rc == IPC_SUCCESS) {
 client.disconnect();
 ```
 
+```cpp
+// RunLoop mode — call() from a non-RunLoop thread:
+ms::RunLoop loop;
+loop.init("app");
+ClientBase client("echo-service", &loop);
+client.connect();
+
+// Start the RunLoop on a background thread.
+std::thread loopThread([&loop] { loop.run(); });
+
+// call() blocks the caller; response arrives on RunLoop thread.
+int rc = client.call(1, 1, request, &response);
+
+client.disconnect();
+loop.stop();
+loopThread.join();
+```
+
+**Important:** Do not call `call()` from the RunLoop thread — it will
+deadlock because the response can only arrive via the same thread.
+
 ## Design decisions
 
-**Virtual `onNotification()` instead of `std::function`** — matches the
-ServiceBase pattern. No handler mutex needed. Generated code overrides it
-with a switch, calling typed virtual methods that users implement.
+**Optional RunLoop** — the RunLoop parameter is optional (`nullptr` by
+default). Threaded mode works standalone; RunLoop mode integrates into
+an event-driven application with zero internal threads.
 
-**`Connection` struct** — reuses the existing `connectToServer()` handshake
-rather than reimplementing shared memory setup. Single member variable
-instead of separate fd/shm/region fields.
+**Virtual `onNotification()` instead of `std::function`** — matches the
+ServiceBase pattern. Generated code overrides it with a switch, calling
+typed virtual methods that users implement.
+
+**Handler mutex (RunLoop mode)** — `m_handlerMutex` prevents `disconnect()`
+from closing the connection while `onDataReady()` is executing on the
+RunLoop thread, avoiding use-after-free.
 
 **`shared_ptr<PendingCall>`** — the PendingCall is shared between the caller
-(which waits on the cv) and the receiver thread (which sets done and notifies).
-Using shared_ptr ensures the PendingCall lives long enough even if the map
-entry is erased during cleanup.
+(which waits on the cv) and the receiver/RunLoop thread (which sets done
+and notifies). Using shared_ptr ensures the PendingCall lives long enough
+even if the map entry is erased during cleanup.
 
 **Atomic sequence counter** — `m_nextSeq.fetch_add(1)` is lock-free and
 generates unique sequence numbers without contention. Safe for concurrent

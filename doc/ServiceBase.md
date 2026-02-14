@@ -36,7 +36,11 @@ classDiagram
 
 ## Threading model
 
-ServiceBase uses internal threads — no RunLoop dependency.
+ServiceBase supports two modes: **threaded** (default) and **RunLoop**.
+Pass a `ms::RunLoop*` to the constructor to use RunLoop mode; pass
+`nullptr` (or omit) for threaded mode.
+
+### Threaded mode (default)
 
 ```mermaid
 graph TD
@@ -60,23 +64,51 @@ Each receiver thread:
 4. Builds a `FRAME_RESPONSE` with the return status in `aux`
 5. Writes the response via `writeFrame()` and signals the client
 
+### RunLoop mode
+
+```mermaid
+graph TD
+    START["svc.start()"] --> RL["RunLoop thread\nepoll_wait()"]
+
+    RL -->|"listenFd readable"| ACCEPT["onAcceptReady()\nacceptConnection()\naddSource(clientFd)"]
+    RL -->|"clientFd readable"| CLIENT["onClientReady()\nrecvSignal()\ndrain frames\nonRequest()\nwriteFrame()\nsendSignal()"]
+```
+
+Zero internal threads — the listen fd and all client fds are registered
+as RunLoop sources. The RunLoop's epoll thread dispatches
+`onAcceptReady()` for new connections and `onClientReady()` for incoming
+requests. If a handler blocks, the entire RunLoop blocks (by design).
+
+A `handlerMutex` per client prevents `stop()` from closing a connection
+while a handler is still executing.
+
 ## Lifecycle
 
 ### Starting
 
 ```cpp
+// Threaded mode (default):
 EchoService svc("my-service");
 svc.start();  // creates listen socket, spawns accept thread
+
+// RunLoop mode:
+ms::RunLoop loop;
+loop.init("svc");
+EchoService svc("my-service", &loop);
+svc.start();  // registers listen fd on RunLoop (no threads spawned)
 ```
 
 `start()` calls `platform::serverSocket()` to create an abstract namespace
-UDS socket, then spawns the accept loop on a dedicated thread.
+UDS socket. In threaded mode, it spawns the accept loop on a dedicated
+thread. In RunLoop mode, it registers the listen fd as a RunLoop source.
 
-### Stopping (two-phase shutdown)
+### Stopping
 
 ```cpp
 svc.stop();
 ```
+
+#### Threaded mode (two-phase shutdown)
 
 ```mermaid
 sequenceDiagram
@@ -96,6 +128,22 @@ sequenceDiagram
     Note over Caller: close() connections, clear vector
 ```
 
+#### RunLoop mode shutdown
+
+```mermaid
+sequenceDiagram
+    participant Caller as svc.stop()
+    participant RL as RunLoop
+
+    Caller->>RL: removeSource(listenFd)
+    Note over Caller: closeFd(listenFd)
+    Note over Caller: Snapshot client list (under lock)
+    Caller->>RL: removeSource(clientFd) for each
+    Note over Caller: Wait for handlerMutex per client
+    Note over Caller: close() each connection
+    Note over Caller: Clear client list
+```
+
 The destructor calls `stop()` automatically.
 
 ## API
@@ -103,11 +151,13 @@ The destructor calls `stop()` automatically.
 ### Public
 
 ```cpp
-explicit ServiceBase(const char *serviceName);
+// loop = nullptr → threaded mode (internal threads)
+// loop = &myLoop → RunLoop mode (zero internal threads)
+explicit ServiceBase(const char *serviceName, ms::RunLoop *loop = nullptr);
 virtual ~ServiceBase();
 
-bool start();        // create listen socket, spawn accept thread
-void stop();         // two-phase shutdown, join all threads
+bool start();        // create listen socket, spawn threads or register sources
+void stop();         // shutdown: join threads or remove sources, cleanup
 bool isRunning() const;  // atomic flag
 ```
 
@@ -187,20 +237,29 @@ called during `stop()`.
 
 ## Design decisions
 
-**Internal threads** — ServiceBase owns its threads rather than requiring
-a RunLoop. This keeps the dependency graph simple and avoids coupling the
-IPC framework to a specific event loop implementation.
+**Optional RunLoop** — the RunLoop parameter is optional (`nullptr` by
+default). Threaded mode keeps the dependency minimal; RunLoop mode enables
+zero-thread operation when integrating into an event-driven application.
 
 **Virtual dispatch** — `onRequest()` is a pure virtual method rather than
-a `std::function` callback. This eliminates the need for a handler mutex
-and allows generated skeletons to implement the switch as a normal override.
+a `std::function` callback. This allows generated skeletons to implement
+the switch as a normal override.
 
-**Per-client threads** — each client gets its own receiver thread. This
-simplifies the implementation (no multiplexing) and ensures one slow client
-doesn't block others. For high-connection-count scenarios, a future
-RunLoop-based variant could multiplex using epoll.
+**Per-client threads (threaded mode)** — each client gets its own receiver
+thread. This simplifies the implementation (no multiplexing) and ensures
+one slow client doesn't block others.
 
-**Two-phase shutdown** — stopping the accept thread before stopping
-receiver threads prevents new connections from arriving during teardown.
-Using `shutdown(fd, SHUT_RDWR)` to unblock blocking socket calls is
-cleaner than using a pipe or eventfd for cancellation.
+**Multiplexed handlers (RunLoop mode)** — all clients share the RunLoop
+thread via epoll. A `handlerMutex` per client prevents `stop()` from
+closing a connection while a handler is in-flight.
+
+**Two-phase shutdown (threaded mode)** — stopping the accept thread
+before stopping receiver threads prevents new connections from arriving
+during teardown. Using `shutdown(fd, SHUT_RDWR)` to unblock blocking
+socket calls is cleaner than using a pipe or eventfd for cancellation.
+
+**Snapshot-then-wait shutdown (RunLoop mode)** — `stop()` snapshots the
+client list under `m_clientsMutex`, releases the lock, then waits for
+each client's `handlerMutex`. This avoids a deadlock where `stop()` holds
+`m_clientsMutex` while a handler holds `handlerMutex` and calls
+`removeClient()` which also needs `m_clientsMutex`.
