@@ -1,6 +1,7 @@
 # Tests
 
-Unit tests for ms-ipc, using [Google Test](https://github.com/google/googletest) v1.14.0.
+Unit tests for ms-ipc. C++ tests use [Google Test](https://github.com/google/googletest) v1.14.0,
+Python tests use pytest.
 
 ## Prerequisites
 
@@ -13,15 +14,20 @@ git submodule update --init --recursive
 ## Running tests
 
 ```bash
-# From the project root:
+# From the project root — runs all C++ and Python tests:
 python3 build.py -t
 
-# Or with CMake directly:
-cmake -B build && cmake --build build -j$(nproc)
+# Or with CMake directly (C++ only):
+cmake -B build -DMS_IPC_BUILD_EXAMPLES=ON && cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
+
+# Python tests only:
+python3 -m pytest tools/ipcgen/test/ -v
 ```
 
-## Test files
+## Test organization
+
+### Core C++ tests (test/) — 50 tests
 
 | File | What it tests |
 |------|---------------|
@@ -30,3 +36,21 @@ ctest --test-dir build --output-on-failure
 | `FrameIOTest.cpp` | Frame I/O: write/read round-trip with all header fields, peek without consuming, ring-full detection, empty-ring errors, multiple frames in sequence, zero-payload frames, vector-based read, large (~200KB) payload, undersized buffer error recovery. 9 tests. |
 | `ServiceBaseTest.cpp` | ServiceBase: start/stop lifecycle, single echo request/response, invalid method error in aux, multiple requests on same connection, multiple independent clients, notification broadcast to all clients, stop cleans up connections (client detects disconnect), client disconnect doesn't crash service. RunLoop mode: accept and respond, multiple clients, client disconnect handling, stop cleanup. 12 tests. |
 | `ClientBaseTest.cpp` | ClientBase: connect/disconnect lifecycle, single echo RPC call, invalid method error, multiple sequential calls, call timeout (IPC_ERR_TIMEOUT), disconnect fails pending calls, notification via virtual onNotification, call after disconnect returns error, server stop disconnects client. RunLoop mode: call and response, notification delivery, clean disconnect, both service and client on same RunLoop. 13 tests. |
+
+### Code generation C++ tests (example/) — 11 tests
+
+| File | What it tests |
+|------|---------------|
+| `CodeGenServerTest.cpp` | Generated server dispatch: GetDeviceCount, GetDeviceStatus, DeviceConnected/Disconnected notifications, invalid method error, RunLoop mode dispatch. 6 tests. |
+| `CodeGenClientTest.cpp` | Generated client RPC: GetDeviceCount, GetDeviceStatus, DeviceConnected/Disconnected notification callbacks, RunLoop typed call. 5 tests. |
+
+### Python tests (tools/ipcgen/test/) — 45 tests
+
+| File | What it tests |
+|------|---------------|
+| `test_hash.py` | FNV-1a 32-bit hash: empty string, known value, uniqueness. 3 tests. |
+| `test_lexer.py` | IDL tokenizer: keywords, identifiers, numbers, symbols, attributes, comments, whitespace, error cases. 12 tests. |
+| `test_parser.py` | IDL parser: minimal/full services, param directions, all scalar types, error validation (name mismatch, unknown types, pointer rules). 15 tests. |
+| `test_server_emitter.py` | Server code emitter: header structure, service ID, handler/notify signatures, dispatch switch. 6 tests. |
+| `test_client_emitter.py` | Client code emitter: header structure, RPC signatures, notification callbacks, dispatch switch. 6 tests. |
+| `test_end_to_end.py` | Full pipeline: file generation, content matching, CLI invocation. 3 tests. |
