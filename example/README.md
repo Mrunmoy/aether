@@ -130,10 +130,10 @@ Create `DeviceMonitor.idl` describing your service interface:
 service DeviceMonitor
 {
     [method=1]
-    int GetDeviceCount([out] uint32* count);
+    int GetDeviceCount([out] uint32 count);
 
     [method=2]
-    int GetDeviceStatus([in] uint32 deviceId, [out] uint32* status);
+    int GetDeviceStatus([in] uint32 deviceId, [out] uint32 status);
 };
 
 notifications DeviceMonitor
@@ -154,7 +154,7 @@ notifications DeviceMonitor
 service <Name>
 {
     [method=<id>]
-    int <MethodName>([in] <type> <param>, ..., [out] <type>* <param>, ...);
+    int <MethodName>([in] <type> <param>, ..., [out] <type> <param>, ...);
 };
 ```
 

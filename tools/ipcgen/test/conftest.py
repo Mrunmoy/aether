@@ -23,10 +23,10 @@ DEVICE_MONITOR_IDL = """\
 service DeviceMonitor
 {
     [method=1]
-    int GetDeviceCount([out] uint32* count);
+    int GetDeviceCount([out] uint32 count);
 
     [method=2]
-    int GetDeviceStatus([in] uint32 deviceId, [out] uint32* status);
+    int GetDeviceStatus([in] uint32 deviceId, [out] uint32 status);
 };
 
 notifications DeviceMonitor

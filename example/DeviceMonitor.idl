@@ -18,10 +18,10 @@ struct DeviceInfo
 service DeviceMonitor
 {
     [method=1]
-    int GetDeviceCount([out] uint32* count);
+    int GetDeviceCount([out] uint32 count);
 
     [method=2]
-    int GetDeviceInfo([in] uint32 deviceId, [out] DeviceInfo* info);
+    int GetDeviceInfo([in] uint32 deviceId, [out] DeviceInfo info);
 };
 
 notifications DeviceMonitor

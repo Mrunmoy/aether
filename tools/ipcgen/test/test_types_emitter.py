@@ -97,7 +97,7 @@ class TestTypesEmitter:
             struct Info { uint32 id; uint32 status; };
             service Foo {
                 [method=1]
-                int GetInfo([in] uint32 id, [out] Info* info);
+                int GetInfo([in] uint32 id, [out] Info info);
             };
         """)
         h = emit_server_h(idl)
@@ -109,7 +109,7 @@ class TestTypesEmitter:
             struct Info { uint32 id; uint32 status; };
             service Foo {
                 [method=1]
-                int GetInfo([in] uint32 id, [out] Info* info);
+                int GetInfo([in] uint32 id, [out] Info info);
             };
         """)
         cpp = emit_server_cpp(idl)
@@ -122,7 +122,7 @@ class TestTypesEmitter:
             struct Info { uint32 id; uint32 status; };
             service Foo {
                 [method=1]
-                int GetInfo([in] uint32 id, [out] Info* info);
+                int GetInfo([in] uint32 id, [out] Info info);
             };
         """)
         h = emit_client_h(idl)
@@ -185,16 +185,15 @@ class TestTypesEmitter:
         assert "#include <array>" in h
 
     def test_array_param_in_client_h(self):
-        """Client method signature uses std::array for array params."""
+        """Client method signature uses raw T* for [out] array params."""
         idl = parse("""
             service Foo {
                 [method=1]
-                int GetKey([in] uint32 slot, [out] uint8[32]* key);
+                int GetKey([in] uint32 slot, [out] uint8[32] key);
             };
         """)
         h = emit_client_h(idl)
-        assert "std::array<uint8_t, 32> *key" in h
-        assert "#include <array>" in h
+        assert "uint8_t *key" in h
 
     def test_array_param_marshal_sizeof(self):
         """Generated code uses sizeof() on std::array param — works correctly."""
@@ -293,11 +292,11 @@ class TestTypesEmitter:
         idl = parse("""
             service Foo {
                 [method=1]
-                int Exchange([in] uint8[16] inBuf, [out] uint8[32]* outBuf);
+                int Exchange([in] uint8[16] inBuf, [out] uint8[32] outBuf);
             };
         """)
         h = emit_server_h(idl)
-        assert "virtual int handleExchange(std::array<uint8_t, 16> inBuf, std::array<uint8_t, 32> *outBuf) = 0;" in h
+        assert "virtual int handleExchange(std::array<uint8_t, 16> inBuf, uint8_t *outBuf) = 0;" in h
 
     def test_server_cpp_array_unmarshal(self):
         """Server cpp correctly declares and unmarshals array [in] param."""
@@ -330,25 +329,25 @@ class TestTypesEmitter:
         idl = parse("""
             service Foo {
                 [method=1]
-                int GetKey([out] uint8[32]* key);
+                int GetKey([out] uint8[32] key);
             };
         """)
         cpp = emit_server_cpp(idl)
-        assert "std::array<uint8_t, 32> key;" in cpp
+        assert "uint8_t key[32];" in cpp
         assert "response->resize(sizeof(key));" in cpp
-        assert "std::memcpy(response->data(), &key, sizeof(key));" in cpp
+        assert "std::memcpy(response->data(), key, sizeof(key));" in cpp
 
     def test_server_cpp_array_and_scalar_out_params(self):
         """Server cpp marshals multiple [out] params with arrays and scalars."""
         idl = parse("""
             service Foo {
                 [method=1]
-                int Read([in] uint32 addr, [out] uint8[64]* data, [out] uint32* status);
+                int Read([in] uint32 addr, [out] uint8[64] data, [out] uint32 status);
             };
         """)
         cpp = emit_server_cpp(idl)
-        # Both [out] params declared
-        assert "std::array<uint8_t, 64> data;" in cpp
+        # Both [out] params declared — array as C array, scalar as plain var
+        assert "uint8_t data[64];" in cpp
         assert "uint32_t status;" in cpp
         # Response resize sums both
         assert "response->resize(sizeof(data) + sizeof(status));" in cpp
@@ -387,7 +386,7 @@ class TestTypesEmitter:
         idl = parse("""
             service Foo {
                 [method=1]
-                int Write([in] uint32 offset, [in] uint8[256] data, [out] uint32* written);
+                int Write([in] uint32 offset, [in] uint8[256] data, [out] uint32 written);
             };
         """)
         h = emit_client_h(idl)
@@ -425,12 +424,12 @@ class TestTypesEmitter:
         idl = parse("""
             service Foo {
                 [method=1]
-                int GetKey([out] uint8[32]* key);
+                int GetKey([out] uint8[32] key);
             };
         """)
         cpp = emit_client_cpp(idl)
-        assert "response.size() >= sizeof(*key)" in cpp
-        assert "std::memcpy(key, response.data(), sizeof(*key));" in cpp
+        assert "response.size() >= 32 * sizeof(uint8_t)" in cpp
+        assert "std::memcpy(key, response.data(), 32 * sizeof(uint8_t));" in cpp
 
     def test_client_notification_array_unmarshal(self):
         """Client notification dispatch correctly unmarshals array param."""
@@ -469,7 +468,7 @@ class TestTypesEmitter:
         idl = parse("""
             service Foo {
                 [method=1]
-                int Get([in] uint32 x, [out] uint32* y);
+                int Get([in] uint32 x, [out] uint32 y);
             };
         """)
         h = emit_server_h(idl)
@@ -480,7 +479,7 @@ class TestTypesEmitter:
         idl = parse("""
             service Foo {
                 [method=1]
-                int Get([in] uint32 x, [out] uint32* y);
+                int Get([in] uint32 x, [out] uint32 y);
             };
         """)
         h = emit_client_h(idl)

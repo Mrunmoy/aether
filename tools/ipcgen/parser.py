@@ -292,19 +292,10 @@ class Parser:
                 raise SyntaxError(
                     f"Line {type_tok.line}: array size must be >= 1")
 
-        is_pointer = False
-        if self.peek().value == "*":
-            self.advance()
-            is_pointer = True
-
         name_tok = self.expect(TOK_IDENT)
 
-        if direction == "out" and not is_pointer:
-            raise SyntaxError(
-                f"Line {name_tok.line}: [out] param '{name_tok.value}' must be a pointer")
-        if direction == "in" and is_pointer:
-            raise SyntaxError(
-                f"Line {name_tok.line}: [in] param '{name_tok.value}' must not be a pointer")
+        # [out] implies pointer — no * needed in IDL syntax.
+        is_pointer = (direction == "out")
 
         return Param(direction=direction, type_name=type_tok.value,
                      name=name_tok.value, is_pointer=is_pointer,

@@ -74,7 +74,7 @@ class TestParser:
         idl = parse("""
             service Foo {
                 [method=1]
-                int GetCount([out] uint32* count);
+                int GetCount([out] uint32 count);
             };
         """)
         in_params = [p for p in idl.methods[0].params if p.direction == "in"]
@@ -101,7 +101,7 @@ class TestParser:
             service Foo {
                 [method=1]
                 int Transfer([in] uint32 src, [in] uint32 dst,
-                             [out] uint32* srcBal, [out] uint32* dstBal);
+                             [out] uint32 srcBal, [out] uint32 dstBal);
             };
         """)
         m = idl.methods[0]
@@ -134,7 +134,7 @@ class TestParser:
             service Foo {
                 /* method 1 */
                 [method=1]
-                int Get([out] uint32* val); // inline comment
+                int Get([out] uint32 val); // inline comment
             };
         """)
         assert idl.service_name == "Foo"
@@ -151,7 +151,7 @@ class TestParser:
             parse("""
                 service Foo {
                     [method=1]
-                    int Get([out] uint32* val);
+                    int Get([out] uint32 val);
                 };
                 notifications Bar {
                     [notify=1]
@@ -169,19 +169,21 @@ class TestParser:
                 };
             """)
 
-    def test_out_param_not_pointer(self):
-        """[out] param without pointer raises SyntaxError."""
-        with pytest.raises(SyntaxError, match="must be a pointer"):
-            parse("""
-                service Foo {
-                    [method=1]
-                    int Get([out] uint32 val);
-                };
-            """)
+    def test_out_param_no_star_needed(self):
+        """[out] param without * is valid — [out] implies pointer."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int Get([out] uint32 val);
+            };
+        """)
+        p = idl.methods[0].params[0]
+        assert p.direction == "out"
+        assert p.is_pointer is True
 
-    def test_in_param_is_pointer(self):
-        """[in] param with pointer raises SyntaxError."""
-        with pytest.raises(SyntaxError, match="must not be a pointer"):
+    def test_in_param_star_rejected(self):
+        """[in] param with * is a syntax error (unexpected token)."""
+        with pytest.raises(SyntaxError):
             parse("""
                 service Foo {
                     [method=1]
@@ -195,7 +197,7 @@ class TestParser:
             parse("""
                 notifications Foo {
                     [notify=1]
-                    void Event([out] uint32* val);
+                    void Event([out] uint32 val);
                 };
             """)
 
@@ -297,7 +299,7 @@ class TestParser:
             struct Info { uint32 id; uint32 status; };
             service Foo {
                 [method=1]
-                int GetInfo([in] uint32 id, [out] Info* info);
+                int GetInfo([in] uint32 id, [out] Info info);
             };
         """)
         p = idl.methods[0].params[1]
@@ -395,7 +397,7 @@ class TestParser:
         idl = parse("""
             service Foo {
                 [method=1]
-                int GetKey([in] uint32 slot, [out] uint8[32]* key);
+                int GetKey([in] uint32 slot, [out] uint8[32] key);
             };
         """)
         p = idl.methods[0].params[1]
@@ -513,7 +515,7 @@ class TestParser:
         idl = parse("""
             service Foo {
                 [method=1]
-                int Transfer([in] uint32 src, [out] uint32* dst);
+                int Transfer([in] uint32 src, [out] uint32 dst);
             };
         """)
         for p in idl.methods[0].params:
@@ -525,7 +527,7 @@ class TestParser:
             service Foo {
                 [method=1]
                 int WriteBlock([in] uint32 offset, [in] uint8[256] data,
-                               [out] uint32* written);
+                               [out] uint32 written);
             };
         """)
         m = idl.methods[0]
@@ -542,7 +544,7 @@ class TestParser:
         idl = parse("""
             service Foo {
                 [method=1]
-                int Exchange([in] uint8[16] inBuf, [out] uint8[32]* outBuf);
+                int Exchange([in] uint8[16] inBuf, [out] uint8[32] outBuf);
             };
         """)
         m = idl.methods[0]

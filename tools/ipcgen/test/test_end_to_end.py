@@ -27,10 +27,10 @@ struct DeviceInfo
 service DeviceMonitor
 {
     [method=1]
-    int GetDeviceCount([out] uint32* count);
+    int GetDeviceCount([out] uint32 count);
 
     [method=2]
-    int GetDeviceInfo([in] uint32 deviceId, [out] DeviceInfo* info);
+    int GetDeviceInfo([in] uint32 deviceId, [out] DeviceInfo info);
 };
 
 notifications DeviceMonitor
@@ -170,7 +170,7 @@ struct DeviceInfo {
 
 service KeyStore {
     [method=1]
-    int GetKey([in] uint32 slot, [out] uint8[32]* key);
+    int GetKey([in] uint32 slot, [out] uint8[32] key);
 
     [method=2]
     int SetData([in] uint8[16] data);
@@ -200,27 +200,27 @@ notifications KeyStore {
         assert "#include <array>" in types_h
         assert "std::array<uint8_t, 6> serial;" in types_h
 
-        # Server header has <array> for params and handler signatures
+        # Server header: [in] array uses std::array, [out] array uses raw T*
         server_h = (outdir / "server" / "KeyStore.h").read_text()
         assert "#include <array>" in server_h
-        assert "std::array<uint8_t, 32> *key" in server_h
-        assert "std::array<uint8_t, 16> data" in server_h
+        assert "uint8_t *key" in server_h               # [out] array → raw pointer
+        assert "std::array<uint8_t, 16> data" in server_h  # [in] array → std::array
 
-        # Client header has array signatures
+        # Client header: same pattern
         client_h = (outdir / "client" / "KeyStore.h").read_text()
         assert "#include <array>" in client_h
-        assert "std::array<uint8_t, 32> *key" in client_h
-        assert "std::array<uint8_t, 32> newKey" in client_h
+        assert "uint8_t *key" in client_h                # [out] array → raw pointer
+        assert "std::array<uint8_t, 32> newKey" in client_h  # notification [in]
 
-        # Server cpp marshals correctly
+        # Server cpp: [out] uses C array, [in] uses std::array
         server_cpp = (outdir / "server" / "KeyStore.cpp").read_text()
-        assert "std::array<uint8_t, 16> data;" in server_cpp
-        assert "std::array<uint8_t, 32> key;" in server_cpp
+        assert "std::array<uint8_t, 16> data;" in server_cpp  # [in] param
+        assert "uint8_t key[32];" in server_cpp               # [out] C array
 
         # Client cpp marshals correctly
         client_cpp = (outdir / "client" / "KeyStore.cpp").read_text()
-        assert "sizeof(*key)" in client_cpp   # [out] pointer: sizeof(*key)
-        assert "sizeof(data)" in client_cpp   # [in] value: sizeof(data)
+        assert "32 * sizeof(uint8_t)" in client_cpp  # [out] array size expr
+        assert "sizeof(data)" in client_cpp           # [in] value: sizeof(data)
 
     def test_full_pipeline_nested_struct_with_arrays(self, tmp_path):
         """Full pipeline with nested structs containing arrays."""
@@ -233,7 +233,7 @@ struct Device {
 };
 service Registry {
     [method=1]
-    int GetDevice([in] uint32 id, [out] Device* dev);
+    int GetDevice([in] uint32 id, [out] Device dev);
     [method=2]
     int SetDevices([in] Device[8] devs);
 };
