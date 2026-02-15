@@ -209,6 +209,10 @@ class Parser:
                 if array_size < 1:
                     raise SyntaxError(
                         f"Line {type_tok.line}: array size must be >= 1")
+            if type_tok.value == "string" and array_size is None:
+                raise SyntaxError(
+                    f"Line {type_tok.line}: 'string' requires a size, "
+                    f"e.g. string[64]")
             field_name_tok = self.expect(TOK_IDENT)
             self.expect(TOK_SYMBOL, ";")
             fields.append(StructField(type_name=type_tok.value,
@@ -291,6 +295,11 @@ class Parser:
             if array_size < 1:
                 raise SyntaxError(
                     f"Line {type_tok.line}: array size must be >= 1")
+
+        if type_tok.value == "string" and array_size is None:
+            raise SyntaxError(
+                f"Line {type_tok.line}: 'string' requires a size, "
+                f"e.g. string[64]")
 
         name_tok = self.expect(TOK_IDENT)
 

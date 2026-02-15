@@ -21,6 +21,7 @@ struct DeviceInfo
     uint32_t vendorId;
     uint32_t productId;
     std::array<uint8_t, 6> serial;
+    char name[65];
 };
 
 } // namespace ms::ipc

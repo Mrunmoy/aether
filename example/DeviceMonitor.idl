@@ -13,6 +13,7 @@ struct DeviceInfo
     uint32 vendorId;
     uint32 productId;
     uint8[6] serial;
+    string[64] name;
 };
 
 service DeviceMonitor

@@ -41,6 +41,7 @@ protected:
         info->vendorId = 0x1234;
         info->productId = 0x5678;
         info->serial = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+        std::strncpy(info->name, "TestDevice", 64);
         return IPC_SUCCESS;
     }
 };

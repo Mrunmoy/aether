@@ -165,7 +165,7 @@ class TestParser:
             parse("""
                 service Foo {
                     [method=1]
-                    int Get([in] string name);
+                    int Get([in] foobar name);
                 };
             """)
 
@@ -623,3 +623,94 @@ class TestParser:
         f = idl.structs[1].fields[0]
         assert f.type_name == "Entry"
         assert f.array_size == 8
+
+    # ── String type ───────────────────────────────────────────────────
+
+    def test_struct_string_field(self):
+        """string[64] parses as type_name='string' with array_size=64."""
+        idl = parse("""
+            struct Info { string[64] name; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        f = idl.structs[0].fields[0]
+        assert f.type_name == "string"
+        assert f.name == "name"
+        assert f.array_size == 64
+
+    def test_param_string_in(self):
+        """[in] string[64] parses correctly."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetName([in] string[64] name);
+            };
+        """)
+        p = idl.methods[0].params[0]
+        assert p.type_name == "string"
+        assert p.direction == "in"
+        assert p.array_size == 64
+        assert p.is_pointer is False
+
+    def test_param_string_out(self):
+        """[out] string[64] parses correctly — is_pointer is True."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int GetName([out] string[64] name);
+            };
+        """)
+        p = idl.methods[0].params[0]
+        assert p.type_name == "string"
+        assert p.direction == "out"
+        assert p.array_size == 64
+        assert p.is_pointer is True
+
+    def test_notification_string_param(self):
+        """Notification with string[32] [in] param."""
+        idl = parse("""
+            service Foo { [method=1] int Get([in] uint32 x); };
+            notifications Foo {
+                [notify=1]
+                void NameChanged([in] string[32] name);
+            };
+        """)
+        p = idl.notifications[0].params[0]
+        assert p.type_name == "string"
+        assert p.array_size == 32
+
+    def test_string_without_size_rejected_in_struct(self):
+        """string without [N] in a struct is a syntax error."""
+        with pytest.raises(SyntaxError, match="string.*requires a size"):
+            parse("""
+                struct Info { string name; };
+                service Foo { [method=1] int Get([in] uint32 x); };
+            """)
+
+    def test_string_without_size_rejected_in_param(self):
+        """string without [N] in a method param is a syntax error."""
+        with pytest.raises(SyntaxError, match="string.*requires a size"):
+            parse("""
+                service Foo {
+                    [method=1]
+                    int SetName([in] string name);
+                };
+            """)
+
+    def test_struct_mixed_string_and_scalar(self):
+        """Struct with string, scalar, and array fields."""
+        idl = parse("""
+            struct Device {
+                uint32 id;
+                string[64] name;
+                uint8[6] mac;
+            };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        fields = idl.structs[0].fields
+        assert len(fields) == 3
+        assert fields[0].type_name == "uint32"
+        assert fields[0].array_size is None
+        assert fields[1].type_name == "string"
+        assert fields[1].array_size == 64
+        assert fields[2].type_name == "uint8"
+        assert fields[2].array_size == 6

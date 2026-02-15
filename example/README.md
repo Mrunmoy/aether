@@ -1,112 +1,72 @@
-# Examples and Tutorial
+# Examples
 
-This guide walks through using ms-ipc at two levels:
-
-1. **Low-level** — subclass ServiceBase/ClientBase directly, handle raw bytes
-2. **Code generation** — write an IDL file, generate typed C++ classes with ipcgen
+These examples show how to use ms-ipc at two levels and demonstrate how
+the code generator eliminates boilerplate while keeping things type-safe.
 
 ## Building
 
 ```bash
-# From the project root:
 python3 build.py -e           # build examples
 python3 build.py -t           # build + run all tests (includes examples)
-
-# Or with CMake directly:
-cmake -B build -DMS_IPC_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
 ```
 
 ---
 
-# Part 1: Low-level API (Echo example)
+# Low-level API (Echo)
 
-The echo example shows the raw ServiceBase/ClientBase API. You work directly
-with `std::vector<uint8_t>` payloads and numeric message IDs.
+The low-level API gives you direct control. You subclass `ServiceBase` and
+`ClientBase`, work with raw `std::vector<uint8_t>` payloads, and manage
+message IDs yourself.
 
-## echo_server
-
-**File:** `echo_server.cpp`
-
-### Step 1: Subclass ServiceBase
-
-Override `onRequest()` to handle incoming requests. The base class handles
-everything else: listening, accepting clients, threading, and signaling.
+**Server** (`echo_server.cpp`):
 
 ```cpp
-#include "ServiceBase.h"
-
 class EchoService : public ms::ipc::ServiceBase
 {
 protected:
     int onRequest(uint32_t messageId, const std::vector<uint8_t> &request,
                   std::vector<uint8_t> *response) override
     {
-        // Echo: copy request payload into response.
-        *response = request;
+        *response = request;    // echo back
         return IPC_SUCCESS;
     }
 };
+
+EchoService service("echo");
+service.start();
 ```
 
-### Step 2: Start the service
-
-```cpp
-EchoService service("echo");       // creates UDS socket at \0ipc_echo
-service.start();                    // spawns accept thread
-// ... wait for Ctrl-C ...
-service.stop();                     // joins all threads, closes connections
-```
-
-## echo_client
-
-**File:** `echo_client.cpp`
-
-### Step 1: Connect
+**Client** (`echo_client.cpp`):
 
 ```cpp
 ms::ipc::ClientBase client("echo");
-client.connect();                   // handshake: creates shared memory, spawns receiver thread
-```
+client.connect();
 
-### Step 2: Make RPC calls
-
-```cpp
 std::vector<uint8_t> request(msg, msg + strlen(msg));
 std::vector<uint8_t> response;
 int rc = client.call(1, 1, request, &response);    // serviceId=1, messageId=1
+
+client.disconnect();
 ```
 
-### Step 3: Disconnect
+This works, but notice the pain points: you manually pack bytes into vectors,
+track numeric message IDs, and both sides must agree on the exact byte layout.
+For anything beyond a simple echo, this gets tedious and error-prone fast.
 
-```cpp
-client.disconnect();                // joins receiver, fails pending calls, closes connection
-```
+### RunLoop mode
 
-## Running the echo example
-
-```bash
-# Terminal 1:
-./build/example/echo_server
-
-# Terminal 2:
-./build/example/echo_client
-```
-
-## RunLoop mode
-
-Both ServiceBase and ClientBase accept an optional `ms::RunLoop*`. When
-provided, they register fds on the RunLoop instead of spawning internal threads.
+Both `ServiceBase` and `ClientBase` accept an optional `ms::RunLoop*`.
+When provided, they register fds on the RunLoop instead of spawning
+internal threads — useful for single-threaded event-driven architectures:
 
 ```cpp
 ms::RunLoop loop;
 loop.init("app");
 
 EchoService service("echo", &loop);
-service.start();                    // no threads — listenFd registered on RunLoop
+service.start();                    // no threads — fd registered on RunLoop
 
 std::thread loopThread([&loop] { loop.run(); });
-
 // ... clients can connect and call from other threads ...
 
 service.stop();
@@ -116,15 +76,19 @@ loopThread.join();
 
 ---
 
-# Part 2: Code Generation Tutorial (ipcgen)
+# Code Generation with ipcgen
 
-For production services, ipcgen generates typed C++ classes from an IDL file.
-You get compile-time type safety, automatic serialization, and no raw byte
-manipulation. This tutorial walks through the full workflow step by step.
+The code generator eliminates all the boilerplate above. You describe your
+service once in an IDL file, and `ipcgen` generates typed C++ classes where:
 
-## Step 1: Write the IDL file
+- **Server**: you implement pure virtual handlers — no byte packing
+- **Client**: you call typed methods — no message IDs, no raw vectors
+- **Notifications**: the server calls `notifyXxx()`, the client overrides `onXxx()`
+- **Serialization**: fully automatic, compile-time checked
 
-Create `DeviceMonitor.idl` describing your service interface:
+## Workflow
+
+### 1. Write the IDL
 
 ```idl
 service DeviceMonitor
@@ -133,22 +97,144 @@ service DeviceMonitor
     int GetDeviceCount([out] uint32 count);
 
     [method=2]
-    int GetDeviceStatus([in] uint32 deviceId, [out] uint32 status);
+    int GetDeviceInfo([in] uint32 deviceId, [out] DeviceInfo info);
 };
 
 notifications DeviceMonitor
 {
     [notify=1]
-    void DeviceConnected([in] uint32 deviceId);
+    void DeviceConnected([in] DeviceInfo info);
 
     [notify=2]
     void DeviceDisconnected([in] uint32 deviceId);
 };
 ```
 
-### IDL syntax reference
+### 2. Generate code
 
-**Service block** — defines RPC methods that clients can call:
+```bash
+cd tools && python3 -m ipcgen ../example/DeviceMonitor.idl --outdir ../example/gen
+```
+
+This produces five files:
+
+| File | What it gives you |
+|------|-------------------|
+| `DeviceMonitorTypes.h` | Shared enums and structs |
+| `server/DeviceMonitor.h` | Server class with pure virtual handlers |
+| `server/DeviceMonitor.cpp` | Request dispatch and notification senders |
+| `client/DeviceMonitor.h` | Client class with typed RPC methods |
+| `client/DeviceMonitor.cpp` | Request marshaling and notification dispatch |
+
+### 3. Implement the server
+
+Subclass the generated class. All you write is your business logic — the
+generated code handles serialization, dispatch, and error routing:
+
+```cpp
+#include "DeviceMonitor.h"      // from gen/server/
+
+class MyDeviceService : public ms::ipc::DeviceMonitor
+{
+public:
+    using DeviceMonitor::DeviceMonitor;
+
+protected:
+    int handleGetDeviceCount(uint32_t *count) override
+    {
+        *count = m_deviceCount;
+        return IPC_SUCCESS;
+    }
+
+    int handleGetDeviceInfo(uint32_t deviceId, DeviceInfo *info) override
+    {
+        if (deviceId >= m_deviceCount)
+            return 1;                    // user-defined error
+        *info = m_devices[deviceId];
+        return IPC_SUCCESS;
+    }
+
+    void onDevicePlugged(uint32_t id)
+    {
+        notifyDeviceConnected(m_devices[id]);   // broadcasts to all clients
+    }
+};
+
+MyDeviceService service("device_monitor");
+service.start();
+```
+
+### 4. Use the client
+
+Call typed methods — no message IDs, no byte vectors, no memcpy:
+
+```cpp
+#include "DeviceMonitor.h"      // from gen/client/
+
+ms::ipc::DeviceMonitor client("device_monitor");
+client.connect();
+
+uint32_t count = 0;
+client.GetDeviceCount(&count);
+
+DeviceInfo info{};
+client.GetDeviceInfo(0, &info);
+
+client.disconnect();
+```
+
+To receive notifications, subclass and override callbacks:
+
+```cpp
+class MyDeviceClient : public ms::ipc::DeviceMonitor
+{
+protected:
+    void onDeviceConnected(DeviceInfo info) override
+    {
+        printf("Device %u connected: %s\n", info.id, info.name);
+    }
+
+    void onDeviceDisconnected(uint32_t deviceId) override
+    {
+        printf("Device %u disconnected\n", deviceId);
+    }
+};
+```
+
+### 5. Add to CMakeLists.txt
+
+```cmake
+# Server
+add_executable(device_server device_server.cpp gen/server/DeviceMonitor.cpp)
+target_include_directories(device_server PRIVATE gen/server/)
+target_link_libraries(device_server ms-ipc)
+
+# Client
+add_executable(device_client device_client.cpp gen/client/DeviceMonitor.cpp)
+target_include_directories(device_client PRIVATE gen/client/)
+target_link_libraries(device_client ms-ipc)
+```
+
+**Note:** Server and client generated classes share the same name but have
+different implementations. Compile them into separate executables.
+
+## What you avoid with codegen
+
+Compare the low-level echo approach to the generated approach:
+
+| Without codegen | With codegen |
+|---|---|
+| Pack params into `std::vector<uint8_t>` with memcpy | Call `client.GetDeviceInfo(42, &info)` |
+| Track numeric message IDs manually | Method names in generated enums |
+| Parse raw bytes in `onRequest()` switch | Implement `handleGetDeviceInfo(deviceId, info)` |
+| Manual `sendNotify()` + `onNotification()` byte parsing | Call `notifyXxx()`, override `onXxx()` callbacks |
+| Both sides must agree on byte layout | Single IDL source of truth |
+
+---
+
+# IDL syntax reference
+
+**Service block** — RPC methods:
 
 ```idl
 service <Name>
@@ -158,12 +244,12 @@ service <Name>
 };
 ```
 
-- Methods always return `int` (error code: `IPC_SUCCESS` on success)
-- `[in]` params are sent from client to server (pass by value)
-- `[out]` params are returned from server to client (pass by pointer)
-- Each method has a unique numeric ID (`[method=N]`)
+- Methods return `int` (error code: `IPC_SUCCESS` on success)
+- `[in]` params are sent client-to-server
+- `[out]` params are returned server-to-client
+- Each method has a unique numeric ID
 
-**Notifications block** — defines server-to-client broadcasts:
+**Notifications block** — server-to-client broadcasts:
 
 ```idl
 notifications <Name>
@@ -174,8 +260,7 @@ notifications <Name>
 ```
 
 - Notifications return `void` (fire-and-forget, broadcast to all clients)
-- Only `[in]` params allowed (data flows server to client)
-- Each notification has a unique numeric ID (`[notify=N]`)
+- Only `[in]` params (data flows server to client)
 
 **Supported types:**
 
@@ -192,364 +277,400 @@ notifications <Name>
 | `float32` | `float` | 4 bytes |
 | `float64` | `double` | 8 bytes |
 | `bool` | `bool` | 1 byte |
+| `T[N]` | `std::array<T, N>` | N x sizeof(T) |
+| `string[N]` | `char[N+1]` | N+1 bytes |
 
-## Step 2: Run the code generator
+**Arrays** (`T[N]`) are fixed-length and work with any scalar, enum, or struct.
+**Strings** (`string[N]`) are null-terminated, fixed-capacity char buffers.
+`N` is max characters; wire size is `N+1` bytes. `string` without `[N]`
+is a syntax error.
 
-```bash
-cd tools && python3 -m ipcgen ../example/DeviceMonitor.idl --outdir ../example/gen
-```
+You can also define **enums** and **structs**:
 
-Output:
+```idl
+enum DeviceType { Unknown = 0, USB = 1, Bluetooth = 2 };
 
-```
-  wrote ../example/gen/server/DeviceMonitor.h
-  wrote ../example/gen/server/DeviceMonitor.cpp
-  wrote ../example/gen/client/DeviceMonitor.h
-  wrote ../example/gen/client/DeviceMonitor.cpp
-
-Generated 4 files for service 'DeviceMonitor' (serviceId=0x00fefaf3)
-```
-
-The `serviceId` is automatically derived from the service name using FNV-1a
-hash — no manual ID assignment needed.
-
-## Step 3: Understand the generated server code
-
-### gen/server/DeviceMonitor.h
-
-```cpp
-// Auto-generated by ipcgen — do not edit.
-#pragma once
-#include "ServiceBase.h"
-#include <cstdint>
-#include <cstring>
-#include <vector>
-
-namespace ms::ipc
+struct DeviceInfo
 {
+    uint32 id;
+    DeviceType type;
+    uint8[6] serial;
+    string[64] name;
+};
+```
 
-class DeviceMonitor : public ServiceBase
+---
+
+# Feature Examples
+
+Self-contained examples showing each IDL feature. Each one is a
+copy-paste starting point for a real embedded service.
+
+---
+
+## Scalars & Enums — Temperature Sensor
+
+A minimal service using only scalar types and enums.
+
+### IDL
+
+```idl
+enum SensorStatus
 {
-public:
-    using ServiceBase::ServiceBase;
-
-    static constexpr uint32_t kServiceId = 0x00fefaf3u;
-
-protected:
-    virtual int handleGetDeviceCount(uint32_t *count) = 0;
-    virtual int handleGetDeviceStatus(uint32_t deviceId, uint32_t *status) = 0;
-
-    int notifyDeviceConnected(uint32_t deviceId);
-    int notifyDeviceDisconnected(uint32_t deviceId);
-
-    int onRequest(uint32_t messageId, const std::vector<uint8_t> &request,
-                  std::vector<uint8_t> *response) override;
+    Offline = 0,
+    Online = 1,
+    Error = 2,
 };
 
-} // namespace ms::ipc
+service TemperatureSensor
+{
+    [method=1]
+    int GetTemperature([out] float32 celsius);
+
+    [method=2]
+    int GetStatus([out] SensorStatus status);
+
+    [method=3]
+    int SetThreshold([in] float32 high, [in] float32 low);
+};
+
+notifications TemperatureSensor
+{
+    [notify=1]
+    void OverTemperature([in] float32 celsius);
+
+    [notify=2]
+    void StatusChanged([in] SensorStatus status);
+};
 ```
 
-What ipcgen generates for the server:
-
-| Member | Purpose |
-|--------|---------|
-| `kServiceId` | Auto-derived hash of `"DeviceMonitor"` — used in all frames |
-| `handleGetDeviceCount()` | **Pure virtual** — you implement this |
-| `handleGetDeviceStatus()` | **Pure virtual** — you implement this |
-| `notifyDeviceConnected()` | **Concrete** — call this to broadcast to all clients |
-| `notifyDeviceDisconnected()` | **Concrete** — call this to broadcast to all clients |
-| `onRequest()` | **Generated override** — dispatches by messageId, handles marshal/unmarshal |
-
-### gen/server/DeviceMonitor.cpp
-
-The generated `onRequest()` dispatches incoming requests by messageId:
+### Server
 
 ```cpp
-int DeviceMonitor::onRequest(uint32_t messageId,
-                             const std::vector<uint8_t> &request,
-                             std::vector<uint8_t> *response)
+class MyTempSensor : public ms::ipc::TemperatureSensor
 {
-    switch (messageId)
-    {
-    case 1: // GetDeviceCount
-    {
-        uint32_t count;
-        int _rc = handleGetDeviceCount(&count);
-        response->resize(sizeof(count));
-        std::memcpy(response->data(), &count, sizeof(count));
-        return _rc;
-    }
-    case 2: // GetDeviceStatus
-    {
-        uint32_t deviceId;
-        std::memcpy(&deviceId, request.data() + 0, sizeof(deviceId));
-        uint32_t status;
-        int _rc = handleGetDeviceStatus(deviceId, &status);
-        response->resize(sizeof(status));
-        std::memcpy(response->data(), &status, sizeof(status));
-        return _rc;
-    }
-    default:
-        return IPC_ERR_INVALID_METHOD;
-    }
-}
-```
-
-For each method it:
-1. Unmarshals `[in]` params from the request buffer using `memcpy`
-2. Calls your `handleXxx()` virtual method
-3. Marshals `[out]` params into the response buffer
-4. Returns your error code
-
-Notification senders serialize params and call `sendNotify()`:
-
-```cpp
-int DeviceMonitor::notifyDeviceConnected(uint32_t deviceId)
-{
-    std::vector<uint8_t> payload(sizeof(deviceId));
-    std::memcpy(payload.data(), &deviceId, sizeof(deviceId));
-    return sendNotify(kServiceId, 1, payload.data(),
-                      static_cast<uint32_t>(payload.size()));
-}
-```
-
-## Step 4: Implement your server
-
-Subclass the generated class and implement the pure virtual handlers:
-
-```cpp
-#include "DeviceMonitor.h"      // from gen/server/
-
-class MyDeviceService : public ms::ipc::DeviceMonitor
-{
-public:
-    using DeviceMonitor::DeviceMonitor;      // inherit constructor
-
 protected:
-    int handleGetDeviceCount(uint32_t *count) override
+    int handleGetTemperature(float *celsius) override
     {
-        *count = m_deviceCount;
+        *celsius = readHardwareSensor();
         return IPC_SUCCESS;
     }
 
-    int handleGetDeviceStatus(uint32_t deviceId, uint32_t *status) override
+    int handleGetStatus(SensorStatus *status) override
     {
-        if (deviceId >= m_deviceCount)
-            return 1;                        // user-defined error (positive)
-        *status = m_devices[deviceId].online ? 1 : 0;
+        *status = m_status;
         return IPC_SUCCESS;
     }
 
-    // You can also call the generated notification senders:
-    void onDevicePlugged(uint32_t id)
+    int handleSetThreshold(float high, float low) override
     {
-        notifyDeviceConnected(id);           // broadcasts to all connected clients
+        m_highThreshold = high;
+        m_lowThreshold = low;
+        return IPC_SUCCESS;
     }
 
-private:
-    uint32_t m_deviceCount = 4;
-    // ... your device tracking data ...
+    // Call when hardware detects over-temperature:
+    void onHwOverTemp(float temp)
+    {
+        notifyOverTemperature(temp);    // broadcasts to all clients
+    }
 };
 ```
 
-Start it the same way as any ServiceBase:
+### Client
 
 ```cpp
-MyDeviceService service("device_monitor");
-service.start();
-// ... run until shutdown ...
-service.stop();
-```
-
-## Step 5: Understand the generated client code
-
-### gen/client/DeviceMonitor.h
-
-```cpp
-// Auto-generated by ipcgen — do not edit.
-#pragma once
-#include "ClientBase.h"
-#include <cstdint>
-#include <cstring>
-#include <vector>
-
-namespace ms::ipc
-{
-
-class DeviceMonitor : public ClientBase
-{
-public:
-    using ClientBase::ClientBase;
-
-    static constexpr uint32_t kServiceId = 0x00fefaf3u;
-
-    int GetDeviceCount(uint32_t *count, uint32_t timeoutMs = 2000);
-    int GetDeviceStatus(uint32_t deviceId, uint32_t *status, uint32_t timeoutMs = 2000);
-
-protected:
-    virtual void onDeviceConnected(uint32_t deviceId) {}
-    virtual void onDeviceDisconnected(uint32_t deviceId) {}
-
-    void onNotification(uint32_t serviceId, uint32_t messageId,
-                        const std::vector<uint8_t> &payload) override;
-};
-
-} // namespace ms::ipc
-```
-
-What ipcgen generates for the client:
-
-| Member | Purpose |
-|--------|---------|
-| `GetDeviceCount()` | **Typed RPC method** — marshals params, calls server, unmarshals response |
-| `GetDeviceStatus()` | **Typed RPC method** — same |
-| `onDeviceConnected()` | **Virtual callback** — override to handle notifications (default: no-op) |
-| `onDeviceDisconnected()` | **Virtual callback** — override to handle notifications |
-| `onNotification()` | **Generated override** — dispatches by messageId, calls your callbacks |
-
-### gen/client/DeviceMonitor.cpp
-
-Each RPC method serializes `[in]` params, calls the base `call()`, and
-deserializes `[out]` params:
-
-```cpp
-int DeviceMonitor::GetDeviceStatus(uint32_t deviceId, uint32_t *status, uint32_t timeoutMs)
-{
-    std::vector<uint8_t> request(sizeof(deviceId));
-    std::memcpy(request.data(), &deviceId, sizeof(deviceId));
-
-    std::vector<uint8_t> response;
-    int _rc = call(kServiceId, 2, request, &response, timeoutMs);
-
-    if (_rc == IPC_SUCCESS && response.size() >= sizeof(*status))
-    {
-        if (status)
-            std::memcpy(status, response.data(), sizeof(*status));
-    }
-    return _rc;
-}
-```
-
-The notification dispatcher routes incoming notifications to your callbacks:
-
-```cpp
-void DeviceMonitor::onNotification(uint32_t serviceId, uint32_t messageId,
-                                   const std::vector<uint8_t> &payload)
-{
-    if (serviceId != kServiceId) return;
-
-    switch (messageId)
-    {
-    case 1: // DeviceConnected
-    {
-        uint32_t deviceId;
-        std::memcpy(&deviceId, payload.data(), sizeof(deviceId));
-        onDeviceConnected(deviceId);
-        break;
-    }
-    case 2: // DeviceDisconnected
-    {
-        uint32_t deviceId;
-        std::memcpy(&deviceId, payload.data(), sizeof(deviceId));
-        onDeviceDisconnected(deviceId);
-        break;
-    }
-    default:
-        break;
-    }
-}
-```
-
-## Step 6: Use the generated client
-
-For basic usage, use the generated client directly:
-
-```cpp
-#include "DeviceMonitor.h"      // from gen/client/
-
-// Connect
-ms::ipc::DeviceMonitor client("device_monitor");
+ms::ipc::TemperatureSensor client("temp_sensor");
 client.connect();
 
-// Typed RPC calls — no raw bytes, no message IDs
+float temp = 0;
+if (client.GetTemperature(&temp) == IPC_SUCCESS)
+    printf("Temperature: %.1f°C\n", temp);
+
+SensorStatus status;
+client.GetStatus(&status);
+
+client.SetThreshold(85.0f, -10.0f);
+client.disconnect();
+```
+
+---
+
+## Fixed-length Arrays — Multi-channel ADC
+
+Service reading fixed-length sample buffers from an ADC. Uses arrays in
+both struct fields and method parameters.
+
+### IDL
+
+```idl
+struct AdcSample
+{
+    uint32 timestamp;
+    uint16[8] channels;
+};
+
+service AdcReader
+{
+    [method=1]
+    int GetLatestSample([out] AdcSample sample);
+
+    [method=2]
+    int GetChannelHistory([in] uint32 channelId, [out] uint16[64] buffer);
+};
+
+notifications AdcReader
+{
+    [notify=1]
+    void SampleReady([in] AdcSample sample);
+};
+```
+
+### Generated struct
+
+```cpp
+struct AdcSample
+{
+    uint32_t timestamp;
+    std::array<uint16_t, 8> channels;   // T[N] -> std::array<T, N>
+};
+```
+
+### Server
+
+```cpp
+class MyAdcReader : public ms::ipc::AdcReader
+{
+protected:
+    int handleGetLatestSample(AdcSample *sample) override
+    {
+        sample->timestamp = now();
+        for (int i = 0; i < 8; i++)
+            sample->channels[i] = readAdc(i);
+        return IPC_SUCCESS;
+    }
+
+    int handleGetChannelHistory(uint32_t channelId, uint16_t *buffer) override
+    {
+        // buffer points to a uint16_t[64] on the wire
+        for (int i = 0; i < 64; i++)
+            buffer[i] = m_history[channelId][i];
+        return IPC_SUCCESS;
+    }
+};
+```
+
+### Client
+
+```cpp
+ms::ipc::AdcReader client("adc");
+client.connect();
+
+AdcSample sample{};
+if (client.GetLatestSample(&sample) == IPC_SUCCESS)
+{
+    printf("Channel 0: %u\n", sample.channels[0]);
+    printf("Channel 7: %u\n", sample.channels[7]);
+}
+
+uint16_t history[64];
+client.GetChannelHistory(0, history);
+client.disconnect();
+```
+
+---
+
+## Bounded Strings — Alarm System
+
+Alarm service using `string[N]` for human-readable names and messages.
+Strings are fixed-size on the wire (N+1 bytes, null-terminated).
+
+### IDL
+
+```idl
+struct AlarmEvent
+{
+    uint32 id;
+    uint32 severity;
+    string[32] source;
+    string[128] message;
+};
+
+service AlarmSystem
+{
+    [method=1]
+    int GetAlarmCount([out] uint32 count);
+
+    [method=2]
+    int GetAlarm([in] uint32 alarmId, [out] AlarmEvent event);
+
+    [method=3]
+    int AcknowledgeAlarm([in] uint32 alarmId, [in] string[32] operatorName);
+};
+
+notifications AlarmSystem
+{
+    [notify=1]
+    void AlarmTriggered([in] AlarmEvent event);
+
+    [notify=2]
+    void AlarmCleared([in] uint32 alarmId);
+};
+```
+
+### Generated struct
+
+```cpp
+struct AlarmEvent
+{
+    uint32_t id;
+    uint32_t severity;
+    char source[33];      // string[32] -> char[33] (32 chars + null)
+    char message[129];    // string[128] -> char[129]
+};
+```
+
+### Server
+
+```cpp
+class MyAlarmSystem : public ms::ipc::AlarmSystem
+{
+protected:
+    int handleGetAlarmCount(uint32_t *count) override
+    {
+        *count = m_alarms.size();
+        return IPC_SUCCESS;
+    }
+
+    int handleGetAlarm(uint32_t alarmId, AlarmEvent *event) override
+    {
+        if (alarmId >= m_alarms.size())
+            return 1;
+        *event = m_alarms[alarmId];
+        return IPC_SUCCESS;
+    }
+
+    // operatorName is const char* (read-only [in] param)
+    int handleAcknowledgeAlarm(uint32_t alarmId,
+                               const char *operatorName) override
+    {
+        printf("Alarm %u acknowledged by %s\n", alarmId, operatorName);
+        notifyAlarmCleared(alarmId);
+        return IPC_SUCCESS;
+    }
+
+    // Raise an alarm from hardware event:
+    void raiseAlarm(const char *source, const char *msg)
+    {
+        AlarmEvent event{};
+        event.id = m_nextId++;
+        event.severity = 3;
+        std::strncpy(event.source, source, 32);
+        std::strncpy(event.message, msg, 128);
+        m_alarms.push_back(event);
+        notifyAlarmTriggered(event);
+    }
+};
+```
+
+### Client
+
+```cpp
+ms::ipc::AlarmSystem client("alarms");
+client.connect();
+
 uint32_t count = 0;
-int rc = client.GetDeviceCount(&count);
-if (rc == IPC_SUCCESS)
-    printf("Device count: %u\n", count);
+client.GetAlarmCount(&count);
 
-uint32_t status = 0;
-rc = client.GetDeviceStatus(0, &status);
-if (rc == IPC_SUCCESS)
-    printf("Device 0 status: %u\n", status);
+AlarmEvent event{};
+for (uint32_t i = 0; i < count; i++)
+{
+    client.GetAlarm(i, &event);
+    printf("[%s] %s (severity=%u)\n", event.source, event.message, event.severity);
+}
 
-// Custom timeout
-rc = client.GetDeviceStatus(1, &status, 5000);  // 5 second timeout
+client.AcknowledgeAlarm(0, "operator_jdoe");
+client.disconnect();
+```
+
+---
+
+## Convenience Wrapper — Sensor Inventory
+
+When a service has `GetCount` + `GetItem` methods, you can write a manual
+wrapper that chains them into a single `std::vector`-returning call.
+This is **not generated** — it's a pattern you write on top of the
+generated client.
+
+### IDL
+
+```idl
+struct SensorInfo
+{
+    uint32 id;
+    uint32 type;
+    string[64] name;
+    float32 lastReading;
+};
+
+service SensorInventory
+{
+    [method=1]
+    int GetSensorCount([out] uint32 count);
+
+    [method=2]
+    int GetSensorInfo([in] uint32 sensorId, [out] SensorInfo info);
+};
+```
+
+### Manual convenience wrapper
+
+```cpp
+#include "SensorInventory.h"   // generated client
+
+class SensorClient : public ms::ipc::SensorInventory
+{
+public:
+    using SensorInventory::SensorInventory;
+
+    // Convenience: chain count + list into a single call.
+    int GetAllSensors(std::vector<SensorInfo> &sensors)
+    {
+        uint32_t count = 0;
+        int rc = GetSensorCount(&count);
+        if (rc != IPC_SUCCESS)
+            return rc;
+
+        sensors.resize(count);
+        for (uint32_t i = 0; i < count; i++)
+        {
+            rc = GetSensorInfo(i, &sensors[i]);
+            if (rc != IPC_SUCCESS)
+                return rc;
+        }
+        return IPC_SUCCESS;
+    }
+};
+```
+
+### Usage
+
+```cpp
+SensorClient client("sensors");
+client.connect();
+
+std::vector<SensorInfo> sensors;
+if (client.GetAllSensors(sensors) == IPC_SUCCESS)
+{
+    for (auto &s : sensors)
+        printf("Sensor %u: %s (reading=%.2f)\n", s.id, s.name, s.lastReading);
+}
 
 client.disconnect();
 ```
 
-To receive notifications, subclass and override the callbacks:
-
-```cpp
-class MyDeviceClient : public ms::ipc::DeviceMonitor
-{
-public:
-    using DeviceMonitor::DeviceMonitor;
-
-protected:
-    void onDeviceConnected(uint32_t deviceId) override
-    {
-        printf("Device %u connected!\n", deviceId);
-    }
-
-    void onDeviceDisconnected(uint32_t deviceId) override
-    {
-        printf("Device %u disconnected!\n", deviceId);
-    }
-};
-
-// Use it:
-MyDeviceClient client("device_monitor");
-client.connect();
-// ... notifications arrive automatically on the receiver thread ...
-```
-
-## Step 7: Add to your CMakeLists.txt
-
-```cmake
-# Server executable
-add_executable(device_server
-    device_server.cpp
-    gen/server/DeviceMonitor.cpp
-)
-target_include_directories(device_server PRIVATE gen/server/)
-target_link_libraries(device_server ms-ipc)
-
-# Client executable
-add_executable(device_client
-    device_client.cpp
-    gen/client/DeviceMonitor.cpp
-)
-target_include_directories(device_client PRIVATE gen/client/)
-target_link_libraries(device_client ms-ipc)
-```
-
-**Important:** The server and client generated classes have the same name
-(`DeviceMonitor`) but different implementations. They must be compiled into
-separate executables — do not link both into the same binary.
-
----
-
-# Summary: Low-level vs Generated
-
-| Aspect | Low-level (ServiceBase/ClientBase) | Generated (ipcgen) |
-|--------|-----------------------------------|---------------------|
-| Payload format | Raw `std::vector<uint8_t>` | Typed C++ parameters |
-| Message IDs | Manual numeric constants | Auto-assigned in IDL |
-| Serialization | You handle it | Auto-generated memcpy |
-| Type safety | None (raw bytes) | Compile-time checked |
-| Notifications | Manual `sendNotify()` + `onNotification()` | `notifyXxx()` + `onXxx()` virtual callbacks |
-| Best for | Prototyping, dynamic formats | Production services |
+This pattern works for any count+item pair. The wrapper class inherits
+all generated methods and adds the convenience method on top.
 
 ---
 
@@ -557,10 +678,8 @@ separate executables — do not link both into the same binary.
 
 | File | Tests |
 |------|-------|
-| `CodeGenServerTest.cpp` | 6 tests — server dispatch, marshal/unmarshal, notifications, invalid method, RunLoop mode |
+| `CodeGenServerTest.cpp` | 6 tests — server dispatch, notifications, invalid method, RunLoop mode |
 | `CodeGenClientTest.cpp` | 5 tests — client typed RPC, notification callbacks, RunLoop mode |
-
-Run with:
 
 ```bash
 python3 build.py -t

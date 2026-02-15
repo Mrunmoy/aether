@@ -561,3 +561,194 @@ class TestTypesEmitter:
         cpp = emit_client_cpp(idl)
         assert "std::vector<uint8_t> request(sizeof(pts));" in cpp
         assert "std::memcpy(request.data(), &pts, sizeof(pts));" in cpp
+
+    # ── String type ───────────────────────────────────────────────────
+
+    def test_types_h_string_field(self):
+        """Struct string field emits char[N+1]."""
+        idl = parse("""
+            struct Info { uint32 id; string[64] name; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        h = emit_types_h(idl)
+        assert "char name[65];" in h
+
+    def test_types_h_string_no_array_include(self):
+        """String-only struct does not include <array>."""
+        idl = parse("""
+            struct Info { uint32 id; string[64] name; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        h = emit_types_h(idl)
+        assert "#include <array>" not in h
+
+    def test_types_h_string_with_array(self):
+        """Struct with both string and array fields includes <array>."""
+        idl = parse("""
+            struct Info { uint32 id; string[64] name; uint8[6] mac; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        h = emit_types_h(idl)
+        assert "#include <array>" in h
+        assert "char name[65];" in h
+        assert "std::array<uint8_t, 6> mac;" in h
+
+    def test_server_h_string_in_handler(self):
+        """Server handler uses const char* for [in] string."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetName([in] string[64] name);
+            };
+        """)
+        h = emit_server_h(idl)
+        assert "const char *name" in h
+
+    def test_server_h_string_out_handler(self):
+        """Server handler uses char* for [out] string."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int GetName([out] string[64] name);
+            };
+        """)
+        h = emit_server_h(idl)
+        assert "char *name" in h
+        assert "const char" not in h.split("handle")[1].split(")")[0]
+
+    def test_server_cpp_string_in_unmarshal(self):
+        """Server cpp unmarshals [in] string with null termination."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetName([in] string[64] name);
+            };
+        """)
+        cpp = emit_server_cpp(idl)
+        assert "char name[65];" in cpp
+        assert "std::memcpy(name, request.data()" in cpp
+        assert "name[64] = '\\0';" in cpp
+
+    def test_server_cpp_string_out_marshal(self):
+        """Server cpp declares [out] string with zero-init."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int GetName([out] string[64] name);
+            };
+        """)
+        cpp = emit_server_cpp(idl)
+        assert "char name[65] = {};" in cpp
+        assert "std::memcpy(response->data(), name, sizeof(name));" in cpp
+
+    def test_client_h_string_in(self):
+        """Client header uses const char* for [in] string."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetName([in] string[64] name);
+            };
+        """)
+        h = emit_client_h(idl)
+        assert "const char *name" in h
+
+    def test_client_h_string_out(self):
+        """Client header uses char* for [out] string."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int GetName([out] string[64] name);
+            };
+        """)
+        h = emit_client_h(idl)
+        assert "char *name" in h
+
+    def test_client_cpp_string_in_marshal(self):
+        """Client cpp marshals [in] string via temp buffer + strncpy."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetName([in] string[64] name);
+            };
+        """)
+        cpp = emit_client_cpp(idl)
+        assert "char _name[65] = {};" in cpp
+        assert "std::strncpy(_name, name, 64);" in cpp
+        assert "std::memcpy(request.data(), _name," in cpp
+
+    def test_client_cpp_string_out_unmarshal(self):
+        """Client cpp unmarshals [out] string with correct size."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int GetName([out] string[64] name);
+            };
+        """)
+        cpp = emit_client_cpp(idl)
+        assert "response.size() >= 65" in cpp
+        assert "std::memcpy(name, response.data(), 65);" in cpp
+
+    def test_notification_string_sender(self):
+        """Notification sender marshals string via temp buffer."""
+        idl = parse("""
+            service Foo { [method=1] int Get([in] uint32 x); };
+            notifications Foo {
+                [notify=1]
+                void NameChanged([in] string[32] name);
+            };
+        """)
+        cpp = emit_server_cpp(idl)
+        assert "const char *name" in cpp
+        assert "char _name[33] = {};" in cpp
+        assert "std::strncpy(_name, name, 32);" in cpp
+
+    def test_notification_string_callback(self):
+        """Notification callback uses const char* for string param."""
+        idl = parse("""
+            service Foo { [method=1] int Get([in] uint32 x); };
+            notifications Foo {
+                [notify=1]
+                void NameChanged([in] string[32] name);
+            };
+        """)
+        h = emit_client_h(idl)
+        assert "const char *name" in h
+
+    def test_notification_string_dispatch(self):
+        """Notification dispatch unmarshals string with null termination."""
+        idl = parse("""
+            service Foo { [method=1] int Get([in] uint32 x); };
+            notifications Foo {
+                [notify=1]
+                void NameChanged([in] string[32] name);
+            };
+        """)
+        cpp = emit_client_cpp(idl)
+        assert "char name[33];" in cpp
+        assert "name[32] = '\\0';" in cpp
+
+    def test_server_h_string_no_array_include(self):
+        """Server header with string-only params has no <array> include."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetName([in] string[64] name);
+            };
+        """)
+        h = emit_server_h(idl)
+        assert "#include <array>" not in h
+
+    def test_client_h_string_no_array_include(self):
+        """Client header with string-only params has no <array> include."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetName([in] string[64] name);
+            };
+            notifications Foo {
+                [notify=1]
+                void NameChanged([in] string[32] msg);
+            };
+        """)
+        h = emit_client_h(idl)
+        assert "#include <array>" not in h

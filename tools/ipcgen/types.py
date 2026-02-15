@@ -15,6 +15,7 @@ TYPE_MAP = {
     "float32": "float",
     "float64": "double",
     "bool":    "bool",
+    "string":  "char",
 }
 
 

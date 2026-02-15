@@ -270,3 +270,75 @@ notifications Registry {
         # Client header has the same
         client_h = (outdir / "client" / "Registry.h").read_text()
         assert "std::array<Device, 8> devs" in client_h
+
+    def test_cli_with_strings(self, tmp_path):
+        """CLI generates correct code for IDL with string fields and params."""
+        idl_text = """\
+struct UserInfo {
+    uint32 id;
+    string[64] name;
+    string[128] email;
+};
+
+service UserService {
+    [method=1]
+    int SetName([in] uint32 userId, [in] string[64] name);
+
+    [method=2]
+    int GetName([in] uint32 userId, [out] string[64] name);
+
+    [method=3]
+    int GetUser([in] uint32 userId, [out] UserInfo info);
+};
+
+notifications UserService {
+    [notify=1]
+    void NameChanged([in] uint32 userId, [in] string[64] newName);
+};
+"""
+        idl_file = tmp_path / "UserService.idl"
+        idl_file.write_text(idl_text)
+        outdir = tmp_path / "out"
+
+        tools_dir = os.path.join(os.path.dirname(__file__), "..", "..")
+        result = subprocess.run(
+            [sys.executable, "-m", "ipcgen", str(idl_file), "--outdir", str(outdir)],
+            capture_output=True,
+            text=True,
+            cwd=tools_dir,
+        )
+
+        assert result.returncode == 0, f"ipcgen failed:\n{result.stderr}"
+
+        # Types header: string fields are char[N+1], no <array> include
+        types_h = (outdir / "UserServiceTypes.h").read_text()
+        assert "char name[65];" in types_h
+        assert "char email[129];" in types_h
+        assert "#include <array>" not in types_h
+
+        # Server header: string params use const char* / char*
+        server_h = (outdir / "server" / "UserService.h").read_text()
+        assert "const char *name" in server_h       # [in] string
+        assert "char *name" in server_h             # [out] string
+        assert "#include <array>" not in server_h
+
+        # Server cpp: [in] string unmarshal with null termination
+        server_cpp = (outdir / "server" / "UserService.cpp").read_text()
+        assert "char name[65];" in server_cpp
+        assert "name[64] = '\\0';" in server_cpp
+        # [out] string: zero-initialized char buffer
+        assert "char name[65] = {};" in server_cpp
+        # Notification sender: temp buffer + strncpy
+        assert "std::strncpy(" in server_cpp
+
+        # Client header: same const char* / char* pattern
+        client_h = (outdir / "client" / "UserService.h").read_text()
+        assert "const char *name" in client_h
+        assert "const char *newName" in client_h    # notification callback
+
+        # Client cpp: [in] string marshal via temp buffer
+        client_cpp = (outdir / "client" / "UserService.cpp").read_text()
+        assert "char _name[65] = {};" in client_cpp
+        assert "std::strncpy(_name, name, 64);" in client_cpp
+        # [out] string unmarshal with literal size
+        assert "response.size() >= 65" in client_cpp
