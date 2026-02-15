@@ -156,3 +156,117 @@ class TestEndToEnd:
         # Server header includes the types header.
         server_h = (outdir / "server" / "DeviceMonitor.h").read_text()
         assert '#include "DeviceMonitorTypes.h"' in server_h
+
+    def test_cli_with_arrays(self, tmp_path):
+        """CLI generates correct code for IDL with fixed-length arrays."""
+        idl_text = """\
+enum DeviceType { Unknown = 0, USB = 1, };
+
+struct DeviceInfo {
+    uint32 id;
+    DeviceType type;
+    uint8[6] serial;
+};
+
+service KeyStore {
+    [method=1]
+    int GetKey([in] uint32 slot, [out] uint8[32]* key);
+
+    [method=2]
+    int SetData([in] uint8[16] data);
+};
+
+notifications KeyStore {
+    [notify=1]
+    void KeyChanged([in] uint32 slot, [in] uint8[32] newKey);
+};
+"""
+        idl_file = tmp_path / "KeyStore.idl"
+        idl_file.write_text(idl_text)
+        outdir = tmp_path / "out"
+
+        tools_dir = os.path.join(os.path.dirname(__file__), "..", "..")
+        result = subprocess.run(
+            [sys.executable, "-m", "ipcgen", str(idl_file), "--outdir", str(outdir)],
+            capture_output=True,
+            text=True,
+            cwd=tools_dir,
+        )
+
+        assert result.returncode == 0, f"ipcgen failed:\n{result.stderr}"
+
+        # Types header has <array> include and std::array field
+        types_h = (outdir / "KeyStoreTypes.h").read_text()
+        assert "#include <array>" in types_h
+        assert "std::array<uint8_t, 6> serial;" in types_h
+
+        # Server header has <array> for params and handler signatures
+        server_h = (outdir / "server" / "KeyStore.h").read_text()
+        assert "#include <array>" in server_h
+        assert "std::array<uint8_t, 32> *key" in server_h
+        assert "std::array<uint8_t, 16> data" in server_h
+
+        # Client header has array signatures
+        client_h = (outdir / "client" / "KeyStore.h").read_text()
+        assert "#include <array>" in client_h
+        assert "std::array<uint8_t, 32> *key" in client_h
+        assert "std::array<uint8_t, 32> newKey" in client_h
+
+        # Server cpp marshals correctly
+        server_cpp = (outdir / "server" / "KeyStore.cpp").read_text()
+        assert "std::array<uint8_t, 16> data;" in server_cpp
+        assert "std::array<uint8_t, 32> key;" in server_cpp
+
+        # Client cpp marshals correctly
+        client_cpp = (outdir / "client" / "KeyStore.cpp").read_text()
+        assert "sizeof(*key)" in client_cpp   # [out] pointer: sizeof(*key)
+        assert "sizeof(data)" in client_cpp   # [in] value: sizeof(data)
+
+    def test_full_pipeline_nested_struct_with_arrays(self, tmp_path):
+        """Full pipeline with nested structs containing arrays."""
+        idl_text = """\
+struct MacAddr { uint8[6] bytes; };
+struct Device {
+    uint32 id;
+    MacAddr mac;
+    uint8[16] serial;
+};
+service Registry {
+    [method=1]
+    int GetDevice([in] uint32 id, [out] Device* dev);
+    [method=2]
+    int SetDevices([in] Device[8] devs);
+};
+notifications Registry {
+    [notify=1]
+    void DeviceAdded([in] Device dev);
+};
+"""
+        idl_file = tmp_path / "Registry.idl"
+        idl_file.write_text(idl_text)
+        outdir = tmp_path / "out"
+
+        tools_dir = os.path.join(os.path.dirname(__file__), "..", "..")
+        result = subprocess.run(
+            [sys.executable, "-m", "ipcgen", str(idl_file), "--outdir", str(outdir)],
+            capture_output=True,
+            text=True,
+            cwd=tools_dir,
+        )
+
+        assert result.returncode == 0, f"ipcgen failed:\n{result.stderr}"
+
+        types_h = (outdir / "RegistryTypes.h").read_text()
+        # MacAddr has array field
+        assert "std::array<uint8_t, 6> bytes;" in types_h
+        # Device has nested struct + array field
+        assert "MacAddr mac;" in types_h
+        assert "std::array<uint8_t, 16> serial;" in types_h
+
+        # Server header has array-of-struct param
+        server_h = (outdir / "server" / "Registry.h").read_text()
+        assert "std::array<Device, 8> devs" in server_h
+
+        # Client header has the same
+        client_h = (outdir / "client" / "Registry.h").read_text()
+        assert "std::array<Device, 8> devs" in client_h

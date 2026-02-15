@@ -40,6 +40,7 @@ protected:
         info->type = (deviceId == 42) ? USB : Unknown;
         info->vendorId = 0x1234;
         info->productId = 0x5678;
+        info->serial = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
         return IPC_SUCCESS;
     }
 };
@@ -122,6 +123,8 @@ TEST(CodeGenServerTest, GetDeviceInfo)
     EXPECT_EQ(info.type, USB);
     EXPECT_EQ(info.vendorId, 0x1234u);
     EXPECT_EQ(info.productId, 0x5678u);
+    EXPECT_EQ(info.serial[0], 0xAAu);
+    EXPECT_EQ(info.serial[5], 0xFFu);
 
     client.disconnect();
     svc.stop();
@@ -166,7 +169,7 @@ TEST(CodeGenServerTest, DeviceConnectedNotification)
     ASSERT_TRUE(client.connect());
     settle();
 
-    DeviceInfo info{7, USB, 0x1111, 0x2222};
+    DeviceInfo info{7, USB, 0x1111, 0x2222, {0x01, 0x02, 0x03, 0x04, 0x05, 0x06}};
     ASSERT_EQ(svc.notifyDeviceConnected(info), IPC_SUCCESS);
 
     {

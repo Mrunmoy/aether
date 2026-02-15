@@ -12,6 +12,7 @@ struct DeviceInfo
     DeviceType type;
     uint32 vendorId;
     uint32 productId;
+    uint8[6] serial;
 };
 
 service DeviceMonitor

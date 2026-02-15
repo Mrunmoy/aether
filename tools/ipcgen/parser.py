@@ -28,6 +28,7 @@ class EnumDef:
 class StructField:
     type_name: str   # IDL type (e.g. "uint32", "DeviceType")
     name: str
+    array_size: Optional[int] = None  # e.g. 6 for uint8[6]
 
 
 @dataclass
@@ -42,6 +43,7 @@ class Param:
     type_name: str   # IDL type (e.g. "uint32")
     name: str
     is_pointer: bool # True for [out] params
+    array_size: Optional[int] = None  # e.g. 16 for uint8[16]
 
 
 @dataclass
@@ -201,10 +203,17 @@ class Parser:
             if type_tok.value not in TYPE_MAP and type_tok.value not in self._user_types:
                 raise SyntaxError(
                     f"Line {type_tok.line}: unknown type {type_tok.value!r}")
+            array_size = None
+            if self.peek().kind == TOK_ATTR and self.peek().value.strip().isdigit():
+                array_size = int(self.advance().value.strip())
+                if array_size < 1:
+                    raise SyntaxError(
+                        f"Line {type_tok.line}: array size must be >= 1")
             field_name_tok = self.expect(TOK_IDENT)
             self.expect(TOK_SYMBOL, ";")
             fields.append(StructField(type_name=type_tok.value,
-                                      name=field_name_tok.value))
+                                      name=field_name_tok.value,
+                                      array_size=array_size))
         self.expect(TOK_SYMBOL, "}")
         self.expect(TOK_SYMBOL, ";")
 
@@ -276,6 +285,13 @@ class Parser:
             raise SyntaxError(
                 f"Line {type_tok.line}: unknown type {type_tok.value!r}")
 
+        array_size = None
+        if self.peek().kind == TOK_ATTR and self.peek().value.strip().isdigit():
+            array_size = int(self.advance().value.strip())
+            if array_size < 1:
+                raise SyntaxError(
+                    f"Line {type_tok.line}: array size must be >= 1")
+
         is_pointer = False
         if self.peek().value == "*":
             self.advance()
@@ -291,4 +307,5 @@ class Parser:
                 f"Line {name_tok.line}: [in] param '{name_tok.value}' must not be a pointer")
 
         return Param(direction=direction, type_name=type_tok.value,
-                     name=name_tok.value, is_pointer=is_pointer)
+                     name=name_tok.value, is_pointer=is_pointer,
+                     array_size=array_size)

@@ -352,3 +352,272 @@ class TestParser:
                 struct Empty {};
                 service Foo { [method=1] int Get([in] uint32 x); };
             """)
+
+    # ── Fixed-length array parsing ──────────────────────────────────
+
+    def test_struct_array_field(self):
+        """Struct field with fixed-length array parses array_size."""
+        idl = parse("""
+            struct Mac { uint8[6] bytes; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        f = idl.structs[0].fields[0]
+        assert f.type_name == "uint8"
+        assert f.name == "bytes"
+        assert f.array_size == 6
+
+    def test_struct_array_of_enum(self):
+        """Struct field can be a fixed-length array of an enum type."""
+        idl = parse("""
+            enum Color { Red = 0, Green = 1, Blue = 2, };
+            struct Palette { Color[4] colors; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        f = idl.structs[0].fields[0]
+        assert f.type_name == "Color"
+        assert f.array_size == 4
+
+    def test_param_array_in(self):
+        """[in] param with fixed-length array."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int SetKey([in] uint8[16] key);
+            };
+        """)
+        p = idl.methods[0].params[0]
+        assert p.type_name == "uint8"
+        assert p.array_size == 16
+        assert p.direction == "in"
+
+    def test_param_array_out(self):
+        """[out] param with fixed-length array pointer."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int GetKey([in] uint32 slot, [out] uint8[32]* key);
+            };
+        """)
+        p = idl.methods[0].params[1]
+        assert p.type_name == "uint8"
+        assert p.array_size == 32
+        assert p.is_pointer is True
+        assert p.direction == "out"
+
+    def test_notification_array_param(self):
+        """Notification [in] param with fixed-length array."""
+        idl = parse("""
+            service Foo { [method=1] int Get([in] uint32 x); };
+            notifications Foo {
+                [notify=1]
+                void DataReady([in] uint8[64] data);
+            };
+        """)
+        p = idl.notifications[0].params[0]
+        assert p.type_name == "uint8"
+        assert p.array_size == 64
+
+    def test_array_zero_size_rejected(self):
+        """Array size of 0 raises SyntaxError."""
+        with pytest.raises(SyntaxError, match="array size must be >= 1"):
+            parse("""
+                struct Bad { uint8[0] data; };
+                service Foo { [method=1] int Get([in] uint32 x); };
+            """)
+
+    def test_struct_multiple_array_fields(self):
+        """Struct with a mix of array and non-array fields."""
+        idl = parse("""
+            struct Packet {
+                uint32 id;
+                uint8[6] mac;
+                uint16 flags;
+                uint8[16] payload;
+            };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        s = idl.structs[0]
+        assert len(s.fields) == 4
+        assert s.fields[0].array_size is None     # uint32 id
+        assert s.fields[1].array_size == 6         # uint8[6] mac
+        assert s.fields[2].array_size is None     # uint16 flags
+        assert s.fields[3].array_size == 16        # uint8[16] payload
+
+    def test_struct_with_array_of_struct(self):
+        """Struct containing a fixed-length array of another struct."""
+        idl = parse("""
+            struct Point { uint32 x; uint32 y; };
+            struct Triangle { Point[3] vertices; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        f = idl.structs[1].fields[0]
+        assert f.type_name == "Point"
+        assert f.array_size == 3
+        assert f.name == "vertices"
+
+    def test_nested_struct_with_arrays(self):
+        """Struct containing another struct that itself has array fields."""
+        idl = parse("""
+            struct Mac { uint8[6] bytes; };
+            struct Device {
+                uint32 id;
+                Mac mac;
+            };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        # Mac has array field, Device has Mac field (no array_size on Device.mac)
+        assert idl.structs[0].fields[0].array_size == 6  # Mac.bytes
+        assert idl.structs[1].fields[1].type_name == "Mac"
+        assert idl.structs[1].fields[1].array_size is None
+
+    def test_param_array_zero_size_rejected(self):
+        """Array size of 0 on method param raises SyntaxError."""
+        with pytest.raises(SyntaxError, match="array size must be >= 1"):
+            parse("""
+                service Foo {
+                    [method=1]
+                    int Get([in] uint8[0] data);
+                };
+            """)
+
+    def test_array_all_pod_types(self):
+        """Arrays of all built-in POD types parse correctly."""
+        types = [
+            "uint8", "uint16", "uint32", "uint64",
+            "int8", "int16", "int32", "int64",
+            "float32", "float64", "bool",
+        ]
+        fields = [f"    {t}[4] f{i};" for i, t in enumerate(types)]
+        body = "\n".join(fields)
+        idl = parse(f"""
+            struct AllTypes {{
+                {body}
+            }};
+            service Foo {{ [method=1] int Get([in] uint32 x); }};
+        """)
+        assert len(idl.structs[0].fields) == len(types)
+        for f in idl.structs[0].fields:
+            assert f.array_size == 4
+
+    def test_non_array_field_has_none_array_size(self):
+        """Scalar fields have array_size == None (not accidentally set)."""
+        idl = parse("""
+            struct Data { uint32 x; uint32 y; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        for f in idl.structs[0].fields:
+            assert f.array_size is None
+
+    def test_non_array_param_has_none_array_size(self):
+        """Scalar params have array_size == None."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int Transfer([in] uint32 src, [out] uint32* dst);
+            };
+        """)
+        for p in idl.methods[0].params:
+            assert p.array_size is None
+
+    def test_method_mixed_array_and_scalar_params(self):
+        """Method with both array and scalar params parses correctly."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int WriteBlock([in] uint32 offset, [in] uint8[256] data,
+                               [out] uint32* written);
+            };
+        """)
+        m = idl.methods[0]
+        assert len(m.params) == 3
+        assert m.params[0].type_name == "uint32"
+        assert m.params[0].array_size is None
+        assert m.params[1].type_name == "uint8"
+        assert m.params[1].array_size == 256
+        assert m.params[2].type_name == "uint32"
+        assert m.params[2].array_size is None
+
+    def test_method_multiple_array_params(self):
+        """Method with multiple array params of different sizes."""
+        idl = parse("""
+            service Foo {
+                [method=1]
+                int Exchange([in] uint8[16] inBuf, [out] uint8[32]* outBuf);
+            };
+        """)
+        m = idl.methods[0]
+        assert m.params[0].array_size == 16
+        assert m.params[0].direction == "in"
+        assert m.params[1].array_size == 32
+        assert m.params[1].direction == "out"
+        assert m.params[1].is_pointer is True
+
+    def test_notification_multiple_array_params(self):
+        """Notification with multiple params including arrays."""
+        idl = parse("""
+            service Foo { [method=1] int Get([in] uint32 x); };
+            notifications Foo {
+                [notify=1]
+                void DataReceived([in] uint32 channel, [in] uint8[64] data);
+            };
+        """)
+        n = idl.notifications[0]
+        assert len(n.params) == 2
+        assert n.params[0].array_size is None
+        assert n.params[1].array_size == 64
+
+    def test_array_of_struct_as_param(self):
+        """Array of user-defined struct as method param."""
+        idl = parse("""
+            struct Point { uint32 x; uint32 y; };
+            service Foo {
+                [method=1]
+                int SetPoints([in] Point[4] pts);
+            };
+        """)
+        p = idl.methods[0].params[0]
+        assert p.type_name == "Point"
+        assert p.array_size == 4
+
+    def test_array_of_enum_as_param(self):
+        """Array of enum as method param."""
+        idl = parse("""
+            enum Color { Red = 0, Green = 1, Blue = 2, };
+            service Foo {
+                [method=1]
+                int SetColors([in] Color[3] colors);
+            };
+        """)
+        p = idl.methods[0].params[0]
+        assert p.type_name == "Color"
+        assert p.array_size == 3
+
+    def test_array_size_1(self):
+        """Array size of 1 is valid (edge case)."""
+        idl = parse("""
+            struct Wrapper { uint8[1] byte; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        assert idl.structs[0].fields[0].array_size == 1
+
+    def test_large_array_size(self):
+        """Large array size parses correctly."""
+        idl = parse("""
+            struct Buffer { uint8[4096] data; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        assert idl.structs[0].fields[0].array_size == 4096
+
+    def test_struct_array_of_struct_with_array(self):
+        """Array of structs where the struct itself has array fields."""
+        idl = parse("""
+            struct Entry { uint32 id; uint8[6] mac; };
+            struct Table { Entry[8] entries; };
+            service Foo { [method=1] int Get([in] uint32 x); };
+        """)
+        # Entry has an array field
+        assert idl.structs[0].fields[1].array_size == 6
+        # Table has an array of Entry
+        f = idl.structs[1].fields[0]
+        assert f.type_name == "Entry"
+        assert f.array_size == 8
