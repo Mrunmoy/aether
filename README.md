@@ -218,9 +218,9 @@ See [example/README.md](example/README.md) for self-contained, copy-paste exampl
 |----------|----------|
 | [example/README.md](example/README.md) | Usage examples and tutorial |
 | [doc/ms-ipc-hld.md](doc/ms-ipc-hld.md) | High-level design — architecture and components |
-| [doc/ms-ipc-lld.md](doc/ms-ipc-lld.md) | Detailed design — classes, wire protocol, threading |
+| [doc/ms-ipc-lld.md](doc/ms-ipc-lld.md) | Low-level design — APIs, wire protocol, threading |
 | [doc/ipcgen-hld.md](doc/ipcgen-hld.md) | High-level design — code generator |
-| [doc/ipcgen-lld.md](doc/ipcgen-lld.md) | Detailed design — code generator |
+| [doc/ipcgen-lld.md](doc/ipcgen-lld.md) | Low-level design — module APIs, code generation |
 
 ## Building
 

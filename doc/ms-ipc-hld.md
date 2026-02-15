@@ -117,7 +117,7 @@ Manages the server side of one named service:
 - Accepts client connections and performs the shared memory handshake
 - Dispatches incoming requests to a pure virtual `onRequest()` method
 - Broadcasts notifications to all connected clients via `sendNotify()`
-- Handles clean shutdown with two-phase thread termination
+- Handles clean shutdown of all threads and connections
 
 ### 5.2 ClientBase
 
@@ -182,12 +182,12 @@ sequenceDiagram
     participant C2 as Client 2 (shm + socket)
 
     S ->> SB: sendNotify(serviceId, messageId, payload)
-    Note over SB: Lock m_clientsMutex
+    Note over SB: Lock client list
 
     SB ->> C1: writeFrame(FRAME_NOTIFY) + sendSignal()
     SB ->> C2: writeFrame(FRAME_NOTIFY) + sendSignal()
 
-    Note over SB: Unlock m_clientsMutex
+    Note over SB: Unlock client list
 
     Note over C1: recvSignal() → readFrameAlloc() → onNotification()
     Note over C2: recvSignal() → readFrameAlloc() → onNotification()

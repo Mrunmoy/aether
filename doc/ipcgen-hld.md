@@ -147,14 +147,9 @@ identifiers, numbers, symbols, bracketed attributes (`[method=1]`, `[in]`,
 
 Recursive-descent parser that builds an AST from the token stream. The AST
 consists of `IdlFile` containing lists of `EnumDef`, `StructDef`, `Method`,
-and `Notification` nodes. Validates:
-
-- Known types (built-in or previously defined enum/struct)
-- No duplicate type names
-- `string` requires `[N]` size
-- Array size >= 1
-- Notification params must be `[in]` only
-- Service and notifications block names must match
+and `Notification` nodes. Validates type correctness, uniqueness, and
+structural constraints during parsing — see ipcgen LLD for the full
+validation rules table.
 
 ### 6.3 Emitter (`emitter.py`)
 
