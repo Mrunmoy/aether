@@ -20,6 +20,14 @@ namespace ms::ipc
     inline int writeFrame(IpcRing *ring, const FrameHeader &header, const uint8_t *payload,
                           uint32_t payloadBytes)
     {
+        // Guard against integer overflow: payload alone must fit within a ring's capacity.
+        static_assert(kRingSize > sizeof(FrameHeader), "Ring must be larger than a frame header");
+        constexpr uint32_t kMaxPayload = kRingSize - static_cast<uint32_t>(sizeof(FrameHeader));
+        if (payloadBytes > kMaxPayload)
+        {
+            return IPC_ERR_RING_FULL;
+        }
+
         uint32_t totalBytes = static_cast<uint32_t>(sizeof(FrameHeader)) + payloadBytes;
         if (ring->writeAvailable() < totalBytes)
         {
@@ -63,6 +71,15 @@ namespace ms::ipc
     {
         FrameHeader hdr{};
         if (!peekFrameHeader(ring, &hdr))
+        {
+            return IPC_ERR_DISCONNECTED;
+        }
+
+        // Guard against integer overflow: reject payloads that could not have been
+        // written by a valid writeFrame() call.
+        static_assert(kRingSize > sizeof(FrameHeader), "Ring must be larger than a frame header");
+        constexpr uint32_t kMaxPayload = kRingSize - static_cast<uint32_t>(sizeof(FrameHeader));
+        if (hdr.payloadBytes > kMaxPayload)
         {
             return IPC_ERR_DISCONNECTED;
         }

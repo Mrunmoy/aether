@@ -256,3 +256,52 @@ TEST(FrameIOTest, PayloadTooLargeForBuffer)
     ASSERT_EQ(readFrame(ring.get(), &outHdr, bigBuf, sizeof(bigBuf)), IPC_SUCCESS);
     EXPECT_EQ(std::memcmp(bigBuf, payload, sizeof(payload)), 0);
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// Oversized payloadBytes in header (integer overflow guard)
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(FrameIOTest, OversizedPayloadBytesRejected)
+{
+    auto ring = std::make_unique<IpcRing>();
+
+    // Craft a FrameHeader whose payloadBytes exceeds the ring capacity.
+    // This simulates a corrupted or malicious header that could cause
+    // integer overflow in the totalBytes computation.
+    FrameHeader hdr = makeHeader(FRAME_REQUEST, 1, 1, 1, 0);
+    hdr.payloadBytes = kRingSize; // exactly equal to ring size — no room for header
+
+    ring->write(reinterpret_cast<const uint8_t *>(&hdr), sizeof(FrameHeader));
+
+    // Both readFrame and readFrameAlloc should reject the oversized payload.
+    FrameHeader outHdr{};
+    uint8_t buf[64]{};
+    EXPECT_EQ(readFrame(ring.get(), &outHdr, buf, sizeof(buf)), IPC_ERR_DISCONNECTED);
+
+    // Ring was consumed by the skip-less peek, so reset
+    auto ring2 = std::make_unique<IpcRing>();
+    ring2->write(reinterpret_cast<const uint8_t *>(&hdr), sizeof(FrameHeader));
+
+    std::vector<uint8_t> payload;
+    EXPECT_EQ(readFrameAlloc(ring2.get(), &outHdr, &payload), IPC_ERR_DISCONNECTED);
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// writeFrame rejects payloads that would overflow the frame size
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(FrameIOTest, WriteFrameOversizedPayloadRejected)
+{
+    auto ring = std::make_unique<IpcRing>();
+
+    // payloadBytes > kRingSize - sizeof(FrameHeader) must be rejected.
+    constexpr uint32_t kMaxPayload = kRingSize - static_cast<uint32_t>(sizeof(FrameHeader));
+    std::vector<uint8_t> bigPayload(kMaxPayload + 1, 0xAB);
+
+    FrameHeader hdr = makeHeader(FRAME_REQUEST, 1, 1, 1, static_cast<uint32_t>(bigPayload.size()));
+    EXPECT_EQ(writeFrame(ring.get(), hdr, bigPayload.data(), static_cast<uint32_t>(bigPayload.size())),
+              IPC_ERR_RING_FULL);
+
+    // Ring should be untouched.
+    EXPECT_TRUE(ring->isEmpty());
+}

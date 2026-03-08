@@ -246,6 +246,8 @@ namespace ms::ipc
         {
             if (platform::recvSignal(client->conn.socketFd) != 0)
             {
+                // Mark the client as dead so sendNotify skips it.
+                client->dead.store(true, std::memory_order_release);
                 break;
             }
 
@@ -297,10 +299,13 @@ namespace ms::ipc
         header.messageId = messageId;
         header.payloadBytes = payloadBytes;
 
+        int result = IPC_SUCCESS;
+
         std::lock_guard<std::mutex> lock(m_clientsMutex);
         for (auto &c : m_clients)
         {
-            if (!c->conn.valid())
+            // Skip clients that have already disconnected.
+            if (c->dead.load(std::memory_order_acquire) || !c->conn.valid())
             {
                 continue;
             }
@@ -308,16 +313,18 @@ namespace ms::ipc
             int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
             if (rc != IPC_SUCCESS)
             {
-                return rc;
+                result = rc;
+                continue;
             }
 
             if (platform::sendSignal(c->conn.socketFd) != 0)
             {
-                return IPC_ERR_DISCONNECTED;
+                result = IPC_ERR_DISCONNECTED;
+                continue;
             }
         }
 
-        return IPC_SUCCESS;
+        return result;
     }
 
 } // namespace ms::ipc
