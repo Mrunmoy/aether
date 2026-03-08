@@ -358,6 +358,73 @@ TEST(ClientBaseTest, ServerStopDisconnectsClient)
     client.disconnect();
 }
 
+// ═════════════════════════════════════════════════════════════════════
+// isConnected() returns false after server stops (receiver loop detects
+// the disconnect and sets m_running = false)
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, IsConnectedFalseAfterServerStop)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    EXPECT_TRUE(client.isConnected());
+
+    svc.stop();
+
+    // Give receiver thread time to detect the disconnect.
+    settle();
+
+    // Receiver loop should have set m_running = false.
+    EXPECT_FALSE(client.isConnected());
+
+    client.disconnect();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// sendNotify skips dead clients — live client still receives the
+// notification even when a previously-connected client has gone away
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, NotifySkipsDeadClient)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    // First client connects, then disconnects.
+    {
+        TestClient dead(SVC_NAME);
+        ASSERT_TRUE(dead.connect());
+        settle();
+        dead.disconnect();
+    }
+    settle();
+
+    // Second client stays connected.
+    TestClient alive(SVC_NAME);
+    ASSERT_TRUE(alive.connect());
+    settle();
+
+    // Broadcast: sendNotify should succeed and the live client should receive.
+    const uint8_t payload[] = "hello";
+    ASSERT_EQ(svc.testNotify(42, payload, sizeof(payload)), IPC_SUCCESS);
+
+    {
+        std::unique_lock<std::mutex> lock(alive.notifyMutex);
+        ASSERT_TRUE(alive.notifyCv.wait_for(lock, std::chrono::milliseconds(500),
+                                            [&] { return !alive.notifications.empty(); }));
+    }
+    ASSERT_EQ(alive.notifications.size(), 1u);
+    EXPECT_EQ(alive.notifications[0].messageId, 42u);
+
+    alive.disconnect();
+    svc.stop();
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // RunLoop-mode tests
 // ═══════════════════════════════════════════════════════════════════════

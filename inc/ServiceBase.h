@@ -63,7 +63,8 @@ namespace ms::ipc
         {
             Connection conn;
             std::thread thread;
-            std::mutex handlerMutex; // guards RunLoop handler execution
+            std::mutex handlerMutex;  // guards RunLoop handler execution
+            std::atomic<bool> dead{false}; // set by receiverLoop when client disconnects
         };
 
         void acceptLoop();
