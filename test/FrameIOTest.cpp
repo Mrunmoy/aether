@@ -278,7 +278,8 @@ TEST(FrameIOTest, OversizedPayloadBytesRejected)
     uint8_t buf[64]{};
     EXPECT_EQ(readFrame(ring.get(), &outHdr, buf, sizeof(buf)), IPC_ERR_DISCONNECTED);
 
-    // Ring was consumed by the skip-less peek, so reset
+    // Use a fresh ring for the second test (readFrame did not consume
+    // the data — it rejected after peek — but a separate ring is cleaner).
     auto ring2 = std::make_unique<IpcRing>();
     ring2->write(reinterpret_cast<const uint8_t *>(&hdr), sizeof(FrameHeader));
 
@@ -294,8 +295,7 @@ TEST(FrameIOTest, WriteFrameOversizedPayloadRejected)
 {
     auto ring = std::make_unique<IpcRing>();
 
-    // payloadBytes > kRingSize - sizeof(FrameHeader) must be rejected.
-    constexpr uint32_t kMaxPayload = kRingSize - static_cast<uint32_t>(sizeof(FrameHeader));
+    // payloadBytes > kMaxPayload must be rejected.
     std::vector<uint8_t> bigPayload(kMaxPayload + 1, 0xAB);
 
     FrameHeader hdr = makeHeader(FRAME_REQUEST, 1, 1, 1, static_cast<uint32_t>(bigPayload.size()));

@@ -11,10 +11,7 @@ namespace ms::ipc
             return IPC_ERR_DISCONNECTED;
         }
 
-        // Guard against integer overflow: reject payloads that could not have been
-        // written by a valid writeFrame() call.
-        static_assert(kRingSize > sizeof(FrameHeader), "Ring must be larger than a frame header");
-        constexpr uint32_t kMaxPayload = kRingSize - static_cast<uint32_t>(sizeof(FrameHeader));
+        // Guard against integer overflow in the totalBytes computation.
         if (hdr.payloadBytes > kMaxPayload)
         {
             return IPC_ERR_DISCONNECTED;
