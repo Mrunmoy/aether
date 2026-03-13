@@ -300,6 +300,7 @@ namespace ms::ipc
         header.payloadBytes = payloadBytes;
 
         int result = IPC_SUCCESS;
+        bool hasDead = false;
 
         std::lock_guard<std::mutex> lock(m_clientsMutex);
         for (auto &c : m_clients)
@@ -307,6 +308,7 @@ namespace ms::ipc
             // Skip clients that have already disconnected.
             if (c->dead.load(std::memory_order_acquire) || !c->conn.valid())
             {
+                hasDead = true;
                 continue;
             }
 
@@ -322,6 +324,23 @@ namespace ms::ipc
                 result = IPC_ERR_DISCONNECTED;
                 continue;
             }
+        }
+
+        // Reap dead clients so they don't accumulate.
+        if (hasDead)
+        {
+            m_clients.erase(
+                std::remove_if(m_clients.begin(), m_clients.end(),
+                               [](const auto &c)
+                               {
+                                   if (!c->dead.load(std::memory_order_acquire))
+                                       return false;
+                                   if (c->thread.joinable())
+                                       c->thread.join();
+                                   c->conn.close();
+                                   return true;
+                               }),
+                m_clients.end());
         }
 
         return result;
