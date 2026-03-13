@@ -245,17 +245,18 @@ def emit_server_cpp(idl: IdlFile) -> str:
                 else:
                     offset = f"{offset} + {sz}"
 
-        # Declare [out] params — strings use char[N+1], arrays use C arrays,
-        # scalars/structs use plain vars.
+        # Declare [out] params — value-initialized to avoid leaking
+        # uninitialized data if the handler returns an error.
         for p in out_params:
             if p.type_name == "string":
                 w(f"        char {p.name}[{p.array_size + 1}] = {{}};")
             else:
                 base = _resolve_type(p.type_name, idl)
                 if p.array_size is not None:
-                    w(f"        {base} {p.name}[{p.array_size}];")
+                    w(f"        {base} {p.name}[{p.array_size}]{{}};")
                 else:
-                    w(f"        {base} {p.name};")
+                    w(f"        {base} {p.name}{{}};")
+
 
         # Call handler — strings and arrays decay to pointer, scalars use &.
         out_args = []
@@ -498,6 +499,18 @@ def emit_client_cpp(idl: IdlFile) -> str:
     for n in idl.notifications:
         w(f"    case {name}::k{n.name}:")
         w("    {")
+
+        # Compute expected payload size and guard against truncated frames.
+        if n.params:
+            size_parts = []
+            for p in n.params:
+                if p.type_name == "string":
+                    size_parts.append(str(p.array_size + 1))
+                else:
+                    size_parts.append(_wire_size(p, idl))
+            expected = " + ".join(size_parts)
+            w(f"        if (payload.size() < {expected}) break;")
+
         offset = "0"
         for i, p in enumerate(n.params):
             if p.type_name == "string":

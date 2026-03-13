@@ -12,7 +12,7 @@ int ExhaustAnalyzer::onRequest(uint32_t messageId,
     {
     case ExhaustAnalyzer::kGetStatus:
     {
-        AnalyzerStatus status;
+        AnalyzerStatus status{};
         int _rc = handleGetStatus(&status);
         response->resize(sizeof(status));
         std::memcpy(response->data(), &status, sizeof(status));
@@ -20,7 +20,7 @@ int ExhaustAnalyzer::onRequest(uint32_t messageId,
     }
     case ExhaustAnalyzer::kGetCurrentReadings:
     {
-        GasReadings readings;
+        GasReadings readings{};
         int _rc = handleGetCurrentReadings(&readings);
         response->resize(sizeof(readings));
         std::memcpy(response->data(), &readings, sizeof(readings));
@@ -28,7 +28,7 @@ int ExhaustAnalyzer::onRequest(uint32_t messageId,
     }
     case ExhaustAnalyzer::kStartMeasurement:
     {
-        bool started;
+        bool started{};
         int _rc = handleStartMeasurement(&started);
         response->resize(sizeof(started));
         std::memcpy(response->data(), &started, sizeof(started));
@@ -36,7 +36,7 @@ int ExhaustAnalyzer::onRequest(uint32_t messageId,
     }
     case ExhaustAnalyzer::kStopMeasurement:
     {
-        bool stopped;
+        bool stopped{};
         int _rc = handleStopMeasurement(&stopped);
         response->resize(sizeof(stopped));
         std::memcpy(response->data(), &stopped, sizeof(stopped));

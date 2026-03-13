@@ -44,6 +44,7 @@ void DeviceMonitor::onNotification(uint32_t serviceId, uint32_t messageId,
     {
     case DeviceMonitor::kDeviceConnected:
     {
+        if (payload.size() < sizeof(DeviceInfo)) break;
         DeviceInfo info;
         std::memcpy(&info, payload.data(), sizeof(info));
         onDeviceConnected(info);
@@ -51,6 +52,7 @@ void DeviceMonitor::onNotification(uint32_t serviceId, uint32_t messageId,
     }
     case DeviceMonitor::kDeviceDisconnected:
     {
+        if (payload.size() < sizeof(uint32_t)) break;
         uint32_t deviceId;
         std::memcpy(&deviceId, payload.data(), sizeof(deviceId));
         onDeviceDisconnected(deviceId);

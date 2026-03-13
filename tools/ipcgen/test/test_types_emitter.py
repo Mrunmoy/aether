@@ -113,7 +113,7 @@ class TestTypesEmitter:
             };
         """)
         cpp = emit_server_cpp(idl)
-        assert "Info info;" in cpp
+        assert "Info info{};" in cpp
         assert "sizeof(info)" in cpp
 
     def test_struct_param_in_client_h(self):
@@ -333,7 +333,7 @@ class TestTypesEmitter:
             };
         """)
         cpp = emit_server_cpp(idl)
-        assert "uint8_t key[32];" in cpp
+        assert "uint8_t key[32]{};" in cpp
         assert "response->resize(sizeof(key));" in cpp
         assert "std::memcpy(response->data(), key, sizeof(key));" in cpp
 
@@ -346,9 +346,9 @@ class TestTypesEmitter:
             };
         """)
         cpp = emit_server_cpp(idl)
-        # Both [out] params declared — array as C array, scalar as plain var
-        assert "uint8_t data[64];" in cpp
-        assert "uint32_t status;" in cpp
+        # Both [out] params declared — value-initialized to avoid leaking uninit data
+        assert "uint8_t data[64]{};" in cpp
+        assert "uint32_t status{};" in cpp
         # Response resize sums both
         assert "response->resize(sizeof(data) + sizeof(status));" in cpp
 
