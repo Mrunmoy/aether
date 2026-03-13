@@ -246,8 +246,10 @@ namespace ms::ipc
         {
             if (platform::recvSignal(client->conn.socketFd) != 0)
             {
-                // Mark the client as dead so sendNotify skips it.
+                // Mark dead and release resources immediately so fds
+                // aren't held until sendNotify happens to reap.
                 client->dead.store(true, std::memory_order_release);
+                client->conn.close();
                 break;
             }
 
@@ -300,47 +302,51 @@ namespace ms::ipc
         header.payloadBytes = payloadBytes;
 
         int result = IPC_SUCCESS;
-        bool hasDead = false;
+        std::vector<std::unique_ptr<ClientConn>> deadClients;
 
-        std::lock_guard<std::mutex> lock(m_clientsMutex);
-        for (auto &c : m_clients)
         {
-            // Skip clients that have already disconnected.
-            if (c->dead.load(std::memory_order_acquire) || !c->conn.valid())
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            for (auto &c : m_clients)
             {
-                hasDead = true;
-                continue;
+                // Skip clients that have already disconnected.
+                if (c->dead.load(std::memory_order_acquire) || !c->conn.valid())
+                {
+                    continue;
+                }
+
+                int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
+                if (rc != IPC_SUCCESS)
+                {
+                    result = rc;
+                    continue;
+                }
+
+                if (platform::sendSignal(c->conn.socketFd) != 0)
+                {
+                    result = IPC_ERR_DISCONNECTED;
+                    continue;
+                }
             }
 
-            int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
-            if (rc != IPC_SUCCESS)
+            // Extract dead clients under lock, then release lock before joining.
+            auto it = std::stable_partition(
+                m_clients.begin(), m_clients.end(),
+                [](const auto &c) { return !c->dead.load(std::memory_order_acquire); });
+            for (auto move_it = it; move_it != m_clients.end(); ++move_it)
             {
-                result = rc;
-                continue;
+                deadClients.push_back(std::move(*move_it));
             }
-
-            if (platform::sendSignal(c->conn.socketFd) != 0)
-            {
-                result = IPC_ERR_DISCONNECTED;
-                continue;
-            }
+            m_clients.erase(it, m_clients.end());
         }
 
-        // Reap dead clients so they don't accumulate.
-        if (hasDead)
+        // Join threads and close connections outside the lock.
+        for (auto &c : deadClients)
         {
-            m_clients.erase(
-                std::remove_if(m_clients.begin(), m_clients.end(),
-                               [](const auto &c)
-                               {
-                                   if (!c->dead.load(std::memory_order_acquire))
-                                       return false;
-                                   if (c->thread.joinable())
-                                       c->thread.join();
-                                   c->conn.close();
-                                   return true;
-                               }),
-                m_clients.end());
+            if (c->thread.joinable())
+            {
+                c->thread.join();
+            }
+            c->conn.close();
         }
 
         return result;
