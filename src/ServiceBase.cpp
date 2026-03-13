@@ -217,9 +217,12 @@ namespace ms::ipc
             response.payloadBytes = static_cast<uint32_t>(responsePayload.size());
             response.aux = static_cast<uint32_t>(status);
 
-            writeFrame(client->conn.txRing, response, responsePayload.data(),
-                       response.payloadBytes);
-            platform::sendSignal(client->conn.socketFd);
+            {
+                std::lock_guard<std::mutex> txLock(client->txMutex);
+                writeFrame(client->conn.txRing, response, responsePayload.data(),
+                           response.payloadBytes);
+                platform::sendSignal(client->conn.socketFd);
+            }
         }
     }
 
@@ -246,10 +249,10 @@ namespace ms::ipc
         {
             if (platform::recvSignal(client->conn.socketFd) != 0)
             {
-                // Mark dead and release resources immediately so fds
-                // aren't held until sendNotify happens to reap.
+                // Mark dead so sendNotify skips this client.
+                // Don't close conn here — sendNotify may be concurrently
+                // reading conn fields. The reap path handles cleanup.
                 client->dead.store(true, std::memory_order_release);
-                client->conn.close();
                 break;
             }
 
@@ -282,9 +285,13 @@ namespace ms::ipc
                 response.payloadBytes = static_cast<uint32_t>(responsePayload.size());
                 response.aux = static_cast<uint32_t>(status);
 
-                writeFrame(client->conn.txRing, response, responsePayload.data(),
-                           response.payloadBytes);
-                platform::sendSignal(client->conn.socketFd);
+                // Serialize with sendNotify which also writes to txRing.
+                {
+                    std::lock_guard<std::mutex> txLock(client->txMutex);
+                    writeFrame(client->conn.txRing, response, responsePayload.data(),
+                               response.payloadBytes);
+                    platform::sendSignal(client->conn.socketFd);
+                }
             }
         }
     }
@@ -313,6 +320,9 @@ namespace ms::ipc
                 {
                     continue;
                 }
+
+                // Serialize with receiverLoop which also writes to txRing.
+                std::lock_guard<std::mutex> txLock(c->txMutex);
 
                 int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
                 if (rc != IPC_SUCCESS)

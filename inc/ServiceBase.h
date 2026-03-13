@@ -64,6 +64,7 @@ namespace ms::ipc
             Connection conn;
             std::thread thread;
             std::mutex handlerMutex;  // guards RunLoop handler execution
+            std::mutex txMutex;       // serializes all writes to txRing (SPSC contract)
             std::atomic<bool> dead{false}; // set by receiverLoop when client disconnects
         };
 
