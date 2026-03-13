@@ -36,8 +36,7 @@ def clean():
 def configure(examples=False):
     os.makedirs(BUILD_DIR, exist_ok=True)
     cmd = ["cmake", "-B", BUILD_DIR, "-DCMAKE_BUILD_TYPE=Release"]
-    if examples:
-        cmd.append("-DMS_IPC_BUILD_EXAMPLES=ON")
+    cmd.append(f"-DMS_IPC_BUILD_EXAMPLES={'ON' if examples else 'OFF'}")
     run(cmd, cwd=ROOT)
 
 
