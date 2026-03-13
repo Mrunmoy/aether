@@ -218,7 +218,7 @@ namespace ms::ipc
             response.aux = static_cast<uint32_t>(status);
 
             {
-                std::lock_guard<std::mutex> txLock(client->txMutex);
+                std::lock_guard<std::mutex> slock(client->sendMutex);
                 writeFrame(client->conn.txRing, response, responsePayload.data(),
                            response.payloadBytes);
                 platform::sendSignal(client->conn.socketFd);
@@ -228,17 +228,22 @@ namespace ms::ipc
 
     void ServiceBase::removeClient(ClientConn *client)
     {
+        // Remove the RunLoop source first (while socketFd is still valid).
         m_loop->removeSource(client->conn.socketFd);
-        client->conn.close();
 
-        // During shutdown (m_running == false), stop() will clear the list.
-        if (m_running.load(std::memory_order_acquire))
+        // Mark dead and close conn under sendMutex so we can't race with a concurrent
+        // sendNotify that has passed the dead-flag check and is about to write to txRing.
         {
-            std::lock_guard<std::mutex> lock(m_clientsMutex);
-            m_clients.erase(std::remove_if(m_clients.begin(), m_clients.end(),
-                                           [client](const auto &c) { return c.get() == client; }),
-                            m_clients.end());
+            std::lock_guard<std::mutex> slock(client->sendMutex);
+            client->dead.store(true, std::memory_order_release);
+            client->conn.close();
         }
+
+        // Do NOT erase from m_clients here: the caller (onClientReady) still holds
+        // a raw pointer to this ClientConn and its lock_guard on handlerMutex.
+        // Destroying the unique_ptr here would make the lock_guard destructor
+        // unlock an already-freed mutex (UB). The entry is reaped on the next
+        // sendNotify call or during stop().
     }
 
     // ── Receiver Loop (per client) ───────────────────────────────────
@@ -249,10 +254,15 @@ namespace ms::ipc
         {
             if (platform::recvSignal(client->conn.socketFd) != 0)
             {
-                // Mark dead so sendNotify skips this client.
-                // Don't close conn here — sendNotify may be concurrently
-                // reading conn fields. The reap path handles cleanup.
-                client->dead.store(true, std::memory_order_release);
+                // Mark dead under sendMutex so we can't race with a concurrent
+                // sendNotify that has passed the dead-flag check and is about
+                // to acquire sendMutex to write to txRing.
+                // Do NOT call conn.close() here — the sendNotify two-phase reap
+                // or stop() joins this thread first, then closes the connection.
+                {
+                    std::lock_guard<std::mutex> slock(client->sendMutex);
+                    client->dead.store(true, std::memory_order_release);
+                }
                 break;
             }
 
@@ -275,7 +285,7 @@ namespace ms::ipc
                 std::vector<uint8_t> responsePayload;
                 int status = onRequest(header.messageId, payload, &responsePayload);
 
-                // Build and send response.
+                // Build and send response — hold sendMutex to keep SPSC invariant.
                 FrameHeader response{};
                 response.version = kProtocolVersion;
                 response.flags = FRAME_RESPONSE;
@@ -287,7 +297,7 @@ namespace ms::ipc
 
                 // Serialize with sendNotify which also writes to txRing.
                 {
-                    std::lock_guard<std::mutex> txLock(client->txMutex);
+                    std::lock_guard<std::mutex> slock(client->sendMutex);
                     writeFrame(client->conn.txRing, response, responsePayload.data(),
                                response.payloadBytes);
                     platform::sendSignal(client->conn.socketFd);
@@ -315,26 +325,35 @@ namespace ms::ipc
             std::lock_guard<std::mutex> lock(m_clientsMutex);
             for (auto &c : m_clients)
             {
-                // Skip clients that have already disconnected.
-                if (c->dead.load(std::memory_order_acquire) || !c->conn.valid())
+                // Fast path: skip obviously dead clients without acquiring sendMutex.
+                if (c->dead.load(std::memory_order_acquire))
                 {
                     continue;
                 }
 
-                // Serialize with receiverLoop which also writes to txRing.
-                std::lock_guard<std::mutex> txLock(c->txMutex);
-
-                int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
-                if (rc != IPC_SUCCESS)
+                // Hold sendMutex while writing so we serialize with receiverLoop
+                // response writes (SPSC: only one producer to txRing at a time).
+                // Re-check dead after acquiring the lock to close the TOCTOU window
+                // between the fast-path check above and the actual write below.
                 {
-                    result = rc;
-                    continue;
-                }
+                    std::lock_guard<std::mutex> slock(c->sendMutex);
+                    if (c->dead.load(std::memory_order_acquire))
+                    {
+                        continue;
+                    }
 
-                if (platform::sendSignal(c->conn.socketFd) != 0)
-                {
-                    result = IPC_ERR_DISCONNECTED;
-                    continue;
+                    int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
+                    if (rc != IPC_SUCCESS)
+                    {
+                        result = rc;
+                        continue;
+                    }
+
+                    if (platform::sendSignal(c->conn.socketFd) != 0)
+                    {
+                        result = IPC_ERR_DISCONNECTED;
+                        continue;
+                    }
                 }
             }
 
@@ -356,6 +375,8 @@ namespace ms::ipc
             {
                 c->thread.join();
             }
+            // conn.close() is idempotent: already called for RunLoop clients
+            // (in removeClient), harmless no-op if called again.
             c->conn.close();
         }
 
