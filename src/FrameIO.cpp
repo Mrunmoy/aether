@@ -11,6 +11,12 @@ namespace ms::ipc
             return IPC_ERR_DISCONNECTED;
         }
 
+        // Guard against integer overflow in the totalBytes computation.
+        if (hdr.payloadBytes > kMaxPayload)
+        {
+            return IPC_ERR_DISCONNECTED;
+        }
+
         uint32_t totalBytes = static_cast<uint32_t>(sizeof(FrameHeader)) + hdr.payloadBytes;
         if (ring->readAvailable() < totalBytes)
         {

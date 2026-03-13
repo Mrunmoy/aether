@@ -40,32 +40,35 @@ namespace ms::ipc
 
     void ClientBase::disconnect()
     {
-        if (!m_running.exchange(false))
-        {
-            return;
-        }
+        bool wasRunning = m_running.exchange(false);
 
         if (m_loop)
         {
-            m_loop->removeSource(m_conn.socketFd);
+            if (wasRunning)
+            {
+                m_loop->removeSource(m_conn.socketFd);
+            }
             // Wait for any in-flight handler to finish.
-            std::lock_guard<std::mutex> lock(m_handlerMutex);
+            std::lock_guard<std::mutex> hlock(m_handlerMutex);
         }
         else
         {
-            // Unblock receiver thread.
-            if (m_conn.socketFd >= 0)
+            if (wasRunning && m_conn.socketFd >= 0)
             {
+                // Unblock receiver thread by shutting down the socket.
                 shutdown(m_conn.socketFd, SHUT_RDWR);
             }
 
+            // Always join: the thread may have already exited (server disconnect),
+            // or we just unblocked it via shutdown above.
             if (m_receiverThread.joinable())
             {
                 m_receiverThread.join();
             }
         }
 
-        // Fail all pending calls.
+        // Fail any pending calls not yet resolved (e.g., server disconnected
+        // mid-call and the receiver thread already cleared some but not all).
         {
             std::lock_guard<std::mutex> lock(m_pendingMutex);
             for (auto &[_, pending] : m_pending)
@@ -174,7 +177,7 @@ namespace ms::ipc
 
                 if (header.flags & FRAME_RESPONSE)
                 {
-                    std::lock_guard<std::mutex> lock(m_pendingMutex);
+                    std::lock_guard<std::mutex> plock(m_pendingMutex);
                     auto it = m_pending.find(header.seq);
                     if (it != m_pending.end())
                     {
@@ -191,21 +194,24 @@ namespace ms::ipc
             }
         }
 
-        // Fail any remaining pending calls on exit.
-        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        // Server disconnected or stop() was called: update state and fail pending calls.
+        m_running.store(false, std::memory_order_release);
+
+        std::lock_guard<std::mutex> plock(m_pendingMutex);
         for (auto &[_, pending] : m_pending)
         {
             pending->status = IPC_ERR_DISCONNECTED;
             pending->done = true;
             pending->cv.notify_one();
         }
+        m_pending.clear();
     }
 
     // ── RunLoop Handler ────────────────────────────────────────────
 
     void ClientBase::onDataReady()
     {
-        std::lock_guard<std::mutex> lock(m_handlerMutex);
+        std::lock_guard<std::mutex> hlock(m_handlerMutex);
 
         if (!m_running.load(std::memory_order_acquire))
         {
@@ -219,13 +225,14 @@ namespace ms::ipc
             m_running.store(false, std::memory_order_release);
 
             // Fail pending calls.
-            std::lock_guard<std::mutex> lock(m_pendingMutex);
+            std::lock_guard<std::mutex> plock(m_pendingMutex);
             for (auto &[_, pending] : m_pending)
             {
                 pending->status = IPC_ERR_DISCONNECTED;
                 pending->done = true;
                 pending->cv.notify_one();
             }
+            m_pending.clear();
             return;
         }
 
@@ -241,7 +248,7 @@ namespace ms::ipc
 
             if (header.flags & FRAME_RESPONSE)
             {
-                std::lock_guard<std::mutex> lock(m_pendingMutex);
+                std::lock_guard<std::mutex> plock(m_pendingMutex);
                 auto it = m_pending.find(header.seq);
                 if (it != m_pending.end())
                 {
