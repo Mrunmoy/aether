@@ -13,6 +13,10 @@ namespace ms::ipc
     // Read and write framed messages (FrameHeader + payload) through
     // ring buffers. No endian conversion — same-machine IPC only.
 
+    // Maximum payload that can fit in a single frame (ring capacity minus header).
+    static_assert(kRingSize > sizeof(FrameHeader), "Ring must be larger than a frame header");
+    constexpr uint32_t kMaxPayload = kRingSize - static_cast<uint32_t>(sizeof(FrameHeader));
+
     // Write a complete frame (header + payload) to a ring buffer.
     // The write is atomic: either the entire frame is written, or
     // nothing is written if insufficient space.
@@ -20,6 +24,12 @@ namespace ms::ipc
     inline int writeFrame(IpcRing *ring, const FrameHeader &header, const uint8_t *payload,
                           uint32_t payloadBytes)
     {
+        // Guard against integer overflow in the totalBytes computation.
+        if (payloadBytes > kMaxPayload)
+        {
+            return IPC_ERR_RING_FULL;
+        }
+
         uint32_t totalBytes = static_cast<uint32_t>(sizeof(FrameHeader)) + payloadBytes;
         if (ring->writeAvailable() < totalBytes)
         {
@@ -63,6 +73,12 @@ namespace ms::ipc
     {
         FrameHeader hdr{};
         if (!peekFrameHeader(ring, &hdr))
+        {
+            return IPC_ERR_DISCONNECTED;
+        }
+
+        // Guard against integer overflow in the totalBytes computation.
+        if (hdr.payloadBytes > kMaxPayload)
         {
             return IPC_ERR_DISCONNECTED;
         }
