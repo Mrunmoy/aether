@@ -118,15 +118,15 @@ protected:
 
     int handleStopMeasurement(bool *stopped) override
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        std::unique_lock<std::mutex> lock(m_mutex);
         if (m_status != Measuring)
         {
             *stopped = false;
             return IPC_SUCCESS;
         }
         *stopped = true;
-        stopSimLocked();
         m_status = Ready;
+        stopSimUnlocked(lock);
         return IPC_SUCCESS;
     }
 
@@ -164,21 +164,22 @@ private:
 
     void stopSim()
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        stopSimLocked();
+        std::unique_lock<std::mutex> lock(m_mutex);
+        stopSimUnlocked(lock);
     }
 
-    void stopSimLocked()
+    // Caller must hold lock. Lock is released before joining the sim
+    // thread (which itself acquires m_mutex), then re-acquired on return.
+    void stopSimUnlocked(std::unique_lock<std::mutex> &lock)
     {
         if (m_simRunning.exchange(false))
         {
-            // Must release mutex before joining since sim thread acquires it.
-            m_mutex.unlock();
+            lock.unlock();
             if (m_simThread.joinable())
             {
                 m_simThread.join();
             }
-            m_mutex.lock();
+            lock.lock();
             printf("[analyzer] measurement stopped\n");
         }
     }

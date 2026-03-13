@@ -73,6 +73,7 @@ void ExhaustAnalyzer::onNotification(uint32_t serviceId, uint32_t messageId,
     {
     case ExhaustAnalyzer::kReadingsUpdated:
     {
+        if (payload.size() < sizeof(GasReadings)) break;
         GasReadings readings;
         std::memcpy(&readings, payload.data(), sizeof(readings));
         onReadingsUpdated(readings);
@@ -80,6 +81,7 @@ void ExhaustAnalyzer::onNotification(uint32_t serviceId, uint32_t messageId,
     }
     case ExhaustAnalyzer::kStatusChanged:
     {
+        if (payload.size() < sizeof(AnalyzerStatus)) break;
         AnalyzerStatus status;
         std::memcpy(&status, payload.data(), sizeof(status));
         onStatusChanged(status);
