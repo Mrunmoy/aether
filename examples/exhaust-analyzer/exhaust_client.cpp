@@ -342,9 +342,28 @@ private slots:
         }
 
         AnalyzerStatus status{};
-        if (m_client->GetStatus(&status) == IPC_SUCCESS)
+        int rc = m_client->GetStatus(&status);
+        if (rc == IPC_SUCCESS)
         {
             updateStatusDisplay(status);
+            m_heartbeatFailures = 0;
+        }
+        else
+        {
+            m_heartbeatFailures++;
+            m_infoLabel->setText(QString("Status poll failed (%1)").arg(rc));
+            if (m_heartbeatFailures >= 3)
+            {
+                m_heartbeat->stop();
+                m_client->ExhaustAnalyzer::disconnect();
+                m_connectBtn->setText("CONNECT");
+                m_statusLabel->setText("OFFLINE");
+                m_statusLabel->setStyleSheet("color: #888;");
+                m_startBtn->setEnabled(false);
+                m_stopBtn->setEnabled(false);
+                m_infoLabel->setText("Server unresponsive — disconnected");
+                setAllGaugesInactive();
+            }
         }
     }
 
@@ -406,6 +425,7 @@ private:
     GaugeWidget *m_temp;
 
     int m_sampleCount = 0;
+    int m_heartbeatFailures = 0;
 };
 
 // ── main ────────────────────────────────────────────────────────────
