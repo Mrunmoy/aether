@@ -20,6 +20,8 @@ int DeviceMonitor::onRequest(uint32_t messageId,
     }
     case DeviceMonitor::kGetDeviceInfo:
     {
+        if (request.size() < sizeof(uint32_t))
+            return IPC_ERR_INVALID_METHOD;
         uint32_t deviceId;
         std::memcpy(&deviceId, request.data() + 0, sizeof(deviceId));
         DeviceInfo info{};

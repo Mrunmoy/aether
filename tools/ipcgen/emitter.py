@@ -226,8 +226,17 @@ def emit_server_cpp(idl: IdlFile) -> str:
         w(f"    case {name}::k{m.name}:")
         w("    {")
 
-        # Unmarshal [in] params
+        # Unmarshal [in] params — validate request size first.
         if in_params:
+            size_parts = []
+            for p in in_params:
+                if p.type_name == "string":
+                    size_parts.append(str(p.array_size + 1))
+                else:
+                    size_parts.append(_wire_size(p, idl))
+            expected = " + ".join(size_parts)
+            w(f"        if (request.size() < {expected})")
+            w( "            return IPC_ERR_INVALID_METHOD;")
             offset = 0
             for p in in_params:
                 if p.type_name == "string":
