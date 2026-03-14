@@ -46,6 +46,10 @@ compile_commands.json
 # Claude
 .claude/
 
+# Nix
+result
+result-*
+
 # clangd / ccls
 .cache/
 .ccls-cache/

@@ -12,7 +12,7 @@ int DeviceMonitor::onRequest(uint32_t messageId,
     {
     case DeviceMonitor::kGetDeviceCount:
     {
-        uint32_t count;
+        uint32_t count{};
         int _rc = handleGetDeviceCount(&count);
         response->resize(sizeof(count));
         std::memcpy(response->data(), &count, sizeof(count));
@@ -20,9 +20,11 @@ int DeviceMonitor::onRequest(uint32_t messageId,
     }
     case DeviceMonitor::kGetDeviceInfo:
     {
+        if (request.size() < sizeof(uint32_t))
+            return IPC_ERR_INVALID_METHOD;
         uint32_t deviceId;
         std::memcpy(&deviceId, request.data() + 0, sizeof(deviceId));
-        DeviceInfo info;
+        DeviceInfo info{};
         int _rc = handleGetDeviceInfo(deviceId, &info);
         response->resize(sizeof(info));
         std::memcpy(response->data(), &info, sizeof(info));

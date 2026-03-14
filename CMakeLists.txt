@@ -31,6 +31,6 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     option(MS_IPC_BUILD_EXAMPLES "Build examples" OFF)
     if(MS_IPC_BUILD_EXAMPLES)
-        add_subdirectory(example)
+        add_subdirectory(examples)
     endif()
 endif()
