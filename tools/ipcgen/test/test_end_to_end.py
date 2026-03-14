@@ -215,7 +215,7 @@ notifications KeyStore {
         # Server cpp: [out] uses C array, [in] uses std::array
         server_cpp = (outdir / "server" / "KeyStore.cpp").read_text()
         assert "std::array<uint8_t, 16> data;" in server_cpp  # [in] param
-        assert "uint8_t key[32];" in server_cpp               # [out] C array
+        assert "uint8_t key[32]{};" in server_cpp               # [out] C array
 
         # Client cpp marshals correctly
         client_cpp = (outdir / "client" / "KeyStore.cpp").read_text()

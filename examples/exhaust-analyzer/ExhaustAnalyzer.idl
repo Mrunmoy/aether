@@ -1,0 +1,49 @@
+// ExhaustAnalyzer.idl
+//
+// IPC interface for a car exhaust gas analyzer — the kind of device
+// found in emissions testing stations and performance tuning shops.
+
+enum AnalyzerStatus
+{
+    Offline   = 0,
+    Warming   = 1,
+    Ready     = 2,
+    Measuring = 3,
+    Error     = 4
+};
+
+struct GasReadings
+{
+    float64 o2Percent;
+    float64 coPercent;
+    float64 co2Percent;
+    float64 noxPpm;
+    float64 hcPpm;
+    float64 lambda;
+    float64 exhaustTempC;
+    uint64  timestampMs;
+};
+
+service ExhaustAnalyzer
+{
+    [method=1]
+    int GetStatus([out] AnalyzerStatus status);
+
+    [method=2]
+    int GetCurrentReadings([out] GasReadings readings);
+
+    [method=3]
+    int StartMeasurement([out] bool started);
+
+    [method=4]
+    int StopMeasurement([out] bool stopped);
+};
+
+notifications ExhaustAnalyzer
+{
+    [notify=1]
+    void ReadingsUpdated([in] GasReadings readings);
+
+    [notify=2]
+    void StatusChanged([in] AnalyzerStatus status);
+};
