@@ -127,6 +127,7 @@ protected:
         *stopped = true;
         m_status = Ready;
         stopSimUnlocked(lock);
+        notifyStatusChanged(Ready);
         return IPC_SUCCESS;
     }
 
