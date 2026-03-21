@@ -18,6 +18,7 @@ namespace ms::ipc
     //  Server: rx = Ring 0, tx = Ring 1
 
     static constexpr uint32_t kShmSize = 2 * sizeof(IpcRing);
+    static constexpr uint32_t kSocketTimeoutMs = 5000;
 
     // ── Connection::close ───────────────────────────────────────────
 
@@ -51,7 +52,10 @@ namespace ms::ipc
             return conn;
         }
 
-        // 2. Create shared memory.
+        // 2. Set socket timeouts.
+        platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs);
+
+        // 3. Create shared memory.
         conn.shmFd = platform::shmCreate(kShmSize);
         if (conn.shmFd < 0)
         {
@@ -105,9 +109,13 @@ namespace ms::ipc
             return conn;
         }
 
-        // 2. Receive protocol version + shared memory FD from client.
+        // 2. Set socket timeouts.
+        platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs);
+
+        // 3. Receive protocol version + shared memory FD from client.
         uint16_t version = 0;
-        if (platform::recvFd(conn.socketFd, &conn.shmFd, &version, sizeof(version)) <= 0)
+        if (platform::recvFd(conn.socketFd, &conn.shmFd, &version, sizeof(version)) <= 0
+            || conn.shmFd < 0)
         {
             conn.close();
             return conn;

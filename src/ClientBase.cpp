@@ -107,25 +107,31 @@ namespace ms::ipc
         header.seq = seq;
         header.payloadBytes = static_cast<uint32_t>(request.size());
 
-        int rc = writeFrame(m_conn.txRing, header, request.data(), header.payloadBytes);
-        if (rc != IPC_SUCCESS)
-        {
-            return rc;
-        }
-
-        // Register pending call before signaling.
+        // Register pending call before writing, so the receiver thread can
+        // always find a consumer for any committed frame.
         auto pending = std::make_shared<PendingCall>();
-        {
-            std::lock_guard<std::mutex> lock(m_pendingMutex);
-            m_pending[seq] = pending;
-        }
 
-        // Signal server.
-        if (platform::sendSignal(m_conn.socketFd) != 0)
         {
-            std::lock_guard<std::mutex> lock(m_pendingMutex);
-            m_pending.erase(seq);
-            return IPC_ERR_DISCONNECTED;
+            // Hold sendMutex to serialize txRing writes (SPSC invariant).
+            std::lock_guard<std::mutex> slock(m_sendMutex);
+
+            int rc = writeFrame(m_conn.txRing, header, request.data(), header.payloadBytes);
+            if (rc != IPC_SUCCESS)
+            {
+                return rc;
+            }
+
+            {
+                std::lock_guard<std::mutex> plock(m_pendingMutex);
+                m_pending[seq] = pending;
+            }
+
+            if (platform::sendSignal(m_conn.socketFd) != 0)
+            {
+                std::lock_guard<std::mutex> plock(m_pendingMutex);
+                m_pending.erase(seq);
+                return IPC_ERR_DISCONNECTED;
+            }
         }
 
         // Wait for response.
@@ -173,6 +179,11 @@ namespace ms::ipc
                 if (readFrameAlloc(m_conn.rxRing, &header, &payload) != IPC_SUCCESS)
                 {
                     break;
+                }
+
+                if (header.version != kProtocolVersion)
+                {
+                    continue;
                 }
 
                 if (header.flags & FRAME_RESPONSE)

@@ -85,6 +85,7 @@ namespace ms::ipc
         std::thread m_receiverThread;
 
         std::mutex m_handlerMutex; // guards RunLoop handler execution
+        std::mutex m_sendMutex;   // serializes txRing writes (SPSC invariant)
         std::mutex m_pendingMutex;
         std::unordered_map<uint32_t, std::shared_ptr<PendingCall>> m_pending;
     };

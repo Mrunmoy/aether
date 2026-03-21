@@ -504,3 +504,128 @@ TEST(ServiceBaseTest, RunLoop_StopCleansUp)
 
     client.close();
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// Notify to abruptly dead client does not SIGPIPE/crash
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, NotifyToAbruptlyDeadClient_NoSIGPIPE)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    // Connect a client, let the server register it, then close abruptly
+    // (no graceful shutdown — simulates a crashed process).
+    {
+        Connection client = connectToServer(SVC_NAME);
+        ASSERT_TRUE(client.valid());
+        settle();
+        client.close();
+    }
+    settle();
+
+    // Notify should not crash (no SIGPIPE) and should return successfully.
+    const uint8_t payload[] = "ping";
+    int rc = svc.testNotify(1, payload, sizeof(payload));
+    EXPECT_EQ(rc, IPC_SUCCESS);
+
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Notify reaps dead clients — second call has no stale entries
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, NotifyReapsDeadClients)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    // Connect two clients.
+    Connection client1 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client1.valid());
+    Connection client2 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    // Kill the first client abruptly.
+    client1.close();
+    settle();
+
+    // First notify: reaps the dead client. Should not crash.
+    const uint8_t payload[] = "reap";
+    int rc1 = svc.testNotify(10, payload, sizeof(payload));
+    EXPECT_EQ(rc1, IPC_SUCCESS);
+
+    // Second notify: dead client is already reaped. Should succeed cleanly.
+    int rc2 = svc.testNotify(11, payload, sizeof(payload));
+    EXPECT_EQ(rc2, IPC_SUCCESS);
+
+    client2.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Rapid connect/disconnect cycles — service stays healthy
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, ConnectDisconnectCycle)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    for (int i = 0; i < 20; ++i)
+    {
+        Connection client = connectToServer(SVC_NAME);
+        ASSERT_TRUE(client.valid()) << "iteration " << i;
+        settle();
+
+        const uint8_t payload[] = "cycle";
+        FrameHeader respHdr{};
+        std::vector<uint8_t> respPayload;
+        int rc = sendAndRecv(client, 1, static_cast<uint32_t>(i), payload, sizeof(payload),
+                             &respHdr, &respPayload);
+
+        ASSERT_EQ(rc, IPC_SUCCESS) << "iteration " << i;
+        EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+        ASSERT_EQ(respPayload.size(), sizeof(payload));
+        EXPECT_EQ(std::memcmp(respPayload.data(), payload, sizeof(payload)), 0);
+
+        client.close();
+        settle();
+    }
+
+    EXPECT_TRUE(svc.isRunning());
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Stop without start — no crash
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, StopWithoutStart)
+{
+    EchoService svc(SVC_NAME);
+    // Never started — stop() should be harmless.
+    EXPECT_FALSE(svc.isRunning());
+    svc.stop();
+    EXPECT_FALSE(svc.isRunning());
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Start twice — second start returns false (or is idempotent)
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, StartTwice)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+    EXPECT_TRUE(svc.isRunning());
+
+    // Second start: the socket is already bound, so serverSocket returns -1
+    // and start() returns false.
+    bool secondStart = svc.start();
+    EXPECT_FALSE(secondStart);
+
+    svc.stop();
+}

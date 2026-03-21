@@ -574,3 +574,129 @@ TEST(ClientBaseTest, RunLoop_BothOnSameRunLoop)
     client.disconnect();
     svc.stop();
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// Concurrent calls from the same client (tests m_sendMutex)
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, ConcurrentCallsFromSameClient)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    constexpr int kThreads = 4;
+    constexpr int kCallsPerThread = 5;
+    std::vector<std::thread> threads;
+    std::atomic<int> successCount{0};
+    std::atomic<int> failCount{0};
+
+    for (int t = 0; t < kThreads; ++t)
+    {
+        threads.emplace_back([&, t] {
+            for (int c = 0; c < kCallsPerThread; ++c)
+            {
+                uint32_t tag = static_cast<uint32_t>(t * kCallsPerThread + c);
+                std::vector<uint8_t> request(4);
+                std::memcpy(request.data(), &tag, sizeof(tag));
+
+                std::vector<uint8_t> response;
+                int rc = client.call(1, 1, request, &response, 5000);
+
+                if (rc == IPC_SUCCESS && response == request)
+                    successCount.fetch_add(1);
+                else
+                    failCount.fetch_add(1);
+            }
+        });
+    }
+
+    for (auto &th : threads)
+        th.join();
+
+    EXPECT_EQ(successCount.load(), kThreads * kCallsPerThread);
+    EXPECT_EQ(failCount.load(), 0);
+
+    client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Connect to a nonexistent service returns false
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, ConnectToNonexistentService)
+{
+    ClientBase client("nonexistent_service_xyz");
+    EXPECT_FALSE(client.connect());
+    EXPECT_FALSE(client.isConnected());
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Double disconnect — no crash or deadlock
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, DoubleDisconnect)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    client.disconnect();
+    EXPECT_FALSE(client.isConnected());
+
+    // Second disconnect should be harmless.
+    client.disconnect();
+    EXPECT_FALSE(client.isConnected());
+
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Server stop during call — call returns error, does not hang
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, ServerStopDuringCall)
+{
+    SilentService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    int callResult = IPC_SUCCESS;
+    std::thread callThread([&] {
+        const std::vector<uint8_t> request = {1};
+        std::vector<uint8_t> response;
+        callResult = client.call(1, 1, request, &response, 5000);
+    });
+
+    // Give the call time to register and block in onRequest.
+    settle();
+
+    // Stop the server in a background thread (stop() will block until
+    // the receiver thread's onRequest returns).
+    std::thread stopThread([&] {
+        svc.unblock(); // let onRequest finish so stop() can join
+        svc.stop();
+    });
+
+    callThread.join();
+    stopThread.join();
+
+    // The call should have completed — either successfully (if the response
+    // was sent before the connection was torn down) or with an error.
+    // The key assertion: neither thread hung forever.
+    EXPECT_TRUE(callResult == IPC_SUCCESS || callResult == IPC_ERR_DISCONNECTED ||
+                callResult == IPC_ERR_TIMEOUT)
+        << "callResult = " << callResult;
+
+    client.disconnect();
+}
