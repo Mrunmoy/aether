@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -46,6 +47,18 @@ def build(examples=False):
 
 
 def test():
+    result = subprocess.run(
+        ["ctest", "--test-dir", BUILD_DIR, "--show-only=json-v1"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    data = json.loads(result.stdout)
+    if not data.get("tests"):
+        print("No C++ tests were discovered. Ensure test submodules are initialized.", file=sys.stderr)
+        sys.exit(1)
+
     # C++ tests (core + codegen examples)
     run(["ctest", "--test-dir", BUILD_DIR, "--output-on-failure"], cwd=ROOT)
     # Python tests for the code generator

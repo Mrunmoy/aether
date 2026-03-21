@@ -267,7 +267,7 @@ TEST(ClientBaseTest, DisconnectFailsPendingCalls)
     client.disconnect();
     callThread.join();
 
-    EXPECT_TRUE(callResult == IPC_ERR_DISCONNECTED || callResult == IPC_ERR_TIMEOUT);
+    EXPECT_EQ(callResult, IPC_ERR_DISCONNECTED);
 
     svc.unblock();
     svc.stop();
@@ -635,6 +635,38 @@ TEST(ClientBaseTest, ConnectToNonexistentService)
     EXPECT_FALSE(client.isConnected());
 }
 
+TEST(ClientBaseTest, ConnectTwiceFails)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    EXPECT_FALSE(client.connect());
+    EXPECT_TRUE(client.isConnected());
+
+    client.disconnect();
+    svc.stop();
+}
+
+TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRLConn2");
+
+    ClientBase client(SVC_NAME, &loop);
+    ASSERT_TRUE(client.connect());
+    EXPECT_FALSE(client.connect());
+    EXPECT_TRUE(client.isConnected());
+
+    RunLoopGuard guard(loop);
+    client.disconnect();
+    svc.stop();
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Double disconnect — no crash or deadlock
 // ═════════════════════════════════════════════════════════════════════
@@ -691,12 +723,52 @@ TEST(ClientBaseTest, ServerStopDuringCall)
     callThread.join();
     stopThread.join();
 
-    // The call should have completed — either successfully (if the response
-    // was sent before the connection was torn down) or with an error.
-    // The key assertion: neither thread hung forever.
-    EXPECT_TRUE(callResult == IPC_SUCCESS || callResult == IPC_ERR_DISCONNECTED ||
-                callResult == IPC_ERR_TIMEOUT)
+    EXPECT_TRUE(callResult == IPC_SUCCESS || callResult == IPC_ERR_DISCONNECTED)
         << "callResult = " << callResult;
 
     client.disconnect();
+}
+
+TEST(ClientBaseTest, ConcurrentDisconnectDuringCalls)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> disconnectedCount{0};
+    std::atomic<int> successCount{0};
+
+    std::thread caller([&] {
+        const std::vector<uint8_t> request = {'r', 'a', 'c', 'e'};
+        while (!stop.load())
+        {
+            std::vector<uint8_t> response;
+            int rc = client.call(1, 1, request, &response, 200);
+            if (rc == IPC_SUCCESS)
+            {
+                EXPECT_EQ(response, request);
+                successCount.fetch_add(1);
+            }
+            else
+            {
+                EXPECT_EQ(rc, IPC_ERR_DISCONNECTED);
+                disconnectedCount.fetch_add(1);
+                break;
+            }
+        }
+    });
+
+    settle();
+    client.disconnect();
+    stop.store(true);
+    caller.join();
+
+    EXPECT_GE(successCount.load() + disconnectedCount.load(), 1);
+    EXPECT_GE(disconnectedCount.load(), 1);
+
+    svc.stop();
 }
