@@ -19,6 +19,17 @@ namespace ms::ipc
 
     bool ClientBase::connect()
     {
+        if (m_running.load(std::memory_order_acquire))
+        {
+            return false;
+        }
+        if (!m_loop && m_receiverThread.joinable())
+        {
+            // Reconnect after a server-side disconnect leaves the old receiver
+            // thread joinable until the client explicitly joins it.
+            m_receiverThread.join();
+        }
+
         m_conn = connectToServer(m_serviceName.c_str());
         if (!m_conn.valid())
         {
@@ -80,7 +91,10 @@ namespace ms::ipc
             m_pending.clear();
         }
 
-        m_conn.close();
+        {
+            std::lock_guard<std::mutex> slock(m_sendMutex);
+            m_conn.close();
+        }
     }
 
     bool ClientBase::isConnected() const { return m_running.load(std::memory_order_acquire); }
@@ -120,6 +134,14 @@ namespace ms::ipc
         {
             // Hold sendMutex to serialize txRing writes (SPSC invariant).
             std::lock_guard<std::mutex> slock(m_sendMutex);
+            if (!m_running.load(std::memory_order_acquire) || !m_conn.valid())
+            {
+                // Lock order: sendMutex is always acquired before pendingMutex
+                // when both are needed.
+                std::lock_guard<std::mutex> plock(m_pendingMutex);
+                m_pending.erase(seq);
+                return IPC_ERR_DISCONNECTED;
+            }
 
             int rc = writeFrame(m_conn.txRing, header, request.data(), header.payloadBytes);
             if (rc != IPC_SUCCESS)

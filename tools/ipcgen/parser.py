@@ -44,6 +44,7 @@ class Param:
     name: str
     is_pointer: bool # True for [out] params
     array_size: Optional[int] = None  # e.g. 16 for uint8[16]
+    line: int = 0
 
 
 @dataclass
@@ -51,6 +52,7 @@ class Method:
     name: str
     method_id: int
     params: List[Param]
+    line: int = 0
 
 
 @dataclass
@@ -58,6 +60,7 @@ class Notification:
     name: str
     notify_id: int
     params: List[Param]
+    line: int = 0
 
 
 @dataclass
@@ -83,6 +86,8 @@ class Parser:
         self.tokens = tokens
         self.pos = 0
         self._user_types: set = set()
+        self._seen_service = False
+        self._seen_notifications = False
 
     # ── Token helpers ────────────────────────────────────────────────
 
@@ -135,30 +140,60 @@ class Parser:
     def _parse_service(self, idl: IdlFile):
         self.expect(TOK_KEYWORD, "service")
         name_tok = self.expect(TOK_IDENT)
+        if self._seen_service:
+            raise SyntaxError(
+                f"Line {name_tok.line}: duplicate service block for {name_tok.value!r}")
         if idl.service_name and idl.service_name != name_tok.value:
             raise SyntaxError(
                 f"Line {name_tok.line}: service name mismatch: "
                 f"{name_tok.value!r} vs {idl.service_name!r}")
         idl.service_name = name_tok.value
+        self._seen_service = True
 
         self.expect(TOK_SYMBOL, "{")
+        seen_names = set()
+        seen_ids = set()
         while self.peek().value != "}":
-            idl.methods.append(self._parse_method())
+            method = self._parse_method()
+            if method.name in seen_names:
+                raise SyntaxError(
+                    f"Line {method.line}: duplicate method name {method.name!r}")
+            if method.method_id in seen_ids:
+                raise SyntaxError(
+                    f"Line {method.line}: duplicate method id {method.method_id}")
+            seen_names.add(method.name)
+            seen_ids.add(method.method_id)
+            idl.methods.append(method)
         self.expect(TOK_SYMBOL, "}")
         self.expect(TOK_SYMBOL, ";")
 
     def _parse_notifications(self, idl: IdlFile):
         self.expect(TOK_KEYWORD, "notifications")
         name_tok = self.expect(TOK_IDENT)
+        if self._seen_notifications:
+            raise SyntaxError(
+                f"Line {name_tok.line}: duplicate notifications block for {name_tok.value!r}")
         if idl.service_name and idl.service_name != name_tok.value:
             raise SyntaxError(
                 f"Line {name_tok.line}: notifications name mismatch: "
                 f"{name_tok.value!r} vs {idl.service_name!r}")
         idl.service_name = name_tok.value
+        self._seen_notifications = True
 
         self.expect(TOK_SYMBOL, "{")
+        seen_names = set()
+        seen_ids = set()
         while self.peek().value != "}":
-            idl.notifications.append(self._parse_notification())
+            notification = self._parse_notification()
+            if notification.name in seen_names:
+                raise SyntaxError(
+                    f"Line {notification.line}: duplicate notification name {notification.name!r}")
+            if notification.notify_id in seen_ids:
+                raise SyntaxError(
+                    f"Line {notification.line}: duplicate notification id {notification.notify_id}")
+            seen_names.add(notification.name)
+            seen_ids.add(notification.notify_id)
+            idl.notifications.append(notification)
         self.expect(TOK_SYMBOL, "}")
         self.expect(TOK_SYMBOL, ";")
 
@@ -174,12 +209,18 @@ class Parser:
 
         self.expect(TOK_SYMBOL, "{")
         values: List[EnumValue] = []
+        # Duplicate names are rejected; duplicate integer values are allowed.
+        seen_names = set()
         while self.peek().value != "}":
             val_name_tok = self.expect(TOK_IDENT)
+            if val_name_tok.value in seen_names:
+                raise SyntaxError(
+                    f"Line {val_name_tok.line}: duplicate enum value {val_name_tok.value!r}")
             self.expect(TOK_SYMBOL, "=")
             val_num_tok = self.expect(TOK_NUMBER)
             values.append(EnumValue(name=val_name_tok.value,
                                     value=int(val_num_tok.value)))
+            seen_names.add(val_name_tok.value)
             if self.peek().value == ",":
                 self.advance()  # consume optional trailing comma
         self.expect(TOK_SYMBOL, "}")
@@ -198,6 +239,7 @@ class Parser:
 
         self.expect(TOK_SYMBOL, "{")
         fields: List[StructField] = []
+        seen_names = set()
         while self.peek().value != "}":
             type_tok = self.advance()
             if type_tok.value not in TYPE_MAP and type_tok.value not in self._user_types:
@@ -214,10 +256,14 @@ class Parser:
                     f"Line {type_tok.line}: 'string' requires a size, "
                     f"e.g. string[64]")
             field_name_tok = self.expect(TOK_IDENT)
+            if field_name_tok.value in seen_names:
+                raise SyntaxError(
+                    f"Line {field_name_tok.line}: duplicate field name {field_name_tok.value!r}")
             self.expect(TOK_SYMBOL, ";")
             fields.append(StructField(type_name=type_tok.value,
                                       name=field_name_tok.value,
                                       array_size=array_size))
+            seen_names.add(field_name_tok.value)
         self.expect(TOK_SYMBOL, "}")
         self.expect(TOK_SYMBOL, ";")
 
@@ -232,7 +278,7 @@ class Parser:
 
     def _parse_method(self) -> Method:
         attr_tok = self.expect(TOK_ATTR)
-        m = re.match(r"method\s*=\s*(\d+)", attr_tok.value)
+        m = re.fullmatch(r"method\s*=\s*(\d+)", attr_tok.value)
         if not m:
             raise SyntaxError(
                 f"Line {attr_tok.line}: expected [method=N], got [{attr_tok.value}]")
@@ -242,11 +288,12 @@ class Parser:
         params = self._parse_params()
         self.expect(TOK_SYMBOL, ";")
 
-        return Method(name=name_tok.value, method_id=int(m.group(1)), params=params)
+        return Method(name=name_tok.value, method_id=int(m.group(1)), params=params,
+                      line=attr_tok.line)
 
     def _parse_notification(self) -> Notification:
         attr_tok = self.expect(TOK_ATTR)
-        m = re.match(r"notify\s*=\s*(\d+)", attr_tok.value)
+        m = re.fullmatch(r"notify\s*=\s*(\d+)", attr_tok.value)
         if not m:
             raise SyntaxError(
                 f"Line {attr_tok.line}: expected [notify=N], got [{attr_tok.value}]")
@@ -262,18 +309,29 @@ class Parser:
                     f"Line {attr_tok.line}: notification params must be [in]")
 
         return Notification(name=name_tok.value, notify_id=int(m.group(1)),
-                            params=params)
+                            params=params, line=attr_tok.line)
 
     # ── Parameters ───────────────────────────────────────────────────
 
     def _parse_params(self) -> List[Param]:
         self.expect(TOK_SYMBOL, "(")
         params: List[Param] = []
+        seen_names = set()
         if self.peek().value != ")":
-            params.append(self._parse_param())
+            param = self._parse_param()
+            if param.name in seen_names:
+                raise SyntaxError(
+                    f"Line {param.line}: duplicate parameter name {param.name!r}")
+            params.append(param)
+            seen_names.add(param.name)
             while self.peek().value == ",":
                 self.advance()
-                params.append(self._parse_param())
+                param = self._parse_param()
+                if param.name in seen_names:
+                    raise SyntaxError(
+                        f"Line {param.line}: duplicate parameter name {param.name!r}")
+                params.append(param)
+                seen_names.add(param.name)
         self.expect(TOK_SYMBOL, ")")
         return params
 
@@ -308,4 +366,4 @@ class Parser:
 
         return Param(direction=direction, type_name=type_tok.value,
                      name=name_tok.value, is_pointer=is_pointer,
-                     array_size=array_size)
+                     array_size=array_size, line=name_tok.line)
