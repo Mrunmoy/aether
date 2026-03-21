@@ -350,14 +350,16 @@ namespace ms::ipc
                     int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
                     if (rc != IPC_SUCCESS)
                     {
-                        result = rc;
+                        if (result == IPC_SUCCESS)
+                            result = rc;
                         continue;
                     }
 
                     if (platform::sendSignal(c->conn.socketFd) != 0)
                     {
                         c->dead.store(true, std::memory_order_release);
-                        result = IPC_ERR_DISCONNECTED;
+                        if (result == IPC_SUCCESS)
+                            result = IPC_ERR_DISCONNECTED;
                         continue;
                     }
                 }
