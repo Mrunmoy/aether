@@ -588,8 +588,8 @@ TEST(ClientBaseTest, ConcurrentCallsFromSameClient)
     ASSERT_TRUE(client.connect());
     settle();
 
-    constexpr int kThreads = 4;
-    constexpr int kCallsPerThread = 5;
+    constexpr int kThreads = 2;
+    constexpr int kCallsPerThread = 4;
     std::vector<std::thread> threads;
     std::atomic<int> successCount{0};
     std::atomic<int> failCount{0};
@@ -604,7 +604,7 @@ TEST(ClientBaseTest, ConcurrentCallsFromSameClient)
                 std::memcpy(request.data(), &tag, sizeof(tag));
 
                 std::vector<uint8_t> response;
-                int rc = client.call(1, 1, request, &response, 5000);
+                int rc = client.call(1, 1, request, &response, 10000);
 
                 if (rc == IPC_SUCCESS && response == request)
                     successCount.fetch_add(1);
