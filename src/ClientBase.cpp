@@ -107,7 +107,7 @@ namespace ms::ipc
         header.seq = seq;
         header.payloadBytes = static_cast<uint32_t>(request.size());
 
-        // Register pending call before writing, so the receiver thread can
+        // Register pending call before signaling, so the receiver thread can
         // always find a consumer for any committed frame.
         auto pending = std::make_shared<PendingCall>();
 
@@ -255,6 +255,11 @@ namespace ms::ipc
             if (readFrameAlloc(m_conn.rxRing, &header, &payload) != IPC_SUCCESS)
             {
                 break;
+            }
+
+            if (header.version != kProtocolVersion)
+            {
+                continue;
             }
 
             if (header.flags & FRAME_RESPONSE)

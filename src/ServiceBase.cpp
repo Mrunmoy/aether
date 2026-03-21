@@ -20,6 +20,11 @@ namespace ms::ipc
 
     bool ServiceBase::start()
     {
+        if (m_running.load(std::memory_order_acquire))
+        {
+            return false; // already started
+        }
+
         m_listenFd = platform::serverSocket(m_serviceName.c_str());
         if (m_listenFd < 0)
         {
@@ -267,7 +272,7 @@ namespace ms::ipc
                     break;
                 }
 
-                if (!(header.flags & FRAME_REQUEST))
+                if (header.version != kProtocolVersion || !(header.flags & FRAME_REQUEST))
                 {
                     continue;
                 }

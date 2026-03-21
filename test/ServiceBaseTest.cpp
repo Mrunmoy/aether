@@ -626,6 +626,21 @@ TEST(ServiceBaseTest, StartTwice)
     // and start() returns false.
     bool secondStart = svc.start();
     EXPECT_FALSE(secondStart);
+    EXPECT_TRUE(svc.isRunning());
 
+    // Verify the service is still healthy after the failed second start.
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    const uint8_t payload[] = "still-alive";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    int rc = sendAndRecv(client, 1, 0, payload, sizeof(payload), &respHdr, &respPayload);
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+
+    client.close();
+    settle();
     svc.stop();
 }

@@ -37,7 +37,7 @@ namespace ms::ipc::platform
     // Returns 0 on success, -1 on failure.
     int recvSignal(int sockFd);
 
-    // Set send/receive timeouts on a socket.
+    // Set a timeout on socket send operations (SO_SNDTIMEO only).
     // Returns 0 on success, -1 on failure.
     int setSocketTimeouts(int sockFd, uint32_t timeoutMs);
 
