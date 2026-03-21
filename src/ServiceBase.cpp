@@ -210,11 +210,21 @@ namespace ms::ipc
             response.payloadBytes = static_cast<uint32_t>(responsePayload.size());
             response.aux = static_cast<uint32_t>(status);
 
+            bool sendFailed = false;
             {
                 std::lock_guard<std::mutex> slock(client->sendMutex);
-                writeFrame(client->conn.txRing, response, responsePayload.data(),
-                           response.payloadBytes);
-                platform::sendSignal(client->conn.socketFd);
+                int rc = writeFrame(client->conn.txRing, response, responsePayload.data(),
+                                    response.payloadBytes);
+                if (rc != IPC_SUCCESS || platform::sendSignal(client->conn.socketFd) != 0)
+                {
+                    sendFailed = true;
+                }
+            }
+
+            if (sendFailed)
+            {
+                removeClient(client);
+                return;
             }
         }
     }
@@ -243,6 +253,7 @@ namespace ms::ipc
 
     void ServiceBase::receiverLoop(ClientConn *client)
     {
+        bool disconnectClient = false;
         while (m_running.load(std::memory_order_acquire))
         {
             if (platform::recvSignal(client->conn.socketFd) != 0)
@@ -291,10 +302,28 @@ namespace ms::ipc
                 // Serialize with sendNotify which also writes to txRing.
                 {
                     std::lock_guard<std::mutex> slock(client->sendMutex);
-                    writeFrame(client->conn.txRing, response, responsePayload.data(),
-                               response.payloadBytes);
-                    platform::sendSignal(client->conn.socketFd);
+                    int rc = writeFrame(client->conn.txRing, response, responsePayload.data(),
+                                        response.payloadBytes);
+                    if (rc != IPC_SUCCESS || platform::sendSignal(client->conn.socketFd) != 0)
+                    {
+                        client->dead.store(true, std::memory_order_release);
+                        if (client->conn.socketFd >= 0)
+                        {
+                            shutdown(client->conn.socketFd, SHUT_RDWR);
+                        }
+                        disconnectClient = true;
+                    }
                 }
+
+                if (disconnectClient)
+                {
+                    break;
+                }
+            }
+
+            if (disconnectClient)
+            {
+                break;
             }
         }
     }

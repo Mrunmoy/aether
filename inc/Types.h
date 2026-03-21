@@ -27,6 +27,7 @@ namespace ms::ipc
         IPC_ERR_VERSION_MISMATCH = -5,
         IPC_ERR_RING_FULL = -6,
         IPC_ERR_STOPPED = -7,
+        IPC_ERR_INVALID_ARGUMENT = -8,
     };
 
     // ── Frame Header (24 bytes) ─────────────────────────────────────

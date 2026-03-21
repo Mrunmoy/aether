@@ -169,6 +169,38 @@ TEST(ServiceBaseTest, InvalidMethodReturnsError)
     svc.stop();
 }
 
+TEST(ServiceBaseTest, InvalidVersionRequestIsIgnored)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    FrameHeader badHdr = makeRequest(1, 7, 1);
+    badHdr.version = kProtocolVersion + 1;
+    uint8_t badPayload = 0x42;
+    ASSERT_EQ(writeFrame(client.txRing, badHdr, &badPayload, sizeof(badPayload)), IPC_SUCCESS);
+    ASSERT_EQ(sendSignal(client.socketFd), 0);
+
+    settle();
+
+    const uint8_t payload[] = "good";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    int rc = sendAndRecv(client, 1, 8, payload, sizeof(payload), &respHdr, &respPayload);
+
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(respHdr.flags, FRAME_RESPONSE);
+    EXPECT_EQ(respHdr.seq, 8u);
+    EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    EXPECT_EQ(respPayload, std::vector<uint8_t>(payload, payload + sizeof(payload)));
+
+    client.close();
+    svc.stop();
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Multiple requests on the same connection
 // ═════════════════════════════════════════════════════════════════════
@@ -562,6 +594,56 @@ TEST(ServiceBaseTest, NotifyReapsDeadClients)
     EXPECT_EQ(rc2, IPC_SUCCESS);
 
     client2.close();
+    svc.stop();
+}
+
+TEST(ServiceBaseTest, ResponseBackpressureDisconnectsClient)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    bool sawDisconnect = false;
+    const uint8_t payload[] = {'x'};
+
+    for (uint32_t seq = 1; seq <= 20000; ++seq)
+    {
+        FrameHeader hdr = makeRequest(1, seq, sizeof(payload));
+        if (writeFrame(client.txRing, hdr, payload, sizeof(payload)) != IPC_SUCCESS
+            || sendSignal(client.socketFd) != 0)
+        {
+            sawDisconnect = true;
+            break;
+        }
+
+        if (recvSignal(client.socketFd) != 0)
+        {
+            sawDisconnect = true;
+            break;
+        }
+    }
+
+    ASSERT_TRUE(sawDisconnect) << "service did not disconnect the stuck client";
+
+    Connection healthyClient = connectToServer(SVC_NAME);
+    ASSERT_TRUE(healthyClient.valid());
+    settle();
+
+    const uint8_t healthyPayload[] = "healthy";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    ASSERT_EQ(sendAndRecv(healthyClient, 1, 999, healthyPayload, sizeof(healthyPayload),
+                          &respHdr, &respPayload),
+              IPC_SUCCESS);
+    EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    EXPECT_EQ(respPayload,
+              std::vector<uint8_t>(healthyPayload, healthyPayload + sizeof(healthyPayload)));
+
+    client.close();
+    healthyClient.close();
     svc.stop();
 }
 

@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include "ClientBase.h"
+#include "Connection.h"
+#include "FrameIO.h"
+#include "Platform.h"
 #include "ServiceBase.h"
 #include "RunLoop.h"
 
@@ -11,6 +14,7 @@
 #include <vector>
 
 using namespace ms::ipc;
+using namespace ms::ipc::platform;
 
 #define SVC_NAME (::testing::UnitTest::GetInstance()->current_test_info()->name())
 
@@ -116,6 +120,20 @@ static void settle()
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 }
 
+static FrameHeader makeResponse(uint32_t messageId, uint32_t seq, uint32_t payloadBytes,
+                                int status = IPC_SUCCESS)
+{
+    FrameHeader hdr{};
+    hdr.version = kProtocolVersion;
+    hdr.flags = FRAME_RESPONSE;
+    hdr.serviceId = 1;
+    hdr.messageId = messageId;
+    hdr.seq = seq;
+    hdr.payloadBytes = payloadBytes;
+    hdr.aux = static_cast<uint32_t>(status);
+    return hdr;
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Connect and disconnect without any calls
 // ═════════════════════════════════════════════════════════════════════
@@ -181,6 +199,84 @@ TEST(ClientBaseTest, InvalidMethodReturnsError)
 
     client.disconnect();
     svc.stop();
+}
+
+TEST(ClientBaseTest, UnknownSequenceResponseIsIgnored)
+{
+    int listenFd = serverSocket(SVC_NAME);
+    ASSERT_GE(listenFd, 0);
+    std::atomic<bool> serverOk{true};
+    std::atomic<bool> serverDone{false};
+
+    std::thread serverThread([&] {
+        Connection serverConn = acceptConnection(listenFd);
+        if (!serverConn.valid())
+        {
+            serverOk.store(false);
+            closeFd(listenFd);
+            return;
+        }
+
+        if (recvSignal(serverConn.socketFd) != 0)
+        {
+            serverOk.store(false);
+            serverConn.close();
+            closeFd(listenFd);
+            return;
+        }
+        FrameHeader reqHdr{};
+        std::vector<uint8_t> request;
+        if (readFrameAlloc(serverConn.rxRing, &reqHdr, &request) != IPC_SUCCESS)
+        {
+            serverOk.store(false);
+            serverConn.close();
+            closeFd(listenFd);
+            return;
+        }
+
+        const uint8_t strayPayload[] = {'b', 'a', 'd'};
+        FrameHeader stray = makeResponse(reqHdr.messageId, reqHdr.seq + 100, sizeof(strayPayload));
+        if (writeFrame(serverConn.txRing, stray, strayPayload, sizeof(strayPayload)) != IPC_SUCCESS
+            || sendSignal(serverConn.socketFd) != 0)
+        {
+            serverOk.store(false);
+            serverConn.close();
+            closeFd(listenFd);
+            return;
+        }
+
+        FrameHeader good = makeResponse(reqHdr.messageId, reqHdr.seq,
+                                        static_cast<uint32_t>(request.size()));
+        if (writeFrame(serverConn.txRing, good, request.data(),
+                       static_cast<uint32_t>(request.size())) != IPC_SUCCESS
+            || sendSignal(serverConn.socketFd) != 0)
+        {
+            serverOk.store(false);
+        }
+
+        while (!serverDone.load())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        serverConn.close();
+        closeFd(listenFd);
+    });
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    const std::vector<uint8_t> request = {'o', 'k'};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response, 1000);
+
+    EXPECT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(response, request);
+
+    serverDone.store(true);
+    client.disconnect();
+    serverThread.join();
+    EXPECT_TRUE(serverOk.load());
 }
 
 // ═════════════════════════════════════════════════════════════════════
