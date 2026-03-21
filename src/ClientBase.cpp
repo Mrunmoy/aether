@@ -107,9 +107,15 @@ namespace ms::ipc
         header.seq = seq;
         header.payloadBytes = static_cast<uint32_t>(request.size());
 
-        // Register pending call before signaling, so the receiver thread can
-        // always find a consumer for any committed frame.
+        // Register pending call before writing, so the receiver thread can
+        // always find a consumer for any committed frame (the server may
+        // drain a newly committed frame before sendSignal if another
+        // wakeup is already in flight).
         auto pending = std::make_shared<PendingCall>();
+        {
+            std::lock_guard<std::mutex> plock(m_pendingMutex);
+            m_pending[seq] = pending;
+        }
 
         {
             // Hold sendMutex to serialize txRing writes (SPSC invariant).
@@ -118,12 +124,9 @@ namespace ms::ipc
             int rc = writeFrame(m_conn.txRing, header, request.data(), header.payloadBytes);
             if (rc != IPC_SUCCESS)
             {
-                return rc;
-            }
-
-            {
                 std::lock_guard<std::mutex> plock(m_pendingMutex);
-                m_pending[seq] = pending;
+                m_pending.erase(seq);
+                return rc;
             }
 
             if (platform::sendSignal(m_conn.socketFd) != 0)

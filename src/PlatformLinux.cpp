@@ -149,6 +149,24 @@ namespace ms::ipc::platform
             return -1;
         }
 
+        // If control data was truncated, the kernel may have installed fds
+        // we can't see. Treat this as a protocol error — close any fds we
+        // did receive and fail.
+        if (msg.msg_flags & MSG_CTRUNC)
+        {
+            for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg))
+            {
+                if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
+                {
+                    int nfds = static_cast<int>((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int));
+                    int *fds = reinterpret_cast<int *>(CMSG_DATA(cmsg));
+                    for (int i = 0; i < nfds; ++i)
+                        close(fds[i]);
+                }
+            }
+            return -1;
+        }
+
         *receivedFd = -1;
         bool firstFdTaken = false;
         for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg))
