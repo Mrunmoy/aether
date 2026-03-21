@@ -99,7 +99,7 @@ static_assert(sizeof(FrameHeader) == 24);
 
 **Returns:** File descriptor >= 0 on success, -1 on failure.
 **Thread safety:** Safe to call from any thread.
-**Notes:** Linux uses `SOCK_SEQPACKET` with `SOCK_CLOEXEC`. The socket is set to listen with a backlog of 5.
+**Notes:** Linux uses `SOCK_SEQPACKET` with `SOCK_CLOEXEC`. The socket is set to listen with a backlog of 16.
 
 ### 3.2 clientSocket()
 
@@ -152,8 +152,9 @@ static_assert(sizeof(FrameHeader) == 24);
 | `data` | `void *` | out | Buffer for ancillary data. |
 | `dataLen` | `uint32_t` | in | Size of the data buffer. |
 
-**Returns:** Bytes received (> 0) on success, -1 on failure.
+**Returns:** Bytes received (> 0) on success, -1 on failure. Returns -1 if no fd was received.
 **Thread safety:** Not thread-safe on the same `sockFd`.
+**Notes:** Closes any unexpected extra file descriptors sent by the peer (prevents fd leak via malicious SCM_RIGHTS).
 
 ### 3.6 sendSignal()
 
@@ -166,6 +167,7 @@ static_assert(sizeof(FrameHeader) == 24);
 
 **Returns:** 0 on success, -1 on failure.
 **Thread safety:** Safe to call from any thread (single byte, atomic send).
+**Notes:** Uses `MSG_NOSIGNAL` to prevent SIGPIPE when the peer has disconnected. Returns -1 with `errno = EPIPE` instead of raising a signal.
 
 ### 3.7 recvSignal()
 
@@ -192,7 +194,21 @@ static_assert(sizeof(FrameHeader) == 24);
 **Thread safety:** Safe to call from any thread.
 **Notes:** Linux uses `memfd_create("ipc_shm", MFD_CLOEXEC)` + `ftruncate(fd, size)`. The FD has no filesystem entry.
 
-### 3.9 closeFd()
+### 3.9 setSocketTimeouts()
+
+**Signature:** `int setSocketTimeouts(int sockFd, uint32_t timeoutMs)`
+**Description:** Set the send timeout (`SO_SNDTIMEO`) on a socket. Prevents `send()`/`sendmsg()` from blocking indefinitely when the peer stops reading.
+
+| Parameter | Type | Direction | Description |
+|-----------|------|-----------|-------------|
+| `sockFd` | `int` | in | Socket to configure. |
+| `timeoutMs` | `uint32_t` | in | Timeout in milliseconds. |
+
+**Returns:** 0 on success, -1 on failure.
+**Thread safety:** Not thread-safe on the same `sockFd`.
+**Notes:** Only sets `SO_SNDTIMEO`, not `SO_RCVTIMEO`. Receiver threads intentionally block on `recv()` and rely on `shutdown()` to unblock — a receive timeout would cause spurious disconnect detection.
+
+### 3.10 closeFd()
 
 **Signature:** `void closeFd(int fd)`
 **Description:** Close a file descriptor. Safe to call with -1 (no-op).
@@ -223,10 +239,20 @@ struct Connection
     IpcRing *txRing = nullptr;
     IpcRing *rxRing = nullptr;
 
+    Connection() = default;
+    Connection(const Connection &) = delete;
+    Connection &operator=(const Connection &) = delete;
+    Connection(Connection &&other) noexcept;
+    Connection &operator=(Connection &&other) noexcept;
+
     bool valid() const;
     void close();
 };
 ```
+
+**Move semantics:** Connection is non-copyable and move-only. Moving transfers
+ownership of file descriptors and the mmap'd region, resetting the source to
+defaults. Move-assignment calls `close()` on the destination first.
 
 | Field | Description |
 |-------|-------------|
@@ -419,6 +445,7 @@ struct Connection
 
 **Returns:** `IPC_SUCCESS` if all clients were notified, or the first error code if any `writeFrame()` or `sendSignal()` fails.
 **Thread safety:** Safe to call from any thread (acquires `m_clientsMutex` internally).
+**Notes:** Returns immediately if no clients are connected. Marks clients as dead when `sendSignal()` fails and reaps them in the same call via a two-phase partition-and-join.
 
 ---
 
@@ -486,7 +513,7 @@ struct Connection
 - `IPC_ERR_RING_FULL` — request frame doesn't fit in the ring.
 - Server status — the value from the response frame's `aux` field.
 
-**Thread safety:** Safe to call from multiple threads concurrently (each call gets a unique sequence number).
+**Thread safety:** Safe to call from multiple threads concurrently. Each call gets a unique sequence number via atomic `fetch_add`, and `m_sendMutex` serializes txRing writes to maintain the SPSC invariant.
 **Important:** Do NOT call from the RunLoop thread in RunLoop mode — it will deadlock because the response arrives on the same thread.
 
 ### 7.6 onNotification() (virtual)
@@ -515,10 +542,11 @@ struct Connection
 | `serverSocket()` | `socket(AF_UNIX, SOCK_SEQPACKET \| SOCK_CLOEXEC)`, `bind`, `listen` |
 | `clientSocket()` | `socket(AF_UNIX, SOCK_SEQPACKET \| SOCK_CLOEXEC)`, `connect` |
 | `acceptClient()` | `accept4(SOCK_CLOEXEC)` |
-| `sendFd()` | `sendmsg` with `SCM_RIGHTS` control message |
-| `recvFd()` | `recvmsg` with `SCM_RIGHTS` control message |
-| `sendSignal()` | `send(sockFd, &byte, 1, 0)` |
+| `sendFd()` | `sendmsg` with `SCM_RIGHTS` control message, `MSG_NOSIGNAL` |
+| `recvFd()` | `recvmsg` with `SCM_RIGHTS` control message (closes extra fds) |
+| `sendSignal()` | `send(sockFd, &byte, 1, MSG_NOSIGNAL)` |
 | `recvSignal()` | `recv(sockFd, &byte, 1, 0)` (blocks) |
+| `setSocketTimeouts()` | `setsockopt(SO_SNDTIMEO)` |
 | `shmCreate()` | `memfd_create("ipc_shm", MFD_CLOEXEC)`, `ftruncate` |
 | `closeFd()` | `close` (no-op if fd == -1) |
 
@@ -541,6 +569,10 @@ cleaned up when the process exits.
   `recv()`). Important for FD passing and signal bytes.
 - **`SOCK_CLOEXEC` / `MFD_CLOEXEC`** on all file descriptors prevents
   leaking into child processes.
+- **`MSG_NOSIGNAL`** on all `send()`/`sendmsg()` calls prevents SIGPIPE
+  when the peer disconnects. Returns `EPIPE` instead.
+- **`SO_SNDTIMEO` (5 s)** on connected sockets prevents `send()` from
+  blocking indefinitely when a peer stops reading.
 - **No heap allocations** — all addresses use stack-allocated `sockaddr_un`.
 
 ## 9. Connection internals
@@ -606,7 +638,8 @@ sequenceDiagram
 
 **Key details:**
 - The **client** creates the shared memory, does placement-new on both rings, and sends the FD.
-- The **server** validates the protocol version, `fstat`s for the size, and `mmap`s.
+- The **server** validates the protocol version, validates `shmFd >= 0`, `fstat`s for the size, and `mmap`s.
+- Both sides set `SO_SNDTIMEO` (5 s) after socket establishment to prevent send blocking.
 - **ACK** is a single signal byte. **NACK** is implicit — the server closes the socket.
 - On any failure, both sides clean up (munmap, close FDs) and return an invalid connection.
 
@@ -787,12 +820,16 @@ while (m_running):
 ### 12.4 Notification broadcast
 
 `sendNotify()`:
-1. Lock `m_clientsMutex`
-2. For each connected client:
-   - Build `FRAME_NOTIFY` header
+1. Early-out if `m_clients` is empty
+2. Lock `m_clientsMutex`
+3. For each connected client:
+   - Skip if `dead` flag set (fast path, no lock)
+   - Lock `sendMutex`, re-check `dead` flag (TOCTOU guard)
    - `writeFrame()` to client's txRing
-   - `sendSignal()` on client's socket
-3. Unlock
+   - `sendSignal()` on client's socket (marks dead on failure)
+4. Partition dead clients out of `m_clients`
+5. Unlock `m_clientsMutex`
+6. Join threads and close connections for reaped clients
 
 ### 12.5 Two-phase shutdown (threaded mode)
 
@@ -891,7 +928,9 @@ while (m_running):
 | Mutex | Owner | Protects |
 |-------|-------|----------|
 | `m_clientsMutex` | ServiceBase | `m_clients` vector; held during notification broadcast |
+| `sendMutex` | ServiceBase::ClientConn | Serializes server→client txRing writes (SPSC invariant); also guards dead-flag transitions |
 | `handlerMutex` | ServiceBase::ClientConn | Guards RunLoop handler execution per client; prevents `stop()` from closing a connection during dispatch |
+| `m_sendMutex` | ClientBase | Serializes client→server txRing writes (SPSC invariant); protects concurrent `call()` from multiple threads |
 | `m_pendingMutex` | ClientBase | `m_pending` map (insert, lookup, removal) |
 | `m_handlerMutex` | ClientBase | Guards RunLoop handler execution; prevents `disconnect()` from closing connection during dispatch |
 
