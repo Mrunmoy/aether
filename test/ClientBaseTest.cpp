@@ -660,7 +660,10 @@ TEST(ClientBaseTest, ReconnectAfterServerDisconnect)
         settle();
 
         svc.stop();
-        settle();
+        for (int i = 0; i < 100 && client.isConnected(); ++i)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
 
         EchoService svc2(SVC_NAME);
         ASSERT_TRUE(svc2.start());
