@@ -136,6 +136,8 @@ namespace ms::ipc
             std::lock_guard<std::mutex> slock(m_sendMutex);
             if (!m_running.load(std::memory_order_acquire) || !m_conn.valid())
             {
+                // Lock order: sendMutex is always acquired before pendingMutex
+                // when both are needed.
                 std::lock_guard<std::mutex> plock(m_pendingMutex);
                 m_pending.erase(seq);
                 return IPC_ERR_DISCONNECTED;

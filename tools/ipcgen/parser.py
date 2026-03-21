@@ -209,6 +209,7 @@ class Parser:
 
         self.expect(TOK_SYMBOL, "{")
         values: List[EnumValue] = []
+        # Duplicate names are rejected; duplicate integer values are allowed.
         seen_names = set()
         while self.peek().value != "}":
             val_name_tok = self.expect(TOK_IDENT)
