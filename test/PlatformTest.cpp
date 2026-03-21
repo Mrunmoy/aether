@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 #include "Platform.h"
 
+#include <chrono>
 #include <cstring>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 using namespace ms::ipc::platform;
@@ -204,4 +206,59 @@ TEST(PlatformTest, CloseFdNegativeOne)
 {
     // Should not crash or fail.
     closeFd(-1);
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Closed-socket signal tests (MSG_NOSIGNAL / SIGPIPE safety)
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(PlatformTest, SendSignalToClosedSocket)
+{
+    int fds[2];
+    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+
+    // Close the receiving end.
+    closeFd(fds[1]);
+
+    // sendSignal on the remaining end should return -1 (not crash from SIGPIPE).
+    EXPECT_EQ(sendSignal(fds[0]), -1);
+
+    closeFd(fds[0]);
+}
+
+TEST(PlatformTest, RecvSignalFromClosedSocket)
+{
+    int fds[2];
+    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+
+    // Close the sending end.
+    closeFd(fds[1]);
+
+    // recvSignal on the remaining end should return -1.
+    EXPECT_EQ(recvSignal(fds[0]), -1);
+
+    closeFd(fds[0]);
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Socket timeout test
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(PlatformTest, SetSocketTimeouts)
+{
+    int fds[2];
+    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+
+    // Setting send timeout should succeed.
+    EXPECT_EQ(setSocketTimeouts(fds[0], 100), 0);
+
+    // Verify SO_SNDTIMEO was set by reading it back.
+    timeval tv{};
+    socklen_t len = sizeof(tv);
+    ASSERT_EQ(getsockopt(fds[0], SOL_SOCKET, SO_SNDTIMEO, &tv, &len), 0);
+    EXPECT_EQ(tv.tv_sec, 0);
+    EXPECT_GE(tv.tv_usec, 90000); // ~100ms (allow kernel rounding)
+
+    closeFd(fds[0]);
+    closeFd(fds[1]);
 }

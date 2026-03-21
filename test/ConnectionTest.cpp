@@ -210,3 +210,108 @@ TEST(ConnectionTest, ConnectionClose)
     acceptor.conn.close();
     closeFd(srv);
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// Double close — calling close() twice must not crash
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ConnectionTest, DoubleClose)
+{
+    int srv = serverSocket(SVC_NAME);
+    ASSERT_GE(srv, 0);
+
+    AcceptThread acceptor(srv);
+    Connection client = connectToServer(SVC_NAME);
+    acceptor.join();
+
+    ASSERT_TRUE(client.valid());
+
+    client.close();
+    EXPECT_FALSE(client.valid());
+
+    // Second close — must not crash or double-free.
+    client.close();
+    EXPECT_FALSE(client.valid());
+    EXPECT_EQ(client.socketFd, -1);
+    EXPECT_EQ(client.shmFd, -1);
+    EXPECT_EQ(client.shmBase, nullptr);
+    EXPECT_EQ(client.shmSize, 0u);
+    EXPECT_EQ(client.txRing, nullptr);
+    EXPECT_EQ(client.rxRing, nullptr);
+
+    acceptor.conn.close();
+    closeFd(srv);
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Move assignment — destination valid, source invalidated
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ConnectionTest, MoveAssignment)
+{
+    int srv = serverSocket(SVC_NAME);
+    ASSERT_GE(srv, 0);
+
+    AcceptThread acceptor(srv);
+    Connection client = connectToServer(SVC_NAME);
+    acceptor.join();
+
+    ASSERT_TRUE(client.valid());
+
+    Connection dest;
+    dest = std::move(client);
+
+    // Destination should be valid.
+    EXPECT_TRUE(dest.valid());
+    EXPECT_GE(dest.socketFd, 0);
+    EXPECT_NE(dest.shmBase, nullptr);
+    EXPECT_NE(dest.txRing, nullptr);
+    EXPECT_NE(dest.rxRing, nullptr);
+
+    // Source should be invalidated.
+    EXPECT_FALSE(client.valid());
+    EXPECT_EQ(client.socketFd, -1);
+    EXPECT_EQ(client.shmBase, nullptr);
+    EXPECT_EQ(client.txRing, nullptr);
+    EXPECT_EQ(client.rxRing, nullptr);
+
+    dest.close();
+    acceptor.conn.close();
+    closeFd(srv);
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Move constructor — destination valid, source invalidated
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ConnectionTest, MoveConstructor)
+{
+    int srv = serverSocket(SVC_NAME);
+    ASSERT_GE(srv, 0);
+
+    AcceptThread acceptor(srv);
+    Connection client = connectToServer(SVC_NAME);
+    acceptor.join();
+
+    ASSERT_TRUE(client.valid());
+
+    Connection dest(std::move(client));
+
+    // Destination should be valid.
+    EXPECT_TRUE(dest.valid());
+    EXPECT_GE(dest.socketFd, 0);
+    EXPECT_NE(dest.shmBase, nullptr);
+    EXPECT_NE(dest.txRing, nullptr);
+    EXPECT_NE(dest.rxRing, nullptr);
+
+    // Source should be invalidated.
+    EXPECT_FALSE(client.valid());
+    EXPECT_EQ(client.socketFd, -1);
+    EXPECT_EQ(client.shmBase, nullptr);
+    EXPECT_EQ(client.txRing, nullptr);
+    EXPECT_EQ(client.rxRing, nullptr);
+
+    dest.close();
+    acceptor.conn.close();
+    closeFd(srv);
+}

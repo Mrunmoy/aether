@@ -80,17 +80,22 @@ namespace ms::ipc
         }
         else
         {
-            // Phase 1: Unblock accept thread.
+            // Phase 1: Unblock accept thread, then join before closing fd.
             if (m_listenFd >= 0)
             {
                 shutdown(m_listenFd, SHUT_RDWR);
-                platform::closeFd(m_listenFd);
-                m_listenFd = -1;
             }
 
             if (m_acceptThread.joinable())
             {
                 m_acceptThread.join();
+            }
+
+            // Safe to close now — accept thread has exited.
+            if (m_listenFd >= 0)
+            {
+                platform::closeFd(m_listenFd);
+                m_listenFd = -1;
             }
 
             // Phase 2: Unblock all receiver threads, then join and cleanup.
@@ -129,14 +134,7 @@ namespace ms::ipc
             }
 
             auto client = std::make_unique<ClientConn>();
-            client->conn = conn;
-
-            // Zero out local so it doesn't appear to own the fds.
-            conn.socketFd = -1;
-            conn.shmFd = -1;
-            conn.shmBase = nullptr;
-            conn.txRing = nullptr;
-            conn.rxRing = nullptr;
+            client->conn = std::move(conn);
 
             client->thread = std::thread([this, ptr = client.get()] { receiverLoop(ptr); });
 
@@ -156,14 +154,7 @@ namespace ms::ipc
         }
 
         auto client = std::make_unique<ClientConn>();
-        client->conn = conn;
-
-        // Zero out local so it doesn't appear to own the fds.
-        conn.socketFd = -1;
-        conn.shmFd = -1;
-        conn.shmBase = nullptr;
-        conn.txRing = nullptr;
-        conn.rxRing = nullptr;
+        client->conn = std::move(conn);
 
         ClientConn *ptr = client.get();
         m_loop->addSource(ptr->conn.socketFd, [this, ptr] { onClientReady(ptr); });
@@ -198,7 +189,7 @@ namespace ms::ipc
                 break;
             }
 
-            if (!(header.flags & FRAME_REQUEST))
+            if (header.version != kProtocolVersion || !(header.flags & FRAME_REQUEST))
             {
                 continue;
             }
@@ -311,6 +302,15 @@ namespace ms::ipc
     int ServiceBase::sendNotify(uint32_t serviceId, uint32_t messageId, const uint8_t *payload,
                                 uint32_t payloadBytes)
     {
+        // Fast path: nothing to do if no clients are connected.
+        {
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            if (m_clients.empty())
+            {
+                return IPC_SUCCESS;
+            }
+        }
+
         FrameHeader header{};
         header.version = kProtocolVersion;
         header.flags = FRAME_NOTIFY;
@@ -351,6 +351,7 @@ namespace ms::ipc
 
                     if (platform::sendSignal(c->conn.socketFd) != 0)
                     {
+                        c->dead.store(true, std::memory_order_release);
                         result = IPC_ERR_DISCONNECTED;
                         continue;
                     }

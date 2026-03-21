@@ -119,7 +119,7 @@ namespace ms::ipc::platform
         cmsg->cmsg_len = CMSG_LEN(sizeof(int));
         std::memcpy(CMSG_DATA(cmsg), &fdToSend, sizeof(int));
 
-        ssize_t n = sendmsg(sockFd, &msg, 0);
+        ssize_t n = sendmsg(sockFd, &msg, MSG_NOSIGNAL);
         return (n > 0) ? 0 : -1;
     }
 
@@ -134,7 +134,10 @@ namespace ms::ipc::platform
         msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
 
-        char control[CMSG_SPACE(sizeof(int))];
+        // Allocate enough control space for a few fds so we can detect (and
+        // close) any extra fds a peer might send.
+        static constexpr int kMaxFds = 4;
+        char control[CMSG_SPACE(kMaxFds * sizeof(int))];
         std::memset(control, 0, sizeof(control));
         msg.msg_control = control;
         msg.msg_controllen = sizeof(control);
@@ -146,12 +149,25 @@ namespace ms::ipc::platform
         }
 
         *receivedFd = -1;
+        bool firstFdTaken = false;
         for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg))
         {
             if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
             {
-                std::memcpy(receivedFd, CMSG_DATA(cmsg), sizeof(int));
-                break;
+                int nfds = static_cast<int>((cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int));
+                int *fds = reinterpret_cast<int *>(CMSG_DATA(cmsg));
+                for (int i = 0; i < nfds; ++i)
+                {
+                    if (!firstFdTaken)
+                    {
+                        *receivedFd = fds[i];
+                        firstFdTaken = true;
+                    }
+                    else
+                    {
+                        close(fds[i]); // close unexpected extra fds
+                    }
+                }
             }
         }
 
@@ -161,7 +177,7 @@ namespace ms::ipc::platform
     int sendSignal(int sockFd)
     {
         uint8_t byte = 1;
-        ssize_t n = send(sockFd, &byte, 1, 0);
+        ssize_t n = send(sockFd, &byte, 1, MSG_NOSIGNAL);
         return (n == 1) ? 0 : -1;
     }
 
@@ -170,6 +186,22 @@ namespace ms::ipc::platform
         uint8_t byte = 0;
         ssize_t n = recv(sockFd, &byte, 1, 0);
         return (n == 1) ? 0 : -1;
+    }
+
+    int setSocketTimeouts(int sockFd, uint32_t timeoutMs)
+    {
+        timeval tv{};
+        tv.tv_sec = static_cast<time_t>(timeoutMs / 1000);
+        tv.tv_usec = static_cast<suseconds_t>((timeoutMs % 1000) * 1000);
+
+        // Only set SO_SNDTIMEO. The receiver threads intentionally block on
+        // recv() and rely on shutdown() to unblock — SO_RCVTIMEO would cause
+        // spurious disconnect detection (EAGAIN misread as peer close).
+        if (setsockopt(sockFd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0)
+        {
+            return -1;
+        }
+        return 0;
     }
 
     // ── Shared Memory ───────────────────────────────────────────────

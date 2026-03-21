@@ -37,6 +37,10 @@ namespace ms::ipc::platform
     // Returns 0 on success, -1 on failure.
     int recvSignal(int sockFd);
 
+    // Set send/receive timeouts on a socket.
+    // Returns 0 on success, -1 on failure.
+    int setSocketTimeouts(int sockFd, uint32_t timeoutMs);
+
     // ── Shared Memory ───────────────────────────────────────────────
 
     // Create anonymous shared memory region of `size` bytes.
