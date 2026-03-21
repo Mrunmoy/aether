@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/ipc-robustness-hardening]
   pull_request:
-    branches: [main]
+    branches: [main, fix/ipc-robustness-hardening]
 
 jobs:
   build:
@@ -26,6 +26,10 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DMS_IPC_BUILD_EXAMPLES=ON
 
@@ -41,4 +45,7 @@ jobs:
           build/examples/echo/codegen_client_tests
 
       - name: ipcgen pytest suite
-        run: python3 -m pytest tools/ipcgen/test/ -v
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          python -m pytest tools/ipcgen/test/ -v

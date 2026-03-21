@@ -23,6 +23,12 @@ namespace ms::ipc
         {
             return false;
         }
+        if (!m_loop && m_receiverThread.joinable())
+        {
+            // Reconnect after a server-side disconnect leaves the old receiver
+            // thread joinable until the client explicitly joins it.
+            m_receiverThread.join();
+        }
 
         m_conn = connectToServer(m_serviceName.c_str());
         if (!m_conn.valid())

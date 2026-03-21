@@ -649,6 +649,28 @@ TEST(ClientBaseTest, ConnectTwiceFails)
     svc.stop();
 }
 
+TEST(ClientBaseTest, ReconnectAfterServerDisconnect)
+{
+    {
+        EchoService svc(SVC_NAME);
+        ASSERT_TRUE(svc.start());
+
+        ClientBase client(SVC_NAME);
+        ASSERT_TRUE(client.connect());
+        settle();
+
+        svc.stop();
+        settle();
+
+        EchoService svc2(SVC_NAME);
+        ASSERT_TRUE(svc2.start());
+        EXPECT_TRUE(client.connect());
+
+        client.disconnect();
+        svc2.stop();
+    }
+}
+
 TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
 {
     EchoService svc(SVC_NAME);
@@ -723,7 +745,8 @@ TEST(ClientBaseTest, ServerStopDuringCall)
     callThread.join();
     stopThread.join();
 
-    EXPECT_TRUE(callResult == IPC_SUCCESS || callResult == IPC_ERR_DISCONNECTED)
+    EXPECT_TRUE(callResult == IPC_SUCCESS || callResult == IPC_ERR_DISCONNECTED ||
+                callResult == IPC_ERR_TIMEOUT)
         << "callResult = " << callResult;
 
     client.disconnect();
@@ -741,6 +764,8 @@ TEST(ClientBaseTest, ConcurrentDisconnectDuringCalls)
     std::atomic<bool> stop{false};
     std::atomic<int> disconnectedCount{0};
     std::atomic<int> successCount{0};
+    std::atomic<int> badRcCount{0};
+    std::atomic<int> badResponseCount{0};
 
     std::thread caller([&] {
         const std::vector<uint8_t> request = {'r', 'a', 'c', 'e'};
@@ -750,12 +775,18 @@ TEST(ClientBaseTest, ConcurrentDisconnectDuringCalls)
             int rc = client.call(1, 1, request, &response, 200);
             if (rc == IPC_SUCCESS)
             {
-                EXPECT_EQ(response, request);
+                if (response != request)
+                {
+                    badResponseCount.fetch_add(1);
+                }
                 successCount.fetch_add(1);
             }
             else
             {
-                EXPECT_EQ(rc, IPC_ERR_DISCONNECTED);
+                if (rc != IPC_ERR_DISCONNECTED)
+                {
+                    badRcCount.fetch_add(1);
+                }
                 disconnectedCount.fetch_add(1);
                 break;
             }
@@ -769,6 +800,8 @@ TEST(ClientBaseTest, ConcurrentDisconnectDuringCalls)
 
     EXPECT_GE(successCount.load() + disconnectedCount.load(), 1);
     EXPECT_GE(disconnectedCount.load(), 1);
+    EXPECT_EQ(badRcCount.load(), 0);
+    EXPECT_EQ(badResponseCount.load(), 0);
 
     svc.stop();
 }

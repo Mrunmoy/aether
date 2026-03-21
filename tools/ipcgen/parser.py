@@ -44,6 +44,7 @@ class Param:
     name: str
     is_pointer: bool # True for [out] params
     array_size: Optional[int] = None  # e.g. 16 for uint8[16]
+    line: int = 0
 
 
 @dataclass
@@ -51,6 +52,7 @@ class Method:
     name: str
     method_id: int
     params: List[Param]
+    line: int = 0
 
 
 @dataclass
@@ -58,6 +60,7 @@ class Notification:
     name: str
     notify_id: int
     params: List[Param]
+    line: int = 0
 
 
 @dataclass
@@ -154,10 +157,10 @@ class Parser:
             method = self._parse_method()
             if method.name in seen_names:
                 raise SyntaxError(
-                    f"Line {name_tok.line}: duplicate method name {method.name!r}")
+                    f"Line {method.line}: duplicate method name {method.name!r}")
             if method.method_id in seen_ids:
                 raise SyntaxError(
-                    f"Line {name_tok.line}: duplicate method id {method.method_id}")
+                    f"Line {method.line}: duplicate method id {method.method_id}")
             seen_names.add(method.name)
             seen_ids.add(method.method_id)
             idl.methods.append(method)
@@ -184,10 +187,10 @@ class Parser:
             notification = self._parse_notification()
             if notification.name in seen_names:
                 raise SyntaxError(
-                    f"Line {name_tok.line}: duplicate notification name {notification.name!r}")
+                    f"Line {notification.line}: duplicate notification name {notification.name!r}")
             if notification.notify_id in seen_ids:
                 raise SyntaxError(
-                    f"Line {name_tok.line}: duplicate notification id {notification.notify_id}")
+                    f"Line {notification.line}: duplicate notification id {notification.notify_id}")
             seen_names.add(notification.name)
             seen_ids.add(notification.notify_id)
             idl.notifications.append(notification)
@@ -284,7 +287,8 @@ class Parser:
         params = self._parse_params()
         self.expect(TOK_SYMBOL, ";")
 
-        return Method(name=name_tok.value, method_id=int(m.group(1)), params=params)
+        return Method(name=name_tok.value, method_id=int(m.group(1)), params=params,
+                      line=attr_tok.line)
 
     def _parse_notification(self) -> Notification:
         attr_tok = self.expect(TOK_ATTR)
@@ -304,7 +308,7 @@ class Parser:
                     f"Line {attr_tok.line}: notification params must be [in]")
 
         return Notification(name=name_tok.value, notify_id=int(m.group(1)),
-                            params=params)
+                            params=params, line=attr_tok.line)
 
     # ── Parameters ───────────────────────────────────────────────────
 
@@ -316,7 +320,7 @@ class Parser:
             param = self._parse_param()
             if param.name in seen_names:
                 raise SyntaxError(
-                    f"Line {self.peek().line}: duplicate parameter name {param.name!r}")
+                    f"Line {param.line}: duplicate parameter name {param.name!r}")
             params.append(param)
             seen_names.add(param.name)
             while self.peek().value == ",":
@@ -324,7 +328,7 @@ class Parser:
                 param = self._parse_param()
                 if param.name in seen_names:
                     raise SyntaxError(
-                        f"Line {self.peek().line}: duplicate parameter name {param.name!r}")
+                        f"Line {param.line}: duplicate parameter name {param.name!r}")
                 params.append(param)
                 seen_names.add(param.name)
         self.expect(TOK_SYMBOL, ")")
@@ -361,4 +365,4 @@ class Parser:
 
         return Param(direction=direction, type_name=type_tok.value,
                      name=name_tok.value, is_pointer=is_pointer,
-                     array_size=array_size)
+                     array_size=array_size, line=name_tok.line)

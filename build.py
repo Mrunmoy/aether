@@ -47,15 +47,37 @@ def build(examples=False):
 
 
 def test():
-    result = subprocess.run(
-        ["ctest", "--test-dir", BUILD_DIR, "--show-only=json-v1"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    data = json.loads(result.stdout)
-    if not data.get("tests"):
+    has_cpp_tests = False
+    try:
+        result = subprocess.run(
+            ["ctest", "--test-dir", BUILD_DIR, "--show-only=json-v1"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        data = json.loads(result.stdout)
+        has_cpp_tests = bool(data.get("tests") or [])
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        result = subprocess.run(
+            ["ctest", "--test-dir", BUILD_DIR, "-N"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print("Failed to discover C++ tests. Ensure CTest is installed and tests are configured.",
+                  file=sys.stderr)
+            sys.exit(1)
+        for line in result.stdout.splitlines():
+            if "Total Tests:" in line:
+                try:
+                    has_cpp_tests = int(line.split("Total Tests:", 1)[1].strip()) > 0
+                except ValueError:
+                    has_cpp_tests = False
+                break
+
+    if not has_cpp_tests:
         print("No C++ tests were discovered. Ensure test submodules are initialized.", file=sys.stderr)
         sys.exit(1)
 
