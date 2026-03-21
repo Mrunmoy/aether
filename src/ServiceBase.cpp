@@ -85,22 +85,19 @@ namespace ms::ipc
         }
         else
         {
-            // Phase 1: Unblock accept thread, then join before closing fd.
+            // Phase 1: Unblock accept thread. shutdown() alone may not
+            // reliably unblock accept4() on all socket types, so close the
+            // fd as well — this guarantees accept4() returns immediately.
             if (m_listenFd >= 0)
             {
                 shutdown(m_listenFd, SHUT_RDWR);
+                platform::closeFd(m_listenFd);
+                m_listenFd = -1;
             }
 
             if (m_acceptThread.joinable())
             {
                 m_acceptThread.join();
-            }
-
-            // Safe to close now — accept thread has exited.
-            if (m_listenFd >= 0)
-            {
-                platform::closeFd(m_listenFd);
-                m_listenFd = -1;
             }
 
             // Phase 2: Unblock all receiver threads, then join and cleanup.
