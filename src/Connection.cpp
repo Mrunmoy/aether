@@ -53,7 +53,11 @@ namespace ms::ipc
         }
 
         // 2. Set socket timeouts.
-        platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs);
+        if (platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs) != 0)
+        {
+            conn.close();
+            return conn;
+        }
 
         // 3. Create shared memory.
         conn.shmFd = platform::shmCreate(kShmSize);
@@ -110,7 +114,11 @@ namespace ms::ipc
         }
 
         // 2. Set socket timeouts.
-        platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs);
+        if (platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs) != 0)
+        {
+            conn.close();
+            return conn;
+        }
 
         // 3. Receive protocol version + shared memory FD from client.
         uint16_t version = 0;
