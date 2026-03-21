@@ -39,3 +39,6 @@ jobs:
         run: |
           build/examples/echo/codegen_server_tests
           build/examples/echo/codegen_client_tests
+
+      - name: ipcgen pytest suite
+        run: python3 -m pytest tools/ipcgen/test/ -v
