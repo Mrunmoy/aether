@@ -1,4 +1,5 @@
 add_subdirectory(echo)
+add_subdirectory(c-echo)
 
 # Qt5 is optional — only build exhaust-analyzer when Qt5Widgets is found.
 find_package(Qt5 COMPONENTS Widgets QUIET)

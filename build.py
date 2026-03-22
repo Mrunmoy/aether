@@ -7,12 +7,14 @@ Usage:
   python build.py -c           # clean build
   python build.py -t           # build + run tests
   python build.py -e           # build + examples
+  python build.py -p           # build + package SDK tarball
   python build.py -c -t -e     # clean build + tests + examples
 """
 
 import argparse
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -26,6 +28,22 @@ def run(cmd, **kwargs):
     result = subprocess.run(cmd, **kwargs)
     if result.returncode != 0:
         sys.exit(result.returncode)
+
+
+def get_version():
+    """Read project version from CMakeLists.txt."""
+    ver = os.environ.get("AETHER_SDK_VERSION")
+    if ver:
+        return ver
+    with open(os.path.join(ROOT, "CMakeLists.txt")) as f:
+        for line in f:
+            if "VERSION" in line and "project(" not in line:
+                # Match: VERSION 1.1.0
+                parts = line.strip().split()
+                for i, p in enumerate(parts):
+                    if p == "VERSION" and i + 1 < len(parts):
+                        return parts[i + 1]
+    return "0.0.0"
 
 
 def clean():
@@ -87,21 +105,173 @@ def test():
     run([sys.executable, "-m", "pytest", "tools/ipcgen/test/", "-v"], cwd=ROOT)
 
 
+def package():
+    """Assemble the SDK tarball."""
+    version = get_version()
+    arch = platform.machine()  # e.g. x86_64, aarch64
+    sdk_name = f"aether-sdk-{version}-linux-{arch}"
+    staging = os.path.join(ROOT, sdk_name)
+
+    # Clean previous staging
+    if os.path.isdir(staging):
+        shutil.rmtree(staging)
+
+    print(f"Packaging {sdk_name}...")
+
+    # Install to staging dir
+    run(["cmake", "--install", BUILD_DIR, "--prefix", staging], cwd=ROOT)
+
+    # Create fat static archive (merge deps into libaether.a)
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for lib in [
+            os.path.join(BUILD_DIR, "libaether.a"),
+            os.path.join(BUILD_DIR, "deps", "ms-ringbuffer", "libms-ringbuffer.a"),
+            os.path.join(BUILD_DIR, "deps", "ms-runloop", "libms-runloop.a"),
+        ]:
+            if os.path.isfile(lib):
+                run(["ar", "x", lib], cwd=tmpdir)
+        fat_lib = os.path.join(staging, "lib", "libaether.a")
+        import glob as globmod
+        objs = globmod.glob(os.path.join(tmpdir, "*.o"))
+        if objs:
+            run(["ar", "rcs", fat_lib] + objs)
+            run(["ranlib", fat_lib])
+
+    # Clean out GTest/GMock artifacts that leaked from vendor/
+    for d in ["gmock", "gtest"]:
+        p = os.path.join(staging, "include", d)
+        if os.path.isdir(p):
+            shutil.rmtree(p)
+    for pattern_dir in [
+        os.path.join(staging, "lib", "cmake", "GTest"),
+    ]:
+        if os.path.isdir(pattern_dir):
+            shutil.rmtree(pattern_dir)
+    for f in os.listdir(os.path.join(staging, "lib")):
+        if f.startswith("libgtest") or f.startswith("libgmock"):
+            os.remove(os.path.join(staging, "lib", f))
+    for f in os.listdir(os.path.join(staging, "lib", "pkgconfig")):
+        if "gtest" in f or "gmock" in f:
+            os.remove(os.path.join(staging, "lib", "pkgconfig", f))
+
+    # Copy SDK example
+    example_src = os.path.join(ROOT, "examples", "c-echo")
+    example_dst = os.path.join(staging, "example")
+    os.makedirs(example_dst, exist_ok=True)
+    for f in ["echo_server.c", "echo_client.c"]:
+        shutil.copy2(os.path.join(example_src, f), example_dst)
+
+    # Create standalone example CMakeLists for SDK consumers
+    with open(os.path.join(example_dst, "CMakeLists.txt"), "w") as f:
+        f.write("""\
+cmake_minimum_required(VERSION 3.14)
+project(aether_example C)
+
+# Option 1: find_package (if SDK is installed or CMAKE_PREFIX_PATH is set)
+# find_package(aether REQUIRED)
+
+# Option 2: direct path (simpler for quick tests)
+set(AETHER_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH "Path to Aether SDK")
+
+add_executable(echo_server echo_server.c)
+target_include_directories(echo_server PRIVATE ${AETHER_SDK_DIR}/include)
+target_link_libraries(echo_server ${AETHER_SDK_DIR}/lib/libaether.a stdc++ pthread)
+
+add_executable(echo_client echo_client.c)
+target_include_directories(echo_client PRIVATE ${AETHER_SDK_DIR}/include)
+target_link_libraries(echo_client ${AETHER_SDK_DIR}/lib/libaether.a stdc++ pthread)
+""")
+
+    # Copy README and LICENSE
+    for f in ["LICENSE"]:
+        src = os.path.join(ROOT, f)
+        if os.path.isfile(src):
+            shutil.copy2(src, staging)
+
+    # Create SDK README
+    with open(os.path.join(staging, "README.md"), "w") as f:
+        f.write(f"""\
+# Aether IPC SDK v{version}
+
+Pre-built IPC library for Linux ({arch}).
+
+## Quick Start
+
+```bash
+cd example/
+cmake -B build -DAETHER_SDK_DIR=$(pwd)/..
+cmake --build build
+./build/echo_server &
+./build/echo_client
+```
+
+## Contents
+
+| Path | Description |
+|------|-------------|
+| `include/aether_ipc.h` | C API header (only public header) |
+| `lib/libaether.a` | Static library |
+| `lib/libaether.so*` | Shared library (SOVERSION {version.split('.')[0] if '.' in version else '1'}) |
+| `lib/pkgconfig/aether.pc` | pkg-config support |
+| `lib/cmake/aether/` | CMake find_package() support |
+| `example/` | C API echo server + client |
+
+## Linking
+
+### Static (recommended)
+```bash
+cc -o my_app my_app.c -I/path/to/sdk/include /path/to/sdk/lib/libaether.a -lstdc++ -lpthread
+```
+
+### Shared
+```bash
+cc -o my_app my_app.c -I/path/to/sdk/include -L/path/to/sdk/lib -laether -lstdc++ -lpthread
+```
+
+### pkg-config
+```bash
+cc -o my_app my_app.c $(pkg-config --cflags --libs aether)
+```
+
+### CMake
+```cmake
+find_package(aether REQUIRED)
+target_link_libraries(my_app PRIVATE aether::aether)
+```
+""")
+
+    # Create tarball
+    tarball = f"{sdk_name}.tar.gz"
+    run(["tar", "-czf", tarball, sdk_name], cwd=ROOT)
+
+    # Clean staging dir
+    shutil.rmtree(staging)
+
+    print(f"\n✓ SDK packaged: {tarball}")
+    # Show contents
+    run(["tar", "-tzf", tarball], cwd=ROOT)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build aether")
     parser.add_argument("-c", "--clean", action="store_true", help="clean before building")
     parser.add_argument("-t", "--test", action="store_true", help="run tests after building")
     parser.add_argument("-e", "--examples", action="store_true", help="build examples")
+    parser.add_argument("-p", "--package", action="store_true", help="package SDK tarball")
     args = parser.parse_args()
 
     if args.clean:
         clean()
 
-    # When testing, always build examples (codegen tests live there).
-    build(examples=args.examples or args.test)
+    # When testing or packaging, always build examples.
+    build(examples=args.examples or args.test or args.package)
 
     if args.test:
         test()
+
+    if args.package:
+        package()
 
 
 if __name__ == "__main__":
