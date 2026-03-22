@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // ── Shared Memory Layout ────────────────────────────────────────
@@ -172,4 +172,4 @@ namespace ms::ipc
         return conn;
     }
 
-} // namespace ms::ipc
+} // namespace aether::ipc

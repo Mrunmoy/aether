@@ -3,7 +3,7 @@
 #include <array>
 #include <cstdint>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
 enum DeviceType : uint32_t
@@ -24,4 +24,4 @@ struct DeviceInfo
     char name[65];
 };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

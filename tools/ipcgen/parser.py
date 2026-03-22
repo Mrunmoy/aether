@@ -76,7 +76,7 @@ class IdlFile:
 
 class Parser:
     """
-    Recursive-descent parser for the ms-ipc IDL.
+    Recursive-descent parser for the aether IDL.
 
     Expects a token list produced by ``tokenize()``.  Builds an ``IdlFile``
     AST containing ``Method`` and ``Notification`` nodes.

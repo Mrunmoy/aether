@@ -12,7 +12,7 @@
 
 int main()
 {
-    ms::ipc::ClientBase client("echo");
+    aether::ipc::ClientBase client("echo");
     if (!client.connect())
     {
         std::fprintf(stderr, "Failed to connect to echo service\n");
@@ -21,14 +21,14 @@ int main()
     std::printf("Connected to echo service.\n");
 
     // Send a few echo requests.
-    const char *messages[] = {"Hello", "World", "ms-ipc works!"};
+    const char *messages[] = {"Hello", "World", "aether works!"};
     for (const char *msg : messages)
     {
         std::vector<uint8_t> request(msg, msg + std::strlen(msg));
         std::vector<uint8_t> response;
 
         int rc = client.call(1, 1, request, &response);
-        if (rc == ms::ipc::IPC_SUCCESS)
+        if (rc == aether::ipc::IPC_SUCCESS)
         {
             std::string reply(response.begin(), response.end());
             std::printf("[client] sent: \"%s\"  ->  received: \"%s\"\n", msg, reply.c_str());

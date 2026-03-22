@@ -1,0 +1,44 @@
+# aetherConfig.cmake — find_package(aether) support
+#
+# Provides:
+#   aether::aether   — imported library target (static or shared)
+#
+# Usage:
+#   find_package(aether REQUIRED)
+#   target_link_libraries(my_app PRIVATE aether::aether)
+
+if(TARGET aether::aether)
+    return()
+endif()
+
+get_filename_component(_AETHER_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
+get_filename_component(_AETHER_PREFIX "${_AETHER_CMAKE_DIR}/../../../" ABSOLUTE)
+
+find_library(_AETHER_LIBRARY
+    NAMES aether
+    PATHS "${_AETHER_PREFIX}/lib" "${_AETHER_PREFIX}/@CMAKE_INSTALL_LIBDIR@"
+    NO_DEFAULT_PATH
+)
+
+find_path(_AETHER_INCLUDE_DIR
+    NAMES aether_ipc.h
+    PATHS "${_AETHER_PREFIX}/include" "${_AETHER_PREFIX}/@CMAKE_INSTALL_INCLUDEDIR@"
+    NO_DEFAULT_PATH
+)
+
+if(_AETHER_LIBRARY AND _AETHER_INCLUDE_DIR)
+    add_library(aether::aether UNKNOWN IMPORTED)
+    set_target_properties(aether::aether PROPERTIES
+        IMPORTED_LOCATION "${_AETHER_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${_AETHER_INCLUDE_DIR}"
+        INTERFACE_LINK_LIBRARIES "pthread"
+    )
+    set(aether_FOUND TRUE)
+else()
+    set(aether_FOUND FALSE)
+endif()
+
+unset(_AETHER_CMAKE_DIR)
+unset(_AETHER_PREFIX)
+unset(_AETHER_LIBRARY)
+unset(_AETHER_INCLUDE_DIR)

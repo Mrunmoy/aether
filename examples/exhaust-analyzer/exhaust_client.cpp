@@ -21,7 +21,7 @@
 
 #include <cstdio>
 
-using namespace ms::ipc;
+using namespace aether::ipc;
 
 Q_DECLARE_METATYPE(GasReadings)
 Q_DECLARE_METATYPE(AnalyzerStatus)
@@ -138,7 +138,7 @@ class AnalyzerWindow : public QWidget
 public:
     AnalyzerWindow(QWidget *parent = nullptr) : QWidget(parent)
     {
-        setWindowTitle("Exhaust Gas Analyzer — ms-ipc");
+        setWindowTitle("Exhaust Gas Analyzer — aether");
         setStyleSheet("background: #111; color: #ddd;");
         setMinimumSize(680, 520);
 
