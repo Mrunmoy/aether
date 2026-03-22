@@ -7,6 +7,8 @@ project(aether
 )
 
 # ── Dependencies ─────────────────────────────────────────────────────
+# Enable PIC globally so deps can also be linked into the shared library.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(deps/ms-ringbuffer)
 add_subdirectory(deps/ms-runloop)
 
@@ -25,7 +27,6 @@ target_include_directories(aether PUBLIC
 )
 target_compile_features(aether PUBLIC cxx_std_17)
 target_link_libraries(aether PUBLIC ms-ringbuffer ms-runloop PRIVATE pthread)
-set_target_properties(aether PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # ── Shared library ───────────────────────────────────────────────────
 add_library(aether_shared SHARED
