@@ -203,14 +203,12 @@ integration for single-threaded event-driven operation.
 
 ## Examples
 
-See [example/README.md](example/README.md) for self-contained, copy-paste examples:
-
-- **Low-level echo** — raw `ServiceBase` / `ClientBase` usage
-- **Code generation tutorial** — step-by-step `ipcgen` walkthrough
-- **Scalars & enums** — temperature sensor
-- **Fixed-length arrays** — multi-channel ADC
-- **Bounded strings** — alarm system
-- **Convenience wrappers** — chaining count + list RPCs into `std::vector`
+| Example | Description |
+|---------|-------------|
+| [`examples/sdk-usage/`](examples/sdk-usage/) | **Start here** — C++ project using the SDK release artifact (RAII wrappers, RPC, notifications) |
+| [`examples/c-echo/`](examples/c-echo/) | Minimal C echo server + client using the C API |
+| [`examples/echo/`](examples/echo/) | Low-level C++ (`ServiceBase`/`ClientBase`) + ipcgen codegen (source build) |
+| [`examples/exhaust-analyzer/`](examples/exhaust-analyzer/) | Qt-based codegen example with structs and notifications |
 
 ## Documentation
 
@@ -250,35 +248,22 @@ python3 build.py -t    # runs everything
 
 ## C API
 
-Aether ships a stable C API (`aether_ipc.h`) for use from C code or
-language bindings. See `examples/c-echo/` for a complete example.
-
-```c
-#include <aether_ipc.h>
-
-/* Create and start a server */
-aether_service_t svc = aether_service_create("my_svc", on_request, NULL);
-aether_service_start(svc);
-
-/* Create a client, connect, and call */
-aether_client_t cli = aether_client_create("my_svc", NULL, NULL);
-aether_client_connect(cli, 1000);
-aether_client_call(cli, svc_id, method_id,
-                   req, req_len, &resp, &resp_len, 1000);
-free(resp);
-aether_client_destroy(cli);
-aether_service_destroy(svc);
-```
+Aether ships a stable C API (`aether_ipc.h`) with opaque handles for
+ABI-safe distribution. This is the public interface for SDK consumers.
+See [`examples/c-echo/`](examples/c-echo/) for a minimal C example, or
+[`examples/sdk-usage/`](examples/sdk-usage/) for a full C++ project
+using the SDK.
 
 ## Using the SDK release
 
-Pre-built SDK tarballs are published as GitHub Release assets. No need to
-build from source — just download, extract, and link.
+Pre-built SDK tarballs are published as
+[GitHub Release](https://github.com/Mrunmoy/ms-ipc/releases) assets.
+The SDK exposes a stable **C API** (`aether_ipc.h`) so your C++ project
+isn't tied to a specific compiler or standard library version.
 
-### Download
+### Download and extract
 
 ```bash
-# From the GitHub Releases page, or via CLI:
 gh release download v1.1.0 -R Mrunmoy/ms-ipc -p '*.tar.gz'
 tar xzf aether-sdk-*-linux-x86_64.tar.gz
 ```
@@ -288,21 +273,65 @@ The tarball contains:
 ```
 aether-sdk-1.1.0-linux-x86_64/
 ├── include/
-│   └── aether_ipc.h          # C API header (the only public header)
+│   └── aether_ipc.h          # C API header (only public header)
 ├── lib/
-│   └── libaether.a           # Fat static archive (all deps bundled)
-└── lib/pkgconfig/
-    └── aether.pc              # pkg-config file
+│   ├── libaether.a            # Fat static archive (all deps bundled)
+│   ├── libaether.so           # Shared library
+│   ├── pkgconfig/aether.pc
+│   └── cmake/aether/          # find_package() support
+└── example/                   # C echo server + client
 ```
 
-### Link with CMake (find_package)
+### Write C++ code using the C API
+
+The recommended pattern is to wrap the C handles in RAII classes. Define your
+protocol in a shared header, then write typed C++ wrappers:
+
+```cpp
+#include "aether_ipc.h"
+#include <cstdio>
+#include <cstring>
+
+// RAII wrapper around aether_client_t
+class MyClient {
+public:
+    MyClient(const char *name) {
+        aether_client_create(name, nullptr, nullptr, &m_cli);
+    }
+    ~MyClient() { aether_client_destroy(m_cli); }
+
+    bool connect() { return aether_client_connect(m_cli) == AETHER_SUCCESS; }
+
+    // Typed RPC — hides raw byte marshaling
+    int getTemperature(float *celsius) {
+        uint8_t resp[64]{};
+        uint32_t resp_len = 0;
+        int rc = aether_client_call(m_cli, SVC_ID, METHOD_GET_TEMP,
+                                    nullptr, 0, resp, sizeof(resp),
+                                    &resp_len, 2000);
+        if (rc == AETHER_SUCCESS)
+            std::memcpy(celsius, resp, sizeof(float));
+        return rc;
+    }
+
+private:
+    aether_client_t m_cli = nullptr;
+};
+```
+
+> See [`examples/sdk-usage/`](examples/sdk-usage/) for a complete working
+> project with server, client, notifications, and a CMakeLists.txt you can
+> copy into your own project.
+
+### Link with CMake
 
 ```cmake
-list(APPEND CMAKE_PREFIX_PATH "/path/to/aether-sdk-1.1.0-linux-x86_64")
+set(AETHER_SDK "/path/to/aether-sdk-1.1.0-linux-x86_64" CACHE PATH "Aether SDK")
 
-find_package(aether REQUIRED)
-add_executable(my_app main.c)
-target_link_libraries(my_app aether::aether pthread)
+add_executable(my_app main.cpp)
+target_include_directories(my_app PRIVATE ${AETHER_SDK}/include)
+target_link_libraries(my_app ${AETHER_SDK}/lib/libaether.a stdc++ pthread)
+target_compile_features(my_app PRIVATE cxx_std_17)
 ```
 
 ### Link with pkg-config
@@ -310,7 +339,7 @@ target_link_libraries(my_app aether::aether pthread)
 ```bash
 export PKG_CONFIG_PATH=/path/to/aether-sdk-1.1.0-linux-x86_64/lib/pkgconfig
 
-gcc -o my_app main.c $(pkg-config --cflags --libs aether) -lpthread -lstdc++
+g++ -std=c++17 -o my_app main.cpp $(pkg-config --cflags --libs aether) -lpthread
 ```
 
 ### Link manually
@@ -318,15 +347,22 @@ gcc -o my_app main.c $(pkg-config --cflags --libs aether) -lpthread -lstdc++
 ```bash
 SDK=/path/to/aether-sdk-1.1.0-linux-x86_64
 
-gcc -o my_app main.c \
-    -I$SDK/include \
-    -L$SDK/lib -laether \
-    -lpthread -lstdc++
+g++ -std=c++17 -o my_app main.cpp \
+    -I$SDK/include $SDK/lib/libaether.a -lpthread
 ```
 
 > **Note:** The fat static archive (`libaether.a`) bundles Ouroboros and
-> Vortex, so no additional library files are needed. You only need to link
-> `pthread` and `stdc++` (when compiling with `gcc` rather than `g++`).
+> Vortex, so no additional library files are needed.
+
+### Why a C API for a C++ library?
+
+C++ libraries bake in a specific ABI — name mangling, vtable layout,
+`std::string`/`std::vector` internals — which change between compiler
+versions and standard library implementations. The C API with opaque handles
+gives you a stable binary interface: build the SDK once, use it from any
+C++17 toolchain. The trade-off is writing a thin RAII wrapper on the consumer
+side (as shown above), but you never have to rebuild the SDK when you upgrade
+your compiler.
 
 ## Dependencies
 
