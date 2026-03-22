@@ -196,6 +196,9 @@ target_link_libraries(echo_client ${AETHER_SDK_DIR}/lib/libaether.a stdc++ pthre
 
 Pre-built IPC library for Linux ({arch}).
 
+The SDK exposes a stable **C API** (`aether_ipc.h`) with opaque handles.
+Link against the fat static archive — all dependencies are bundled.
+
 ## Quick Start
 
 ```bash
@@ -203,6 +206,7 @@ cd example/
 cmake -B build -DAETHER_SDK_DIR=$(pwd)/..
 cmake --build build
 ./build/echo_server &
+sleep 0.2
 ./build/echo_client
 ```
 
@@ -211,33 +215,28 @@ cmake --build build
 | Path | Description |
 |------|-------------|
 | `include/aether_ipc.h` | C API header (only public header) |
-| `lib/libaether.a` | Static library |
-| `lib/libaether.so*` | Shared library (SOVERSION {version.split('.')[0] if '.' in version else '1'}) |
+| `lib/libaether.a` | Fat static library (all deps bundled) |
+| `lib/libaether.so*` | Shared library |
 | `lib/pkgconfig/aether.pc` | pkg-config support |
 | `lib/cmake/aether/` | CMake find_package() support |
-| `example/` | C API echo server + client |
+| `example/` | Echo server + client in pure C |
 
 ## Linking
 
-### Static (recommended)
-```bash
-cc -o my_app my_app.c -I/path/to/sdk/include /path/to/sdk/lib/libaether.a -lstdc++ -lpthread
-```
-
-### Shared
-```bash
-cc -o my_app my_app.c -I/path/to/sdk/include -L/path/to/sdk/lib -laether -lstdc++ -lpthread
+### CMake (recommended)
+```cmake
+find_package(aether REQUIRED)
+target_link_libraries(my_app PRIVATE aether::aether)
 ```
 
 ### pkg-config
 ```bash
-cc -o my_app my_app.c $(pkg-config --cflags --libs aether)
+cc -o my_app my_app.c $(pkg-config --cflags --libs aether) -lstdc++
 ```
 
-### CMake
-```cmake
-find_package(aether REQUIRED)
-target_link_libraries(my_app PRIVATE aether::aether)
+### Manual
+```bash
+cc -o my_app my_app.c -I<sdk>/include <sdk>/lib/libaether.a -lstdc++ -lpthread
 ```
 """)
 
