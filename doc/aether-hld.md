@@ -240,8 +240,8 @@ codes through the `call()` return value.
 
 | Component | Purpose |
 |-----------|---------|
-| ms-ringbuffer | SPSC ring buffer for the data plane |
-| ms-runloop | Event loop abstraction (optional) |
+| ouroboros | SPSC ring buffer for the data plane |
+| vortex | Event loop abstraction (optional) |
 | Linux kernel | UDS, memfd_create, mmap, SCM_RIGHTS |
 | C++17 | Language standard |
 

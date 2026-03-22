@@ -11,7 +11,7 @@ a clean SDK layout:
 ```
 sdk/
 ├── lib/libaether.a
-├── lib/libms-runloop.a
+├── lib/libvortex.a
 └── include/ (6 aether headers + RunLoop.h + spsc/RingBuffer.h)
 ```
 
@@ -36,7 +36,7 @@ Extend build.py with a `--package` (or `-p`) flag that:
 ```
 aether-sdk/
 ├── bin/ipcgen
-├── lib/libaether.a, libms-runloop.a
+├── lib/libaether.a, libvortex.a
 ├── include/ (public headers only)
 ├── example/ (IDL + server/client example + CMakeLists.txt)
 ├── README.md

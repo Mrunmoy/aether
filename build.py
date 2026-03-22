@@ -126,8 +126,8 @@ def package():
     with tempfile.TemporaryDirectory() as tmpdir:
         for lib in [
             os.path.join(BUILD_DIR, "libaether.a"),
-            os.path.join(BUILD_DIR, "deps", "ms-ringbuffer", "libms-ringbuffer.a"),
-            os.path.join(BUILD_DIR, "deps", "ms-runloop", "libms-runloop.a"),
+            os.path.join(BUILD_DIR, "deps", "ouroboros", "libouroboros.a"),
+            os.path.join(BUILD_DIR, "deps", "vortex", "libvortex.a"),
         ]:
             if os.path.isfile(lib):
                 run(["ar", "x", lib], cwd=tmpdir)

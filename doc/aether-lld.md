@@ -25,7 +25,7 @@ architecture, see [aether-hld.md](aether-hld.md).
 using IpcRing = ms::spsc::ByteRingBuffer<kRingSize>;
 ```
 
-Lock-free SPSC byte ring buffer from the ms-ringbuffer library. One
+Lock-free SPSC byte ring buffer from the ouroboros library. One
 producer and one consumer per ring — no mutex required for read/write.
 Total size per ring: ~256 KB including control block. Two rings per
 connection (~512 KB total shared memory).

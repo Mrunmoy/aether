@@ -190,7 +190,7 @@ struct DeviceInfo
 | **Serialization** | Manual | Automatic |
 | **Best for** | Custom protocols, prototyping | Production services |
 
-Both modes support optional [ms-runloop](https://github.com/Mrunmoy/ms-runloop)
+Both modes support optional [vortex](https://github.com/Mrunmoy/Vortex)
 integration for single-threaded event-driven operation.
 
 ## Key properties
@@ -252,8 +252,8 @@ python3 build.py -t    # runs everything
 
 | Dependency | Purpose |
 |-----------|---------|
-| [ms-ringbuffer](https://github.com/Mrunmoy/ms-ringbuffer) | Lock-free SPSC ring buffers (submodule) |
-| [ms-runloop](https://github.com/Mrunmoy/ms-runloop) | Event loop for fd watching (submodule) |
+| [ouroboros](https://github.com/Mrunmoy/Ouroboros) | Lock-free SPSC ring buffers (submodule) |
+| [vortex](https://github.com/Mrunmoy/Vortex) | Event loop for fd watching (submodule) |
 | [Google Test](https://github.com/google/googletest) v1.14.0 | C++ testing (submodule, tests only) |
 
 ## License
