@@ -1,10 +1,10 @@
-# ms-ipc Low-Level Design
+# aether Low-Level Design
 
 ## 1. Scope
 
 This document covers the class interfaces, API specifications, and
-implementation details of the ms-ipc core runtime. For the high-level
-architecture, see [ms-ipc-hld.md](ms-ipc-hld.md).
+implementation details of the aether core runtime. For the high-level
+architecture, see [aether-hld.md](aether-hld.md).
 
 ---
 
@@ -85,7 +85,7 @@ static_assert(sizeof(FrameHeader) == 24);
 
 ## 3. Platform (`inc/Platform.h`)
 
-**Namespace:** `ms::ipc::platform`
+**Namespace:** `aether::ipc::platform`
 **Files:** `inc/Platform.h`, `src/PlatformLinux.cpp`
 
 ### 3.1 serverSocket()
@@ -224,7 +224,7 @@ static_assert(sizeof(FrameHeader) == 24);
 
 ## 4. Connection (`inc/Connection.h`)
 
-**Namespace:** `ms::ipc`
+**Namespace:** `aether::ipc`
 **Files:** `inc/Connection.h`, `src/Connection.cpp`
 
 ### 4.1 Connection struct
@@ -306,7 +306,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 
 ## 5. Frame I/O (`inc/FrameIO.h`)
 
-**Namespace:** `ms::ipc`
+**Namespace:** `aether::ipc`
 **Files:** `inc/FrameIO.h` (inline), `src/FrameIO.cpp` (`readFrameAlloc`)
 
 ### 5.1 writeFrame()
@@ -378,7 +378,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 
 ## 6. ServiceBase (`inc/ServiceBase.h`)
 
-**Namespace:** `ms::ipc`
+**Namespace:** `aether::ipc`
 **Files:** `inc/ServiceBase.h`, `src/ServiceBase.cpp`
 
 ### 6.1 Constructor
@@ -451,7 +451,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 
 ## 7. ClientBase (`inc/ClientBase.h`)
 
-**Namespace:** `ms::ipc`
+**Namespace:** `aether::ipc`
 **Files:** `inc/ClientBase.h`, `src/ClientBase.cpp`
 
 ### 7.1 Constructor

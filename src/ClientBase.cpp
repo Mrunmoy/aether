@@ -3,7 +3,7 @@
 
 #include <sys/socket.h>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // ── Constructor / Destructor ─────────────────────────────────────
@@ -313,4 +313,4 @@ namespace ms::ipc
     {
     }
 
-} // namespace ms::ipc
+} // namespace aether::ipc

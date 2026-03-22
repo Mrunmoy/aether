@@ -18,7 +18,7 @@ add_executable(ipc_tests
     ServiceBaseTest.cpp
     ClientBaseTest.cpp
 )
-target_link_libraries(ipc_tests PRIVATE ms-ipc GTest::gtest_main pthread)
+target_link_libraries(ipc_tests PRIVATE aether GTest::gtest_main pthread)
 
 include(GoogleTest)
 gtest_discover_tests(ipc_tests)

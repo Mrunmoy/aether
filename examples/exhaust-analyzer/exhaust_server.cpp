@@ -16,7 +16,7 @@
 #include <random>
 #include <thread>
 
-using namespace ms::ipc;
+using namespace aether::ipc;
 using Clock = std::chrono::steady_clock;
 
 static std::atomic<bool> g_quit{false};

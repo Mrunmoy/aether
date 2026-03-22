@@ -1,7 +1,7 @@
 # Exhaust Gas Analyzer Example
 
 A simulated car exhaust gas analyzer — the kind of device found in emissions
-testing stations and performance tuning shops. Demonstrates ms-ipc's
+testing stations and performance tuning shops. Demonstrates aether's
 code-generated RPC and live notification broadcast with a Qt5 GUI client.
 
 ## Screenshots

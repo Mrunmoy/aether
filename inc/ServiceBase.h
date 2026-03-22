@@ -14,7 +14,7 @@
 #include <thread>
 #include <vector>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // Server-side base class for IPC services.
@@ -86,4 +86,4 @@ namespace ms::ipc
         std::vector<std::unique_ptr<ClientConn>> m_clients;
     };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

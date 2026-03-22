@@ -291,7 +291,7 @@ enum and struct definitions.
 - `#include <cstdint>` always
 - Enums with `uint32_t` underlying type
 - Structs with resolved C++ field types
-- All wrapped in `namespace ms::ipc`
+- All wrapped in `namespace aether::ipc`
 
 ### 5.2 emit_server_h()
 
