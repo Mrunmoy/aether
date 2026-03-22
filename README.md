@@ -242,11 +242,91 @@ ctest --test-dir build --output-on-failure
 
 ## Tests
 
-217 tests total: 61 C++ (Google Test) + 156 Python (pytest).
+268 tests total: 101 C++ (Google Test) + 167 Python (pytest).
 
 ```bash
 python3 build.py -t    # runs everything
 ```
+
+## C API
+
+Aether ships a stable C API (`aether_ipc.h`) for use from C code or
+language bindings. See `examples/c-echo/` for a complete example.
+
+```c
+#include <aether_ipc.h>
+
+/* Create and start a server */
+aether_service_t svc = aether_service_create("my_svc", on_request, NULL);
+aether_service_start(svc);
+
+/* Create a client, connect, and call */
+aether_client_t cli = aether_client_create("my_svc", NULL, NULL);
+aether_client_connect(cli, 1000);
+aether_client_call(cli, svc_id, method_id,
+                   req, req_len, &resp, &resp_len, 1000);
+free(resp);
+aether_client_destroy(cli);
+aether_service_destroy(svc);
+```
+
+## Using the SDK release
+
+Pre-built SDK tarballs are published as GitHub Release assets. No need to
+build from source — just download, extract, and link.
+
+### Download
+
+```bash
+# From the GitHub Releases page, or via CLI:
+gh release download v1.1.0 -R Mrunmoy/ms-ipc -p '*.tar.gz'
+tar xzf aether-sdk-*-linux-x86_64.tar.gz
+```
+
+The tarball contains:
+
+```
+aether-sdk-1.1.0-linux-x86_64/
+├── include/
+│   └── aether_ipc.h          # C API header (the only public header)
+├── lib/
+│   └── libaether.a           # Fat static archive (all deps bundled)
+└── lib/pkgconfig/
+    └── aether.pc              # pkg-config file
+```
+
+### Link with CMake (find_package)
+
+```cmake
+list(APPEND CMAKE_PREFIX_PATH "/path/to/aether-sdk-1.1.0-linux-x86_64")
+
+find_package(aether REQUIRED)
+add_executable(my_app main.c)
+target_link_libraries(my_app aether::aether pthread)
+```
+
+### Link with pkg-config
+
+```bash
+export PKG_CONFIG_PATH=/path/to/aether-sdk-1.1.0-linux-x86_64/lib/pkgconfig
+
+gcc -o my_app main.c $(pkg-config --cflags --libs aether) -lpthread -lstdc++
+```
+
+### Link manually
+
+```bash
+SDK=/path/to/aether-sdk-1.1.0-linux-x86_64
+
+gcc -o my_app main.c \
+    -I$SDK/include \
+    -L$SDK/lib -laether \
+    -lpthread -lstdc++
+```
+
+> **Note:** The fat static archive (`libaether.a`) bundles Ouroboros and
+> Vortex, so no additional library files are needed. You only need to link
+> `pthread` and `stdc++` (when compiling with `gcc` rather than `g++`).
 
 ## Dependencies
 
