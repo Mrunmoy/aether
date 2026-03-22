@@ -2,7 +2,7 @@
 #pragma once
 #include <cstdint>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
 enum AnalyzerStatus : uint32_t
@@ -26,4 +26,4 @@ struct GasReadings
     uint64_t timestampMs;
 };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

@@ -12,7 +12,7 @@
 
 static std::atomic<bool> g_running{true};
 
-class EchoService : public ms::ipc::ServiceBase
+class EchoService : public aether::ipc::ServiceBase
 {
 public:
     using ServiceBase::ServiceBase;
@@ -23,7 +23,7 @@ protected:
     {
         std::printf("[server] request: messageId=%u, %zu bytes\n", messageId, request.size());
         *response = request; // echo back
-        return ms::ipc::IPC_SUCCESS;
+        return aether::ipc::IPC_SUCCESS;
     }
 };
 

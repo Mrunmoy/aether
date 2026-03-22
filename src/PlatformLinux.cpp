@@ -14,12 +14,12 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-namespace ms::ipc::platform
+namespace aether::ipc::platform
 {
 
     // ── Helpers ─────────────────────────────────────────────────────
 
-    // Build abstract namespace address: \0ipc_<name>
+    // Build abstract namespace address: \0aether_<name>
     // Returns the total sockaddr_un length to pass to bind/connect.
     static socklen_t buildAddr(sockaddr_un *addr, const char *name)
     {
@@ -27,8 +27,8 @@ namespace ms::ipc::platform
         addr->sun_family = AF_UNIX;
         addr->sun_path[0] = '\0'; // abstract namespace
 
-        // "ipc_" prefix + name
-        constexpr char prefix[] = "ipc_";
+        // "aether_" prefix + name
+        constexpr char prefix[] = "aether_";
         constexpr size_t prefixLen = sizeof(prefix) - 1;
         size_t nameLen = std::strlen(name);
 
@@ -237,7 +237,7 @@ namespace ms::ipc::platform
 
     int shmCreate(uint32_t size)
     {
-        int fd = static_cast<int>(syscall(SYS_memfd_create, "ipc_shm", MFD_CLOEXEC));
+        int fd = static_cast<int>(syscall(SYS_memfd_create, "aether_shm", MFD_CLOEXEC));
         if (fd < 0)
         {
             return -1;
@@ -262,4 +262,4 @@ namespace ms::ipc::platform
         }
     }
 
-} // namespace ms::ipc::platform
+} // namespace aether::ipc::platform

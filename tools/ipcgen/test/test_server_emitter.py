@@ -21,7 +21,7 @@ class TestServerEmitter:
         h = emit_server_h(idl)
         assert "#pragma once" in h
         assert '#include "ServiceBase.h"' in h
-        assert "namespace ms::ipc" in h
+        assert "namespace aether::ipc" in h
         assert "class DeviceMonitor : public ServiceBase" in h
         assert "using ServiceBase::ServiceBase;" in h
 

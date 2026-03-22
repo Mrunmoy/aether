@@ -15,7 +15,7 @@ from .types import fnv1a_32
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ms-ipc IDL code generator")
+    parser = argparse.ArgumentParser(description="aether IDL code generator")
     parser.add_argument("idl", help="Input .idl file")
     parser.add_argument("--outdir", required=True, help="Output directory")
     args = parser.parse_args()

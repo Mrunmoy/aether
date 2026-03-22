@@ -1,5 +1,5 @@
 """
-ipcgen — IDL-to-C++ code generator for ms-ipc.
+ipcgen — IDL-to-C++ code generator for aether.
 
 Reads a minimal IDL file and emits server and client C++ classes
 that inherit from ServiceBase and ClientBase respectively.

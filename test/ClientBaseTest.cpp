@@ -13,8 +13,8 @@
 #include <thread>
 #include <vector>
 
-using namespace ms::ipc;
-using namespace ms::ipc::platform;
+using namespace aether::ipc;
+using namespace aether::ipc::platform;
 
 #define SVC_NAME (::testing::UnitTest::GetInstance()->current_test_info()->name())
 

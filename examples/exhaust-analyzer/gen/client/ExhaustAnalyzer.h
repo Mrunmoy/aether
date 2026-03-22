@@ -6,7 +6,7 @@
 #include <cstring>
 #include <vector>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
 class ExhaustAnalyzer : public ClientBase
@@ -43,4 +43,4 @@ protected:
                         const std::vector<uint8_t> &payload) override;
 };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

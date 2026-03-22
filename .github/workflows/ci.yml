@@ -31,7 +31,7 @@ jobs:
           python-version: '3.x'
 
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DMS_IPC_BUILD_EXAMPLES=ON
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DAETHER_BUILD_EXAMPLES=ON
 
       - name: Build
         run: cmake --build build -j$(nproc)
