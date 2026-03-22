@@ -6,8 +6,8 @@
 #include <cstring>
 #include <thread>
 
-using namespace ms::ipc;
-using namespace ms::ipc::platform;
+using namespace aether::ipc;
+using namespace aether::ipc::platform;
 
 // Unique service name per test to avoid socket collisions.
 #define SVC_NAME (::testing::UnitTest::GetInstance()->current_test_info()->name())

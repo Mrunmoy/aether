@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build script for ms-ipc.
+Build script for aether.
 
 Usage:
   python build.py              # build only
@@ -37,7 +37,7 @@ def clean():
 def configure(examples=False):
     os.makedirs(BUILD_DIR, exist_ok=True)
     cmd = ["cmake", "-B", BUILD_DIR, "-DCMAKE_BUILD_TYPE=Release"]
-    cmd.append(f"-DMS_IPC_BUILD_EXAMPLES={'ON' if examples else 'OFF'}")
+    cmd.append(f"-DAETHER_BUILD_EXAMPLES={'ON' if examples else 'OFF'}")
     run(cmd, cwd=ROOT)
 
 
@@ -88,7 +88,7 @@ def test():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build ms-ipc")
+    parser = argparse.ArgumentParser(description="Build aether")
     parser.add_argument("-c", "--clean", action="store_true", help="clean before building")
     parser.add_argument("-t", "--test", action="store_true", help="run tests after building")
     parser.add_argument("-e", "--examples", action="store_true", help="build examples")

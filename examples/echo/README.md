@@ -1,6 +1,6 @@
 # Examples
 
-These examples show how to use ms-ipc at two levels and demonstrate how
+These examples show how to use aether at two levels and demonstrate how
 the code generator eliminates boilerplate while keeping things type-safe.
 
 ## Building
@@ -21,7 +21,7 @@ message IDs yourself.
 **Server** (`echo_server.cpp`):
 
 ```cpp
-class EchoService : public ms::ipc::ServiceBase
+class EchoService : public aether::ipc::ServiceBase
 {
 protected:
     int onRequest(uint32_t messageId, const std::vector<uint8_t> &request,
@@ -39,7 +39,7 @@ service.start();
 **Client** (`echo_client.cpp`):
 
 ```cpp
-ms::ipc::ClientBase client("echo");
+aether::ipc::ClientBase client("echo");
 client.connect();
 
 std::vector<uint8_t> request(msg, msg + strlen(msg));
@@ -134,7 +134,7 @@ generated code handles serialization, dispatch, and error routing:
 ```cpp
 #include "DeviceMonitor.h"      // from gen/server/
 
-class MyDeviceService : public ms::ipc::DeviceMonitor
+class MyDeviceService : public aether::ipc::DeviceMonitor
 {
 public:
     using DeviceMonitor::DeviceMonitor;
@@ -171,7 +171,7 @@ Call typed methods — no message IDs, no byte vectors, no memcpy:
 ```cpp
 #include "DeviceMonitor.h"      // from gen/client/
 
-ms::ipc::DeviceMonitor client("device_monitor");
+aether::ipc::DeviceMonitor client("device_monitor");
 client.connect();
 
 uint32_t count = 0;
@@ -186,7 +186,7 @@ client.disconnect();
 To receive notifications, subclass and override callbacks:
 
 ```cpp
-class MyDeviceClient : public ms::ipc::DeviceMonitor
+class MyDeviceClient : public aether::ipc::DeviceMonitor
 {
 protected:
     void onDeviceConnected(DeviceInfo info) override
@@ -207,12 +207,12 @@ protected:
 # Server
 add_executable(device_server device_server.cpp gen/server/DeviceMonitor.cpp)
 target_include_directories(device_server PRIVATE gen/server/)
-target_link_libraries(device_server ms-ipc)
+target_link_libraries(device_server aether)
 
 # Client
 add_executable(device_client device_client.cpp gen/client/DeviceMonitor.cpp)
 target_include_directories(device_client PRIVATE gen/client/)
-target_link_libraries(device_client ms-ipc)
+target_link_libraries(device_client aether)
 ```
 
 **Note:** Server and client generated classes share the same name but have
@@ -347,7 +347,7 @@ notifications TemperatureSensor
 ### Server
 
 ```cpp
-class MyTempSensor : public ms::ipc::TemperatureSensor
+class MyTempSensor : public aether::ipc::TemperatureSensor
 {
 protected:
     int handleGetTemperature(float *celsius) override
@@ -380,7 +380,7 @@ protected:
 ### Client
 
 ```cpp
-ms::ipc::TemperatureSensor client("temp_sensor");
+aether::ipc::TemperatureSensor client("temp_sensor");
 client.connect();
 
 float temp = 0;
@@ -439,7 +439,7 @@ struct AdcSample
 ### Server
 
 ```cpp
-class MyAdcReader : public ms::ipc::AdcReader
+class MyAdcReader : public aether::ipc::AdcReader
 {
 protected:
     int handleGetLatestSample(AdcSample *sample) override
@@ -463,7 +463,7 @@ protected:
 ### Client
 
 ```cpp
-ms::ipc::AdcReader client("adc");
+aether::ipc::AdcReader client("adc");
 client.connect();
 
 AdcSample sample{};
@@ -533,7 +533,7 @@ struct AlarmEvent
 ### Server
 
 ```cpp
-class MyAlarmSystem : public ms::ipc::AlarmSystem
+class MyAlarmSystem : public aether::ipc::AlarmSystem
 {
 protected:
     int handleGetAlarmCount(uint32_t *count) override
@@ -576,7 +576,7 @@ protected:
 ### Client
 
 ```cpp
-ms::ipc::AlarmSystem client("alarms");
+aether::ipc::AlarmSystem client("alarms");
 client.connect();
 
 uint32_t count = 0;
@@ -628,7 +628,7 @@ service SensorInventory
 ```cpp
 #include "SensorInventory.h"   // generated client
 
-class SensorClient : public ms::ipc::SensorInventory
+class SensorClient : public aether::ipc::SensorInventory
 {
 public:
     using SensorInventory::SensorInventory;

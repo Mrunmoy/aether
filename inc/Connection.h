@@ -3,7 +3,7 @@
 #include "Types.h"
 #include <cstdint>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // Represents one side of an established IPC connection.
@@ -83,4 +83,4 @@ namespace ms::ipc
     // Returns valid Connection on success, invalid on failure.
     Connection connectToServer(const char *name);
 
-} // namespace ms::ipc
+} // namespace aether::ipc

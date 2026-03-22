@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <spsc/RingBuffer.h>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // ── Protocol ────────────────────────────────────────────────────
@@ -55,4 +55,4 @@ namespace ms::ipc
         FRAME_NOTIFY = 0x0004,
     };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

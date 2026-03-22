@@ -1,6 +1,6 @@
 # TODO: SDK Packaging & Distribution
 
-Distribute ms-ipc as a closed-source SDK — private source repo, public
+Distribute aether as a closed-source SDK — private source repo, public
 SDK repo with pre-built binaries and headers only.
 
 ## 1. CMake install targets
@@ -10,9 +10,9 @@ a clean SDK layout:
 
 ```
 sdk/
-├── lib/libms-ipc.a
+├── lib/libaether.a
 ├── lib/libms-runloop.a
-└── include/ (6 ms-ipc headers + RunLoop.h + spsc/RingBuffer.h)
+└── include/ (6 aether headers + RunLoop.h + spsc/RingBuffer.h)
 ```
 
 ## 2. Bundle ipcgen as standalone binary
@@ -34,18 +34,18 @@ Extend build.py with a `--package` (or `-p`) flag that:
 4. Assembles the final SDK directory:
 
 ```
-ms-ipc-sdk/
+aether-sdk/
 ├── bin/ipcgen
-├── lib/libms-ipc.a, libms-runloop.a
+├── lib/libaether.a, libms-runloop.a
 ├── include/ (public headers only)
 ├── example/ (IDL + server/client example + CMakeLists.txt)
 ├── README.md
 └── LICENSE
 ```
 
-## 4. Create ms-ipc-sdk public repo
+## 4. Create aether-sdk public repo
 
-Public GitHub repo (`Mrunmoy/ms-ipc-sdk`) containing only SDK artifacts:
+Public GitHub repo (`Mrunmoy/aether-sdk`) containing only SDK artifacts:
 - Pre-built libraries and headers (no .cpp source files)
 - ipcgen binary (no Python source)
 - README with usage instructions and CMake integration example
@@ -54,20 +54,20 @@ Public GitHub repo (`Mrunmoy/ms-ipc-sdk`) containing only SDK artifacts:
 
 ## 5. GitHub Actions CI (auto-publish)
 
-Set up CI on the **private** ms-ipc repo that triggers on version tags:
+Set up CI on the **private** aether repo that triggers on version tags:
 
 ```
-on push tag v* → build → test → package SDK → upload to ms-ipc-sdk releases
+on push tag v* → build → test → package SDK → upload to aether-sdk releases
 ```
 
 Workflow:
-1. Tag a release on ms-ipc (e.g., `git tag v1.0.0`)
+1. Tag a release on aether (e.g., `git tag v1.0.0`)
 2. CI builds and runs all 217 tests
 3. CI runs the package script to assemble the SDK
 4. CI uses a Personal Access Token to create a GitHub Release on
-   the public ms-ipc-sdk repo with the SDK tarball attached
+   the public aether-sdk repo with the SDK tarball attached
 
-Customers download from: `github.com/Mrunmoy/ms-ipc-sdk/releases`
+Customers download from: `github.com/Mrunmoy/aether-sdk/releases`
 
 ## 6. Change license
 

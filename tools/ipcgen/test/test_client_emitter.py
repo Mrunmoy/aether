@@ -20,7 +20,7 @@ class TestClientEmitter:
         h = emit_client_h(idl)
         assert "#pragma once" in h
         assert '#include "ClientBase.h"' in h
-        assert "namespace ms::ipc" in h
+        assert "namespace aether::ipc" in h
         assert "class DeviceMonitor : public ClientBase" in h
         assert "using ClientBase::ClientBase;" in h
 

@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-ipcgen is an IDL-to-C++ code generator for the ms-ipc framework. It reads
+ipcgen is an IDL-to-C++ code generator for the aether framework. It reads
 a service interface definition file (`.idl`) and produces type-safe C++
 server and client classes that handle all marshaling, dispatch, and
 notification routing. The developer implements pure virtual handlers
@@ -11,7 +11,7 @@ notification routing. The developer implements pure virtual handlers
 ## 2. Scope
 
 This document covers the code generator tool at `tools/ipcgen/`. For the
-IPC runtime it generates code against, see [ms-ipc-hld.md](ms-ipc-hld.md).
+IPC runtime it generates code against, see [aether-hld.md](aether-hld.md).
 
 ## 3. System context
 
@@ -36,7 +36,7 @@ graph TD
 
 ipcgen is a build-time tool. It runs once per IDL file and produces C++
 source files that are compiled alongside the application. The generated
-code depends on `ServiceBase` and `ClientBase` from the ms-ipc runtime.
+code depends on `ServiceBase` and `ClientBase` from the aether runtime.
 
 ## 4. IDL language
 

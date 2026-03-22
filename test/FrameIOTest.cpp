@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-using namespace ms::ipc;
+using namespace aether::ipc;
 
 // Helper: create a FrameHeader with test values.
 static FrameHeader makeHeader(uint16_t flags, uint32_t serviceId, uint32_t messageId, uint32_t seq,

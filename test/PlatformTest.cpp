@@ -12,8 +12,8 @@
 #include <unistd.h>
 #include <vector>
 
-using namespace ms::ipc::platform;
-using namespace ms::ipc;
+using namespace aether::ipc::platform;
+using namespace aether::ipc;
 
 // Unique socket name per test to avoid collisions when tests run in parallel.
 // Uses the test name provided by gtest.
