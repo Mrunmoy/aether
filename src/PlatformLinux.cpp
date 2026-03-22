@@ -1,5 +1,6 @@
 #include "Platform.h"
 
+#include <cerrno>
 #include <cstddef>
 #include <cstring>
 
@@ -196,8 +197,17 @@ namespace ms::ipc::platform
     int sendSignal(int sockFd)
     {
         uint8_t byte = 1;
-        ssize_t n = send(sockFd, &byte, 1, MSG_NOSIGNAL);
-        return (n == 1) ? 0 : -1;
+        ssize_t n = send(sockFd, &byte, 1, MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (n == 1)
+            return 0;
+        // EAGAIN/EWOULDBLOCK: the peer's receive buffer already holds a pending
+        // wakeup byte.  Both receiver paths drain *all* available ring frames per
+        // wakeup, so the frame we just wrote will be picked up on the next
+        // iteration — no additional signal is needed.
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
+        // Any other error (EPIPE, ECONNRESET, ENOTCONN) means the peer is gone.
+        return -1;
     }
 
     int recvSignal(int sockFd)

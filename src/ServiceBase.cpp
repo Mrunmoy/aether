@@ -376,8 +376,14 @@ namespace ms::ipc
                     int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
                     if (rc != IPC_SUCCESS)
                     {
+                        // Ring full means this client is not consuming data.
+                        // Mark it dead and shut down its socket so receiverLoop
+                        // unblocks from recvSignal and the thread can be joined.
+                        c->dead.store(true, std::memory_order_release);
+                        if (c->conn.socketFd >= 0)
+                            shutdown(c->conn.socketFd, SHUT_RDWR);
                         if (result == IPC_SUCCESS)
-                            result = rc;
+                            result = IPC_ERR_DISCONNECTED;
                         continue;
                     }
 
