@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace ms::ipc::platform
+namespace aether::ipc::platform
 {
 
     // ── Unix Domain Sockets ─────────────────────────────────────────
@@ -56,4 +56,4 @@ namespace ms::ipc::platform
     // Close a file descriptor. Safe to call with -1 (no-op).
     void closeFd(int fd);
 
-} // namespace ms::ipc::platform
+} // namespace aether::ipc::platform

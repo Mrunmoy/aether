@@ -1,6 +1,6 @@
 # Tests
 
-Unit tests for ms-ipc. C++ tests use [Google Test](https://github.com/google/googletest) v1.14.0,
+Unit tests for aether. C++ tests use [Google Test](https://github.com/google/googletest) v1.14.0,
 Python tests use pytest.
 
 ## Prerequisites

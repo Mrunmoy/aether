@@ -44,14 +44,14 @@ class TestTypesEmitter:
         assert "Color color;" in h
 
     def test_types_header_namespace(self):
-        """Types header wraps definitions in ms::ipc namespace."""
+        """Types header wraps definitions in aether::ipc namespace."""
         idl = parse("""
             enum E { A = 0, };
             service Foo { [method=1] int Get([in] uint32 x); };
         """)
         h = emit_types_h(idl)
-        assert "namespace ms::ipc" in h
-        assert "} // namespace ms::ipc" in h
+        assert "namespace aether::ipc" in h
+        assert "} // namespace aether::ipc" in h
 
     def test_types_header_includes(self):
         """Types header includes <cstdint> and pragma once."""

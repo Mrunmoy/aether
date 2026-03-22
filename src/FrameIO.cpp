@@ -1,6 +1,6 @@
 #include "FrameIO.h"
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     int readFrameAlloc(IpcRing *ring, FrameHeader *header, std::vector<uint8_t> *payload)
@@ -37,4 +37,4 @@ namespace ms::ipc
         return IPC_SUCCESS;
     }
 
-} // namespace ms::ipc
+} // namespace aether::ipc

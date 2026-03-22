@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <spsc/RingBuffer.h>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // ── Protocol ────────────────────────────────────────────────────
@@ -12,7 +12,7 @@ namespace ms::ipc
     constexpr uint32_t kRingSize = 256 * 1024; // 256KB per direction
 
     // Ring buffer type used for IPC data plane.
-    using IpcRing = ms::spsc::ByteRingBuffer<kRingSize>;
+    using IpcRing = ouroboros::spsc::ByteRingBuffer<kRingSize>;
 
     // ── Error Codes ─────────────────────────────────────────────────
     // Negative = framework, 0 = success, positive = user-defined.
@@ -55,4 +55,4 @@ namespace ms::ipc
         FRAME_NOTIFY = 0x0004,
     };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

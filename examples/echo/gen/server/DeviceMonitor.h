@@ -6,7 +6,7 @@
 #include <cstring>
 #include <vector>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
 class DeviceMonitor : public ServiceBase
@@ -39,4 +39,4 @@ protected:
                   std::vector<uint8_t> *response) override;
 };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <sys/socket.h>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // ── Constructor / Destructor ─────────────────────────────────────
@@ -423,4 +423,4 @@ namespace ms::ipc
         return result;
     }
 
-} // namespace ms::ipc
+} // namespace aether::ipc

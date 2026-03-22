@@ -5,7 +5,7 @@
 #include <cstring>
 #include <vector>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // ── Frame I/O ───────────────────────────────────────────────────
@@ -112,4 +112,4 @@ namespace ms::ipc
     // Returns IPC_SUCCESS or IPC_ERR_DISCONNECTED.
     int readFrameAlloc(IpcRing *ring, FrameHeader *header, std::vector<uint8_t> *payload);
 
-} // namespace ms::ipc
+} // namespace aether::ipc
