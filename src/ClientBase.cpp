@@ -19,6 +19,17 @@ namespace ms::ipc
 
     bool ClientBase::connect()
     {
+        if (m_running.load(std::memory_order_acquire))
+        {
+            return false;
+        }
+        if (!m_loop && m_receiverThread.joinable())
+        {
+            // Reconnect after a server-side disconnect leaves the old receiver
+            // thread joinable until the client explicitly joins it.
+            m_receiverThread.join();
+        }
+
         m_conn = connectToServer(m_serviceName.c_str());
         if (!m_conn.valid())
         {
@@ -80,7 +91,10 @@ namespace ms::ipc
             m_pending.clear();
         }
 
-        m_conn.close();
+        {
+            std::lock_guard<std::mutex> slock(m_sendMutex);
+            m_conn.close();
+        }
     }
 
     bool ClientBase::isConnected() const { return m_running.load(std::memory_order_acquire); }
@@ -107,25 +121,42 @@ namespace ms::ipc
         header.seq = seq;
         header.payloadBytes = static_cast<uint32_t>(request.size());
 
-        int rc = writeFrame(m_conn.txRing, header, request.data(), header.payloadBytes);
-        if (rc != IPC_SUCCESS)
-        {
-            return rc;
-        }
-
-        // Register pending call before signaling.
+        // Register pending call before writing, so the receiver thread can
+        // always find a consumer for any committed frame (the server may
+        // drain a newly committed frame before sendSignal if another
+        // wakeup is already in flight).
         auto pending = std::make_shared<PendingCall>();
         {
-            std::lock_guard<std::mutex> lock(m_pendingMutex);
+            std::lock_guard<std::mutex> plock(m_pendingMutex);
             m_pending[seq] = pending;
         }
 
-        // Signal server.
-        if (platform::sendSignal(m_conn.socketFd) != 0)
         {
-            std::lock_guard<std::mutex> lock(m_pendingMutex);
-            m_pending.erase(seq);
-            return IPC_ERR_DISCONNECTED;
+            // Hold sendMutex to serialize txRing writes (SPSC invariant).
+            std::lock_guard<std::mutex> slock(m_sendMutex);
+            if (!m_running.load(std::memory_order_acquire) || !m_conn.valid())
+            {
+                // Lock order: sendMutex is always acquired before pendingMutex
+                // when both are needed.
+                std::lock_guard<std::mutex> plock(m_pendingMutex);
+                m_pending.erase(seq);
+                return IPC_ERR_DISCONNECTED;
+            }
+
+            int rc = writeFrame(m_conn.txRing, header, request.data(), header.payloadBytes);
+            if (rc != IPC_SUCCESS)
+            {
+                std::lock_guard<std::mutex> plock(m_pendingMutex);
+                m_pending.erase(seq);
+                return rc;
+            }
+
+            if (platform::sendSignal(m_conn.socketFd) != 0)
+            {
+                std::lock_guard<std::mutex> plock(m_pendingMutex);
+                m_pending.erase(seq);
+                return IPC_ERR_DISCONNECTED;
+            }
         }
 
         // Wait for response.
@@ -173,6 +204,11 @@ namespace ms::ipc
                 if (readFrameAlloc(m_conn.rxRing, &header, &payload) != IPC_SUCCESS)
                 {
                     break;
+                }
+
+                if (header.version != kProtocolVersion)
+                {
+                    continue;
                 }
 
                 if (header.flags & FRAME_RESPONSE)
@@ -244,6 +280,11 @@ namespace ms::ipc
             if (readFrameAlloc(m_conn.rxRing, &header, &payload) != IPC_SUCCESS)
             {
                 break;
+            }
+
+            if (header.version != kProtocolVersion)
+            {
+                continue;
             }
 
             if (header.flags & FRAME_RESPONSE)

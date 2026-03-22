@@ -330,6 +330,7 @@ notifications UserService {
         assert "char name[65] = {};" in server_cpp
         # Notification sender: temp buffer + strncpy
         assert "std::strncpy(" in server_cpp
+        assert "if (newName == nullptr) return IPC_ERR_INVALID_ARGUMENT;" in server_cpp
 
         # Client header: same const char* / char* pattern
         client_h = (outdir / "client" / "UserService.h").read_text()
@@ -338,6 +339,7 @@ notifications UserService {
 
         # Client cpp: [in] string marshal via temp buffer
         client_cpp = (outdir / "client" / "UserService.cpp").read_text()
+        assert "if (name == nullptr) return IPC_ERR_INVALID_ARGUMENT;" in client_cpp
         assert "char _name[65] = {};" in client_cpp
         assert "std::strncpy(_name, name, 64);" in client_cpp
         # [out] string unmarshal with literal size

@@ -24,6 +24,46 @@ namespace ms::ipc
         IpcRing *txRing = nullptr; // ring buffer for sending
         IpcRing *rxRing = nullptr; // ring buffer for receiving
 
+        Connection() = default;
+
+        // Non-copyable: owns fds and mmap'd memory.
+        Connection(const Connection &) = delete;
+        Connection &operator=(const Connection &) = delete;
+
+        // Move transfers ownership and resets the source.
+        Connection(Connection &&other) noexcept
+            : socketFd(other.socketFd), shmFd(other.shmFd), shmBase(other.shmBase),
+              shmSize(other.shmSize), txRing(other.txRing), rxRing(other.rxRing)
+        {
+            other.socketFd = -1;
+            other.shmFd = -1;
+            other.shmBase = nullptr;
+            other.shmSize = 0;
+            other.txRing = nullptr;
+            other.rxRing = nullptr;
+        }
+
+        Connection &operator=(Connection &&other) noexcept
+        {
+            if (this != &other)
+            {
+                close();
+                socketFd = other.socketFd;
+                shmFd = other.shmFd;
+                shmBase = other.shmBase;
+                shmSize = other.shmSize;
+                txRing = other.txRing;
+                rxRing = other.rxRing;
+                other.socketFd = -1;
+                other.shmFd = -1;
+                other.shmBase = nullptr;
+                other.shmSize = 0;
+                other.txRing = nullptr;
+                other.rxRing = nullptr;
+            }
+            return *this;
+        }
+
         bool valid() const { return socketFd >= 0 && shmBase != nullptr; }
 
         // Clean up: munmap, close fds, reset all fields.

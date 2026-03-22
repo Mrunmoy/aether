@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include "ClientBase.h"
+#include "Connection.h"
+#include "FrameIO.h"
+#include "Platform.h"
 #include "ServiceBase.h"
 #include "RunLoop.h"
 
@@ -11,6 +14,7 @@
 #include <vector>
 
 using namespace ms::ipc;
+using namespace ms::ipc::platform;
 
 #define SVC_NAME (::testing::UnitTest::GetInstance()->current_test_info()->name())
 
@@ -116,6 +120,20 @@ static void settle()
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 }
 
+static FrameHeader makeResponse(uint32_t messageId, uint32_t seq, uint32_t payloadBytes,
+                                int status = IPC_SUCCESS)
+{
+    FrameHeader hdr{};
+    hdr.version = kProtocolVersion;
+    hdr.flags = FRAME_RESPONSE;
+    hdr.serviceId = 1;
+    hdr.messageId = messageId;
+    hdr.seq = seq;
+    hdr.payloadBytes = payloadBytes;
+    hdr.aux = static_cast<uint32_t>(status);
+    return hdr;
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Connect and disconnect without any calls
 // ═════════════════════════════════════════════════════════════════════
@@ -181,6 +199,84 @@ TEST(ClientBaseTest, InvalidMethodReturnsError)
 
     client.disconnect();
     svc.stop();
+}
+
+TEST(ClientBaseTest, UnknownSequenceResponseIsIgnored)
+{
+    int listenFd = serverSocket(SVC_NAME);
+    ASSERT_GE(listenFd, 0);
+    std::atomic<bool> serverOk{true};
+    std::atomic<bool> serverDone{false};
+
+    std::thread serverThread([&] {
+        Connection serverConn = acceptConnection(listenFd);
+        if (!serverConn.valid())
+        {
+            serverOk.store(false);
+            closeFd(listenFd);
+            return;
+        }
+
+        if (recvSignal(serverConn.socketFd) != 0)
+        {
+            serverOk.store(false);
+            serverConn.close();
+            closeFd(listenFd);
+            return;
+        }
+        FrameHeader reqHdr{};
+        std::vector<uint8_t> request;
+        if (readFrameAlloc(serverConn.rxRing, &reqHdr, &request) != IPC_SUCCESS)
+        {
+            serverOk.store(false);
+            serverConn.close();
+            closeFd(listenFd);
+            return;
+        }
+
+        const uint8_t strayPayload[] = {'b', 'a', 'd'};
+        FrameHeader stray = makeResponse(reqHdr.messageId, reqHdr.seq + 100, sizeof(strayPayload));
+        if (writeFrame(serverConn.txRing, stray, strayPayload, sizeof(strayPayload)) != IPC_SUCCESS
+            || sendSignal(serverConn.socketFd) != 0)
+        {
+            serverOk.store(false);
+            serverConn.close();
+            closeFd(listenFd);
+            return;
+        }
+
+        FrameHeader good = makeResponse(reqHdr.messageId, reqHdr.seq,
+                                        static_cast<uint32_t>(request.size()));
+        if (writeFrame(serverConn.txRing, good, request.data(),
+                       static_cast<uint32_t>(request.size())) != IPC_SUCCESS
+            || sendSignal(serverConn.socketFd) != 0)
+        {
+            serverOk.store(false);
+        }
+
+        while (!serverDone.load())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        serverConn.close();
+        closeFd(listenFd);
+    });
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    const std::vector<uint8_t> request = {'o', 'k'};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response, 1000);
+
+    EXPECT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(response, request);
+
+    serverDone.store(true);
+    client.disconnect();
+    serverThread.join();
+    EXPECT_TRUE(serverOk.load());
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -267,7 +363,7 @@ TEST(ClientBaseTest, DisconnectFailsPendingCalls)
     client.disconnect();
     callThread.join();
 
-    EXPECT_TRUE(callResult == IPC_ERR_DISCONNECTED || callResult == IPC_ERR_TIMEOUT);
+    EXPECT_EQ(callResult, IPC_ERR_DISCONNECTED);
 
     svc.unblock();
     svc.stop();
@@ -572,5 +668,239 @@ TEST(ClientBaseTest, RunLoop_BothOnSameRunLoop)
     EXPECT_EQ(response, request);
 
     client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Concurrent calls from the same client (tests m_sendMutex)
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, ConcurrentCallsFromSameClient)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    constexpr int kThreads = 2;
+    constexpr int kCallsPerThread = 4;
+    std::vector<std::thread> threads;
+    std::atomic<int> successCount{0};
+    std::atomic<int> failCount{0};
+
+    for (int t = 0; t < kThreads; ++t)
+    {
+        threads.emplace_back([&, t] {
+            for (int c = 0; c < kCallsPerThread; ++c)
+            {
+                uint32_t tag = static_cast<uint32_t>(t * kCallsPerThread + c);
+                std::vector<uint8_t> request(4);
+                std::memcpy(request.data(), &tag, sizeof(tag));
+
+                std::vector<uint8_t> response;
+                int rc = client.call(1, 1, request, &response, 10000);
+
+                if (rc == IPC_SUCCESS && response == request)
+                    successCount.fetch_add(1);
+                else
+                    failCount.fetch_add(1);
+            }
+        });
+    }
+
+    for (auto &th : threads)
+        th.join();
+
+    EXPECT_EQ(successCount.load(), kThreads * kCallsPerThread);
+    EXPECT_EQ(failCount.load(), 0);
+
+    client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Connect to a nonexistent service returns false
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, ConnectToNonexistentService)
+{
+    ClientBase client("nonexistent_service_xyz");
+    EXPECT_FALSE(client.connect());
+    EXPECT_FALSE(client.isConnected());
+}
+
+TEST(ClientBaseTest, ConnectTwiceFails)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    EXPECT_FALSE(client.connect());
+    EXPECT_TRUE(client.isConnected());
+
+    client.disconnect();
+    svc.stop();
+}
+
+TEST(ClientBaseTest, ReconnectAfterServerDisconnect)
+{
+    {
+        EchoService svc(SVC_NAME);
+        ASSERT_TRUE(svc.start());
+
+        ClientBase client(SVC_NAME);
+        ASSERT_TRUE(client.connect());
+        settle();
+
+        svc.stop();
+        for (int i = 0; i < 100 && client.isConnected(); ++i)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        EchoService svc2(SVC_NAME);
+        ASSERT_TRUE(svc2.start());
+        EXPECT_TRUE(client.connect());
+
+        client.disconnect();
+        svc2.stop();
+    }
+}
+
+TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRLConn2");
+
+    ClientBase client(SVC_NAME, &loop);
+    ASSERT_TRUE(client.connect());
+    EXPECT_FALSE(client.connect());
+    EXPECT_TRUE(client.isConnected());
+
+    RunLoopGuard guard(loop);
+    client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Double disconnect — no crash or deadlock
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, DoubleDisconnect)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    client.disconnect();
+    EXPECT_FALSE(client.isConnected());
+
+    // Second disconnect should be harmless.
+    client.disconnect();
+    EXPECT_FALSE(client.isConnected());
+
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Server stop during call — call returns error, does not hang
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, ServerStopDuringCall)
+{
+    SilentService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    int callResult = IPC_SUCCESS;
+    std::thread callThread([&] {
+        const std::vector<uint8_t> request = {1};
+        std::vector<uint8_t> response;
+        callResult = client.call(1, 1, request, &response, 5000);
+    });
+
+    // Give the call time to register and block in onRequest.
+    settle();
+
+    // Stop the server in a background thread (stop() will block until
+    // the receiver thread's onRequest returns).
+    std::thread stopThread([&] {
+        svc.unblock(); // let onRequest finish so stop() can join
+        svc.stop();
+    });
+
+    callThread.join();
+    stopThread.join();
+
+    EXPECT_TRUE(callResult == IPC_SUCCESS || callResult == IPC_ERR_DISCONNECTED ||
+                callResult == IPC_ERR_TIMEOUT)
+        << "callResult = " << callResult;
+
+    client.disconnect();
+}
+
+TEST(ClientBaseTest, ConcurrentDisconnectDuringCalls)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> disconnectedCount{0};
+    std::atomic<int> successCount{0};
+    std::atomic<int> badRcCount{0};
+    std::atomic<int> badResponseCount{0};
+
+    std::thread caller([&] {
+        const std::vector<uint8_t> request = {'r', 'a', 'c', 'e'};
+        while (!stop.load())
+        {
+            std::vector<uint8_t> response;
+            int rc = client.call(1, 1, request, &response, 200);
+            if (rc == IPC_SUCCESS)
+            {
+                if (response != request)
+                {
+                    badResponseCount.fetch_add(1);
+                }
+                successCount.fetch_add(1);
+            }
+            else
+            {
+                if (rc != IPC_ERR_DISCONNECTED)
+                {
+                    badRcCount.fetch_add(1);
+                }
+                disconnectedCount.fetch_add(1);
+                break;
+            }
+        }
+    });
+
+    settle();
+    client.disconnect();
+    stop.store(true);
+    caller.join();
+
+    EXPECT_GE(successCount.load() + disconnectedCount.load(), 1);
+    EXPECT_GE(disconnectedCount.load(), 1);
+    EXPECT_EQ(badRcCount.load(), 0);
+    EXPECT_EQ(badResponseCount.load(), 0);
+
     svc.stop();
 }

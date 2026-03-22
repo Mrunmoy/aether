@@ -20,6 +20,11 @@ namespace ms::ipc
 
     bool ServiceBase::start()
     {
+        if (m_running.load(std::memory_order_acquire))
+        {
+            return false; // already started
+        }
+
         m_listenFd = platform::serverSocket(m_serviceName.c_str());
         if (m_listenFd < 0)
         {
@@ -80,7 +85,9 @@ namespace ms::ipc
         }
         else
         {
-            // Phase 1: Unblock accept thread.
+            // Phase 1: Unblock accept thread. shutdown() alone may not
+            // reliably unblock accept4() on all socket types, so close the
+            // fd as well — this guarantees accept4() returns immediately.
             if (m_listenFd >= 0)
             {
                 shutdown(m_listenFd, SHUT_RDWR);
@@ -129,14 +136,7 @@ namespace ms::ipc
             }
 
             auto client = std::make_unique<ClientConn>();
-            client->conn = conn;
-
-            // Zero out local so it doesn't appear to own the fds.
-            conn.socketFd = -1;
-            conn.shmFd = -1;
-            conn.shmBase = nullptr;
-            conn.txRing = nullptr;
-            conn.rxRing = nullptr;
+            client->conn = std::move(conn);
 
             client->thread = std::thread([this, ptr = client.get()] { receiverLoop(ptr); });
 
@@ -156,14 +156,7 @@ namespace ms::ipc
         }
 
         auto client = std::make_unique<ClientConn>();
-        client->conn = conn;
-
-        // Zero out local so it doesn't appear to own the fds.
-        conn.socketFd = -1;
-        conn.shmFd = -1;
-        conn.shmBase = nullptr;
-        conn.txRing = nullptr;
-        conn.rxRing = nullptr;
+        client->conn = std::move(conn);
 
         ClientConn *ptr = client.get();
         m_loop->addSource(ptr->conn.socketFd, [this, ptr] { onClientReady(ptr); });
@@ -198,7 +191,7 @@ namespace ms::ipc
                 break;
             }
 
-            if (!(header.flags & FRAME_REQUEST))
+            if (header.version != kProtocolVersion || !(header.flags & FRAME_REQUEST))
             {
                 continue;
             }
@@ -217,11 +210,21 @@ namespace ms::ipc
             response.payloadBytes = static_cast<uint32_t>(responsePayload.size());
             response.aux = static_cast<uint32_t>(status);
 
+            bool sendFailed = false;
             {
                 std::lock_guard<std::mutex> slock(client->sendMutex);
-                writeFrame(client->conn.txRing, response, responsePayload.data(),
-                           response.payloadBytes);
-                platform::sendSignal(client->conn.socketFd);
+                int rc = writeFrame(client->conn.txRing, response, responsePayload.data(),
+                                    response.payloadBytes);
+                if (rc != IPC_SUCCESS || platform::sendSignal(client->conn.socketFd) != 0)
+                {
+                    sendFailed = true;
+                }
+            }
+
+            if (sendFailed)
+            {
+                removeClient(client);
+                return;
             }
         }
     }
@@ -250,6 +253,7 @@ namespace ms::ipc
 
     void ServiceBase::receiverLoop(ClientConn *client)
     {
+        bool disconnectClient = false;
         while (m_running.load(std::memory_order_acquire))
         {
             if (platform::recvSignal(client->conn.socketFd) != 0)
@@ -276,7 +280,7 @@ namespace ms::ipc
                     break;
                 }
 
-                if (!(header.flags & FRAME_REQUEST))
+                if (header.version != kProtocolVersion || !(header.flags & FRAME_REQUEST))
                 {
                     continue;
                 }
@@ -298,10 +302,28 @@ namespace ms::ipc
                 // Serialize with sendNotify which also writes to txRing.
                 {
                     std::lock_guard<std::mutex> slock(client->sendMutex);
-                    writeFrame(client->conn.txRing, response, responsePayload.data(),
-                               response.payloadBytes);
-                    platform::sendSignal(client->conn.socketFd);
+                    int rc = writeFrame(client->conn.txRing, response, responsePayload.data(),
+                                        response.payloadBytes);
+                    if (rc != IPC_SUCCESS || platform::sendSignal(client->conn.socketFd) != 0)
+                    {
+                        client->dead.store(true, std::memory_order_release);
+                        if (client->conn.socketFd >= 0)
+                        {
+                            shutdown(client->conn.socketFd, SHUT_RDWR);
+                        }
+                        disconnectClient = true;
+                    }
                 }
+
+                if (disconnectClient)
+                {
+                    break;
+                }
+            }
+
+            if (disconnectClient)
+            {
+                break;
             }
         }
     }
@@ -311,6 +333,15 @@ namespace ms::ipc
     int ServiceBase::sendNotify(uint32_t serviceId, uint32_t messageId, const uint8_t *payload,
                                 uint32_t payloadBytes)
     {
+        // Fast path: nothing to do if no clients are connected.
+        {
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            if (m_clients.empty())
+            {
+                return IPC_SUCCESS;
+            }
+        }
+
         FrameHeader header{};
         header.version = kProtocolVersion;
         header.flags = FRAME_NOTIFY;
@@ -345,13 +376,22 @@ namespace ms::ipc
                     int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
                     if (rc != IPC_SUCCESS)
                     {
-                        result = rc;
+                        // Ring full means this client is not consuming data.
+                        // Mark it dead and shut down its socket so receiverLoop
+                        // unblocks from recvSignal and the thread can be joined.
+                        c->dead.store(true, std::memory_order_release);
+                        if (c->conn.socketFd >= 0)
+                            shutdown(c->conn.socketFd, SHUT_RDWR);
+                        if (result == IPC_SUCCESS)
+                            result = IPC_ERR_DISCONNECTED;
                         continue;
                     }
 
                     if (platform::sendSignal(c->conn.socketFd) != 0)
                     {
-                        result = IPC_ERR_DISCONNECTED;
+                        c->dead.store(true, std::memory_order_release);
+                        if (result == IPC_SUCCESS)
+                            result = IPC_ERR_DISCONNECTED;
                         continue;
                     }
                 }

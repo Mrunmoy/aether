@@ -211,6 +211,82 @@ class TestParser:
                 };
             """)
 
+    def test_duplicate_service_block_rejected(self):
+        """A service may only have one service block."""
+        with pytest.raises(SyntaxError, match="duplicate service block"):
+            parse("""
+                service Foo { [method=1] int A([in] uint32 x); };
+                service Foo { [method=2] int B([in] uint32 y); };
+            """)
+
+    def test_duplicate_notifications_block_rejected(self):
+        """A service may only have one notifications block."""
+        with pytest.raises(SyntaxError, match="duplicate notifications block"):
+            parse("""
+                notifications Foo { [notify=1] void A([in] uint32 x); };
+                notifications Foo { [notify=2] void B([in] uint32 y); };
+            """)
+
+    def test_duplicate_method_id_rejected(self):
+        """Duplicate method IDs are rejected during parsing."""
+        with pytest.raises(SyntaxError, match="duplicate method id"):
+            parse("""
+                service Foo {
+                    [method=1] int A([in] uint32 x);
+                    [method=1] int B([in] uint32 y);
+                };
+            """)
+
+    def test_duplicate_method_name_rejected(self):
+        """Duplicate method names are rejected during parsing."""
+        with pytest.raises(SyntaxError, match="duplicate method name"):
+            parse("""
+                service Foo {
+                    [method=1] int A([in] uint32 x);
+                    [method=2] int A([in] uint32 y);
+                };
+            """)
+
+    def test_duplicate_notify_id_rejected(self):
+        """Duplicate notification IDs are rejected during parsing."""
+        with pytest.raises(SyntaxError, match="duplicate notification id"):
+            parse("""
+                notifications Foo {
+                    [notify=1] void A([in] uint32 x);
+                    [notify=1] void B([in] uint32 y);
+                };
+            """)
+
+    def test_duplicate_notify_name_rejected(self):
+        """Duplicate notification names are rejected during parsing."""
+        with pytest.raises(SyntaxError, match="duplicate notification name"):
+            parse("""
+                notifications Foo {
+                    [notify=1] void A([in] uint32 x);
+                    [notify=2] void A([in] uint32 y);
+                };
+            """)
+
+    def test_method_attribute_trailing_garbage_rejected(self):
+        """Malformed [method=...] attributes with trailing tokens are rejected."""
+        with pytest.raises(SyntaxError, match=r"expected \[method=N\]"):
+            parse("""
+                service Foo {
+                    [method=1 junk]
+                    int A([in] uint32 x);
+                };
+            """)
+
+    def test_notify_attribute_trailing_garbage_rejected(self):
+        """Malformed [notify=...] attributes with trailing tokens are rejected."""
+        with pytest.raises(SyntaxError, match=r"expected \[notify=N\]"):
+            parse("""
+                notifications Foo {
+                    [notify=1 junk]
+                    void A([in] uint32 x);
+                };
+            """)
+
     # ── Enum / struct parsing ────────────────────────────────────────
 
     def test_enum_basic(self):
@@ -353,6 +429,22 @@ class TestParser:
             parse("""
                 struct Empty {};
                 service Foo { [method=1] int Get([in] uint32 x); };
+            """)
+
+    def test_duplicate_enum_value_rejected(self):
+        """Enum members must have unique names."""
+        with pytest.raises(SyntaxError, match="duplicate enum value"):
+            parse("""
+                enum Foo { A = 0, A = 1, };
+                service Bar { [method=1] int Get([in] uint32 x); };
+            """)
+
+    def test_duplicate_struct_field_rejected(self):
+        """Struct fields must have unique names."""
+        with pytest.raises(SyntaxError, match="duplicate field name"):
+            parse("""
+                struct Point { uint32 x; uint32 x; };
+                service Foo { [method=1] int Get([in] uint32 y); };
             """)
 
     # ── Fixed-length array parsing ──────────────────────────────────
@@ -520,6 +612,16 @@ class TestParser:
         """)
         for p in idl.methods[0].params:
             assert p.array_size is None
+
+    def test_duplicate_param_name_rejected(self):
+        """Parameters within one method must have unique names."""
+        with pytest.raises(SyntaxError, match="duplicate parameter name"):
+            parse("""
+                service Foo {
+                    [method=1]
+                    int Transfer([in] uint32 src, [out] uint32 src);
+                };
+            """)
 
     def test_method_mixed_array_and_scalar_params(self):
         """Method with both array and scalar params parses correctly."""
