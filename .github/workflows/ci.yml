@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches: [main, fix/ipc-robustness-hardening]
+  pull_request:
+    branches: [main, fix/ipc-robustness-hardening]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DMS_IPC_BUILD_EXAMPLES=ON
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Unit & integration tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Codegen tests
+        run: |
+          build/examples/echo/codegen_server_tests
+          build/examples/echo/codegen_client_tests
+
+      - name: ipcgen pytest suite
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install 'pytest>=7'
+          python3 -m pytest tools/ipcgen/test/ -v

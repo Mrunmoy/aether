@@ -672,6 +672,7 @@ class TestTypesEmitter:
             };
         """)
         cpp = emit_client_cpp(idl)
+        assert "if (name == nullptr) return IPC_ERR_INVALID_ARGUMENT;" in cpp
         assert "char _name[65] = {};" in cpp
         assert "std::strncpy(_name, name, 64);" in cpp
         assert "std::memcpy(request.data(), _name," in cpp
@@ -699,6 +700,7 @@ class TestTypesEmitter:
         """)
         cpp = emit_server_cpp(idl)
         assert "const char *name" in cpp
+        assert "if (name == nullptr) return IPC_ERR_INVALID_ARGUMENT;" in cpp
         assert "char _name[33] = {};" in cpp
         assert "std::strncpy(_name, name, 32);" in cpp
 

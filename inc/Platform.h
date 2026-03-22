@@ -29,13 +29,20 @@ namespace ms::ipc::platform
     // Returns bytes received (> 0) on success, -1 on failure.
     int recvFd(int sockFd, int *receivedFd, void *data, uint32_t dataLen);
 
-    // Send a single wakeup byte.
-    // Returns 0 on success, -1 on failure.
+    // Send a single wakeup byte (non-blocking).
+    // Returns 0 on success, or if the peer's receive buffer already holds a
+    // pending wakeup (EAGAIN/EWOULDBLOCK — both receiver paths drain all
+    // available ring frames per wakeup, so no additional signal is needed).
+    // Returns -1 only on a genuine peer-gone error (EPIPE, ECONNRESET, ENOTCONN).
     int sendSignal(int sockFd);
 
     // Receive a single wakeup byte (blocks until available).
     // Returns 0 on success, -1 on failure.
     int recvSignal(int sockFd);
+
+    // Set a timeout on socket send operations (SO_SNDTIMEO only).
+    // Returns 0 on success, -1 on failure.
+    int setSocketTimeouts(int sockFd, uint32_t timeoutMs);
 
     // ── Shared Memory ───────────────────────────────────────────────
 
