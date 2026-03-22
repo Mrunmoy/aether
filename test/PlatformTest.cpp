@@ -1,13 +1,19 @@
 #include <gtest/gtest.h>
+#include "Connection.h"
+#include "FrameIO.h"
 #include "Platform.h"
 
+#include <cerrno>
 #include <chrono>
 #include <cstring>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
+#include <vector>
 
 using namespace ms::ipc::platform;
+using namespace ms::ipc;
 
 // Unique socket name per test to avoid collisions when tests run in parallel.
 // Uses the test name provided by gtest.
@@ -261,4 +267,75 @@ TEST(PlatformTest, SetSocketTimeouts)
 
     closeFd(fds[0]);
     closeFd(fds[1]);
+}
+
+TEST(PlatformTest, PendingWakeupDrainsQueuedFrameBurst)
+{
+    int srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+
+    Connection server;
+    std::thread acceptThread([&] { server = acceptConnection(srv); });
+    Connection client = connectToServer(SOCK_NAME);
+    ASSERT_TRUE(client.valid());
+    acceptThread.join();
+    ASSERT_TRUE(server.valid());
+
+    int bufSize = 1024;
+    ASSERT_EQ(setsockopt(client.socketFd, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize)), 0);
+    ASSERT_EQ(setsockopt(server.socketFd, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize)), 0);
+
+    uint8_t byte = 1;
+    int queuedSignals = 0;
+    for (; queuedSignals < 65536; ++queuedSignals)
+    {
+        ssize_t n = send(client.socketFd, &byte, 1, MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (n == 1)
+        {
+            continue;
+        }
+        ASSERT_TRUE(errno == EAGAIN || errno == EWOULDBLOCK);
+        break;
+    }
+    ASSERT_LT(queuedSignals, 65536) << "failed to reach a full wakeup queue";
+    ASSERT_GT(queuedSignals, 0) << "failed to saturate the wakeup socket";
+
+    constexpr uint32_t kBurstFrames = 2048;
+    for (uint32_t seq = 1; seq <= kBurstFrames; ++seq)
+    {
+        FrameHeader hdr{};
+        hdr.version = kProtocolVersion;
+        hdr.flags = FRAME_REQUEST;
+        hdr.serviceId = 1;
+        hdr.messageId = 1;
+        hdr.seq = seq;
+
+        ASSERT_EQ(writeFrame(client.txRing, hdr, nullptr, 0), IPC_SUCCESS);
+        ASSERT_EQ(sendSignal(client.socketFd), 0);
+    }
+
+    ASSERT_EQ(recvSignal(server.socketFd), 0);
+
+    uint32_t received = 0;
+    while (true)
+    {
+        FrameHeader hdr{};
+        std::vector<uint8_t> payload;
+        if (readFrameAlloc(server.rxRing, &hdr, &payload) != IPC_SUCCESS)
+        {
+            break;
+        }
+
+        ++received;
+        EXPECT_EQ(hdr.version, kProtocolVersion);
+        EXPECT_EQ(hdr.flags, FRAME_REQUEST);
+        EXPECT_EQ(hdr.seq, received);
+        EXPECT_TRUE(payload.empty());
+    }
+
+    EXPECT_EQ(received, kBurstFrames);
+
+    client.close();
+    server.close();
+    closeFd(srv);
 }

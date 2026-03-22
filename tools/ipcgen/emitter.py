@@ -307,6 +307,10 @@ def emit_server_cpp(idl: IdlFile) -> str:
         w(f"int {name}::notify{n.name}({', '.join(parts)})")
         w("{")
 
+        for p in n.params:
+            if p.type_name == "string":
+                w(f"    if ({p.name} == nullptr) return IPC_ERR_INVALID_ARGUMENT;")
+
         if n.params:
             size_parts = []
             for p in n.params:
@@ -438,6 +442,10 @@ def emit_client_cpp(idl: IdlFile) -> str:
         w("")
         w(f"int {name}::{m.name}({', '.join(parts)})")
         w("{")
+
+        for p in in_params:
+            if p.type_name == "string":
+                w(f"    if ({p.name} == nullptr) return IPC_ERR_INVALID_ARGUMENT;")
 
         # Marshal [in] params
         if in_params:
