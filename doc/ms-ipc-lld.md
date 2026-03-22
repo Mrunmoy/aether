@@ -544,7 +544,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 | `acceptClient()` | `accept4(SOCK_CLOEXEC)` |
 | `sendFd()` | `sendmsg` with `SCM_RIGHTS` control message, `MSG_NOSIGNAL` |
 | `recvFd()` | `recvmsg` with `SCM_RIGHTS` control message (closes extra fds) |
-| `sendSignal()` | `send(sockFd, &byte, 1, MSG_NOSIGNAL)` |
+| `sendSignal()` | `send(sockFd, &byte, 1, MSG_NOSIGNAL \| MSG_DONTWAIT)` |
 | `recvSignal()` | `recv(sockFd, &byte, 1, 0)` (blocks) |
 | `setSocketTimeouts()` | `setsockopt(SO_SNDTIMEO)` |
 | `shmCreate()` | `memfd_create("ipc_shm", MFD_CLOEXEC)`, `ftruncate` |
