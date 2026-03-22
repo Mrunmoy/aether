@@ -1,4 +1,4 @@
-# ms-ipc
+# aether
 
 A lightweight IPC framework for Linux that lets you define service interfaces
 in a simple IDL and generates type-safe C++ server and client code. Built on
@@ -13,21 +13,21 @@ configuration, and real-time events. Existing solutions were either too
 heavyweight (D-Bus, gRPC) or too manual (custom socket protocols with
 hand-rolled serialization).
 
-ms-ipc is an attempt to hit the sweet spot: a minimal framework that handles
+aether is an attempt to hit the sweet spot: a minimal framework that handles
 the boring parts (connection setup, shared memory, framing, marshaling) while
 staying small, fast, and predictable enough for embedded and latency-sensitive
 use cases. The IDL code generator was added to eliminate the most error-prone
 part of IPC development — manually keeping server and client message formats
 in sync.
 
-## Why ms-ipc
+## Why aether
 
 Communicating between processes on Linux usually means choosing between
 heavyweight frameworks (D-Bus, gRPC) or hand-rolling sockets with custom
 serialization. Both paths lead to boilerplate, fragile byte packing, and
 wasted time debugging wire format mismatches.
 
-ms-ipc solves this by letting you describe your service interface once in a
+aether solves this by letting you describe your service interface once in a
 simple IDL file, then generating all the marshaling and dispatch code for
 you. On the server side, you implement virtual handler methods. On the client
 side, you call typed C++ methods. The framework handles connection management,
@@ -66,7 +66,7 @@ notifications TemperatureSensor
 **Server** — implement pure virtual handlers:
 
 ```cpp
-class MyTempSensor : public ms::ipc::TemperatureSensor
+class MyTempSensor : public aether::ipc::TemperatureSensor
 {
 protected:
     int handleGetTemperature(float *celsius) override
@@ -90,7 +90,7 @@ service.start();
 **Client** — call typed methods:
 
 ```cpp
-ms::ipc::TemperatureSensor client("temp_sensor");
+aether::ipc::TemperatureSensor client("temp_sensor");
 client.connect();
 
 float temp = 0;
@@ -114,8 +114,8 @@ No message IDs, no serialization, no raw byte buffers.
 ### Clone and build
 
 ```bash
-git clone --recursive https://github.com/Mrunmoy/ms-ipc
-cd ms-ipc
+git clone --recursive https://github.com/Mrunmoy/aether
+cd aether
 python3 build.py -t    # build + run all tests
 ```
 
@@ -141,12 +141,12 @@ This generates five files:
 # Server
 add_executable(my_server my_server.cpp gen/server/YourService.cpp)
 target_include_directories(my_server PRIVATE gen/server/)
-target_link_libraries(my_server ms-ipc)
+target_link_libraries(my_server aether)
 
 # Client
 add_executable(my_client my_client.cpp gen/client/YourService.cpp)
 target_include_directories(my_client PRIVATE gen/client/)
-target_link_libraries(my_client ms-ipc)
+target_link_libraries(my_client aether)
 ```
 
 ## IDL types
@@ -190,7 +190,7 @@ struct DeviceInfo
 | **Serialization** | Manual | Automatic |
 | **Best for** | Custom protocols, prototyping | Production services |
 
-Both modes support optional [ms-runloop](https://github.com/Mrunmoy/ms-runloop)
+Both modes support optional [vortex](https://github.com/Mrunmoy/Vortex)
 integration for single-threaded event-driven operation.
 
 ## Key properties
@@ -217,8 +217,8 @@ See [example/README.md](example/README.md) for self-contained, copy-paste exampl
 | Document | Contents |
 |----------|----------|
 | [example/README.md](example/README.md) | Usage examples and tutorial |
-| [doc/ms-ipc-hld.md](doc/ms-ipc-hld.md) | High-level design — architecture and components |
-| [doc/ms-ipc-lld.md](doc/ms-ipc-lld.md) | Low-level design — APIs, wire protocol, threading |
+| [doc/aether-hld.md](doc/aether-hld.md) | High-level design — architecture and components |
+| [doc/aether-lld.md](doc/aether-lld.md) | Low-level design — APIs, wire protocol, threading |
 | [doc/ipcgen-hld.md](doc/ipcgen-hld.md) | High-level design — code generator |
 | [doc/ipcgen-lld.md](doc/ipcgen-lld.md) | Low-level design — module APIs, code generation |
 
@@ -252,8 +252,8 @@ python3 build.py -t    # runs everything
 
 | Dependency | Purpose |
 |-----------|---------|
-| [ms-ringbuffer](https://github.com/Mrunmoy/ms-ringbuffer) | Lock-free SPSC ring buffers (submodule) |
-| [ms-runloop](https://github.com/Mrunmoy/ms-runloop) | Event loop for fd watching (submodule) |
+| [ouroboros](https://github.com/Mrunmoy/Ouroboros) | Lock-free SPSC ring buffers (submodule) |
+| [vortex](https://github.com/Mrunmoy/Vortex) | Event loop for fd watching (submodule) |
 | [Google Test](https://github.com/google/googletest) v1.14.0 | C++ testing (submodule, tests only) |
 
 ## License

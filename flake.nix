@@ -1,5 +1,5 @@
 {
-  description = "ms-ipc — lightweight IPC framework with shared-memory transport";
+  description = "aether — lightweight IPC framework with shared-memory transport";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";

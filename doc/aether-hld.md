@@ -1,8 +1,8 @@
-# ms-ipc High-Level Design
+# aether High-Level Design
 
 ## 1. Purpose
 
-ms-ipc is an inter-process communication framework for Linux that provides
+aether is an inter-process communication framework for Linux that provides
 type-safe RPC and notification services between processes on the same machine.
 It is designed for embedded and systems-level applications where low latency,
 predictable performance, and a small footprint are required.
@@ -26,7 +26,7 @@ graph TD
         GC["DeviceMonitor : ClientBase"]
     end
 
-    subgraph "ms-ipc Runtime"
+    subgraph "aether Runtime"
         SB["ServiceBase / ClientBase"]
         FIO["FrameIO / Connection"]
         PLAT["Platform (Linux)"]
@@ -45,7 +45,7 @@ graph TD
     PLAT --> K
 ```
 
-ms-ipc sits between user application code and the Linux kernel. Users interact
+aether sits between user application code and the Linux kernel. Users interact
 through the Service layer (directly or via generated code) and never touch
 sockets, shared memory, or serialization.
 
@@ -240,8 +240,8 @@ codes through the `call()` return value.
 
 | Component | Purpose |
 |-----------|---------|
-| ms-ringbuffer | SPSC ring buffer for the data plane |
-| ms-runloop | Event loop abstraction (optional) |
+| ouroboros | SPSC ring buffer for the data plane |
+| vortex | Event loop abstraction (optional) |
 | Linux kernel | UDS, memfd_create, mmap, SCM_RIGHTS |
 | C++17 | Language standard |
 

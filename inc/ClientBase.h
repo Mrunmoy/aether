@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ms::ipc
+namespace aether::ipc
 {
 
     // Client-side base class for IPC services.
@@ -90,4 +90,4 @@ namespace ms::ipc
         std::unordered_map<uint32_t, std::shared_ptr<PendingCall>> m_pending;
     };
 
-} // namespace ms::ipc
+} // namespace aether::ipc

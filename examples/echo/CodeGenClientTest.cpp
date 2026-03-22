@@ -10,7 +10,7 @@
 #include <mutex>
 #include <thread>
 
-using namespace ms::ipc;
+using namespace aether::ipc;
 
 #define SVC_NAME (::testing::UnitTest::GetInstance()->current_test_info()->name())
 
