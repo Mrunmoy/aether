@@ -10,13 +10,14 @@ project(aether
 add_subdirectory(deps/ms-ringbuffer)
 add_subdirectory(deps/ms-runloop)
 
-# ── Library ──────────────────────────────────────────────────────────
-add_library(aether
+# ── Static library ───────────────────────────────────────────────────
+add_library(aether STATIC
     src/PlatformLinux.cpp
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
     src/ClientBase.cpp
+    src/CApi.cpp
 )
 target_include_directories(aether PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
@@ -24,6 +25,70 @@ target_include_directories(aether PUBLIC
 )
 target_compile_features(aether PUBLIC cxx_std_17)
 target_link_libraries(aether PUBLIC ms-ringbuffer ms-runloop PRIVATE pthread)
+set_target_properties(aether PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# ── Shared library ───────────────────────────────────────────────────
+add_library(aether_shared SHARED
+    src/PlatformLinux.cpp
+    src/Connection.cpp
+    src/FrameIO.cpp
+    src/ServiceBase.cpp
+    src/ClientBase.cpp
+    src/CApi.cpp
+)
+target_include_directories(aether_shared PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
+    $<INSTALL_INTERFACE:include>
+)
+target_compile_features(aether_shared PUBLIC cxx_std_17)
+target_link_libraries(aether_shared PRIVATE ms-ringbuffer ms-runloop pthread)
+set_target_properties(aether_shared PROPERTIES
+    OUTPUT_NAME aether
+    VERSION     ${PROJECT_VERSION}
+    SOVERSION   ${PROJECT_VERSION_MAJOR}
+)
+
+# ── Install ──────────────────────────────────────────────────────────
+include(GNUInstallDirs)
+
+install(TARGETS aether aether_shared
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+# Only install the C API header for SDK consumers
+install(FILES inc/aether_ipc.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# pkg-config
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/aether.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/aether.pc
+    @ONLY
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/aether.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+)
+
+# CMake package config (hand-written, no EXPORT needed)
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/aetherConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/aetherConfig.cmake
+    @ONLY
+)
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/aetherConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/aetherConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/aetherConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/aether
+)
 
 # ── Tests (only when building standalone) ────────────────────────────
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
