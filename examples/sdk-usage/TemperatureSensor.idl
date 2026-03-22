@@ -1,0 +1,16 @@
+// TemperatureSensor.idl — Example service for Aether SDK usage
+
+service TemperatureSensor
+{
+    [method=1]
+    int GetTemperature([out] float32 celsius);
+
+    [method=2]
+    int SetThreshold([in] float32 high, [in] float32 low);
+};
+
+notifications TemperatureSensor
+{
+    [notify=1]
+    void OverTemperature([in] float32 celsius);
+};
