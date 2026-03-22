@@ -114,7 +114,7 @@ No message IDs, no serialization, no raw byte buffers.
 ### Clone and build
 
 ```bash
-git clone --recursive https://github.com/Mrunmoy/aether
+git clone --recursive https://github.com/Mrunmoy/ms-ipc.git aether
 cd aether
 python3 build.py -t    # build + run all tests
 ```
@@ -125,29 +125,8 @@ python3 build.py -t    # build + run all tests
 cd tools && python3 -m ipcgen path/to/YourService.idl --outdir path/to/gen
 ```
 
-This generates five files:
-
-| File | Purpose |
-|------|---------|
-| `YourServiceTypes.h` | Enums and structs (shared between server and client) |
-| `server/YourService.h` | Server class with pure virtual handlers to implement |
-| `server/YourService.cpp` | Request dispatch and notification senders |
-| `client/YourService.h` | Client class with typed RPC methods |
-| `client/YourService.cpp` | Request marshaling and notification dispatch |
-
-### Link with CMake
-
-```cmake
-# Server
-add_executable(my_server my_server.cpp gen/server/YourService.cpp)
-target_include_directories(my_server PRIVATE gen/server/)
-target_link_libraries(my_server aether)
-
-# Client
-add_executable(my_client my_client.cpp gen/client/YourService.cpp)
-target_include_directories(my_client PRIVATE gen/client/)
-target_link_libraries(my_client aether)
-```
+Use `--backend c_api` when building against the SDK release (see
+[Way 1](#way-1-pre-built-sdk-recommended-for-most-users) below).
 
 ## IDL types
 
@@ -181,17 +160,122 @@ struct DeviceInfo
 };
 ```
 
-## Two ways to use
+## Integrating aether into your project
 
-| | Low-level API | Code generation |
-|---|---|---|
-| **How** | Subclass `ServiceBase` / `ClientBase` directly | Write IDL, run `ipcgen` |
-| **Payloads** | Raw `std::vector<uint8_t>` | Typed C++ parameters |
-| **Serialization** | Manual | Automatic |
-| **Best for** | Custom protocols, prototyping | Production services |
+There are two ways to use aether. Both give you the same developer
+experience — write an IDL, generate code, subclass, implement handlers.
 
-Both modes support optional [vortex](https://github.com/Mrunmoy/Vortex)
+---
+
+### Way 1: Pre-built SDK (recommended for most users)
+
+Download a pre-built release tarball. Your project only needs `aether_ipc.h`
+and `libaether.a` — no source tree, no submodules, no building aether yourself.
+The C API boundary means it works with **any C++17 toolchain** regardless of
+which compiler the SDK was built with.
+
+**Step by step:**
+
+```bash
+# 1. Download the SDK from GitHub Releases
+gh release download v1.1.0 -R Mrunmoy/ms-ipc -p '*.tar.gz'
+tar xzf aether-sdk-*-linux-x86_64.tar.gz
+
+# 2. Clone the repo just to get ipcgen (the code generator)
+git clone https://github.com/Mrunmoy/ms-ipc.git aether-tools
+# (You only need the tools/ipcgen/ directory)
+
+# 3. Write your service IDL
+cat > MyService.idl << 'EOF'
+service MyService
+{
+    [method=1]
+    int DoSomething([in] uint32 input, [out] uint32 result);
+};
+EOF
+
+# 4. Generate C++ code using the c_api backend
+cd aether-tools/tools && python3 -m ipcgen /path/to/MyService.idl \
+    --outdir /path/to/your-project/gen --backend c_api
+
+# 5. Implement your server/client (subclass the generated classes)
+# 6. Build against the SDK
+```
+
+**CMakeLists.txt:**
+```cmake
+set(AETHER_SDK "/path/to/aether-sdk" CACHE PATH "Aether SDK")
+
+add_executable(my_server my_server.cpp gen/server/MyService.cpp)
+target_include_directories(my_server PRIVATE gen gen/server ${AETHER_SDK}/include)
+target_link_libraries(my_server ${AETHER_SDK}/lib/libaether.a stdc++ pthread)
+target_compile_features(my_server PRIVATE cxx_std_17)
+```
+
+**SDK tarball contents:**
+```
+aether-sdk-1.1.0-linux-x86_64/
+├── include/aether_ipc.h       # Stable C API (only public header)
+├── lib/
+│   ├── libaether.a            # Fat static archive (all deps bundled)
+│   ├── libaether.so           # Shared library
+│   ├── pkgconfig/aether.pc    # pkg-config support
+│   └── cmake/aether/          # find_package() support
+└── example/                   # C echo example
+```
+
+> See [`examples/sdk-usage/`](examples/sdk-usage/) for a complete working
+> project with IDL, generated code, server, client, and CMakeLists.txt.
+
+---
+
+### Way 2: Git submodule (full source access)
+
+Add aether as a git submodule in your project. You build everything from
+source and link directly against the C++ CMake target. This gives you access
+to all internals — `ServiceBase`, `ClientBase`, RunLoop integration, etc.
+
+**Step by step:**
+
+```bash
+# 1. Add aether as a submodule
+git submodule add --recursive https://github.com/Mrunmoy/ms-ipc.git deps/aether
+
+# 2. Write your service IDL (same as Way 1)
+
+# 3. Generate C++ code using the default backend
+cd deps/aether/tools && python3 -m ipcgen /path/to/MyService.idl \
+    --outdir /path/to/your-project/gen
+```
+
+**CMakeLists.txt:**
+```cmake
+add_subdirectory(deps/aether)
+
+add_executable(my_server my_server.cpp gen/server/MyService.cpp)
+target_include_directories(my_server PRIVATE gen/server)
+target_link_libraries(my_server aether)
+```
+
+This backend generates classes that inherit from `ServiceBase`/`ClientBase`
+directly, with optional [Vortex](https://github.com/Mrunmoy/Vortex) RunLoop
 integration for single-threaded event-driven operation.
+
+> See [`examples/echo/`](examples/echo/) for a source-build codegen example.
+
+---
+
+### Which way should I choose?
+
+| | Way 1: SDK release | Way 2: Git submodule |
+|---|---|---|
+| **Setup** | Download tarball + clone ipcgen | `git submodule add` |
+| **Build aether?** | No — pre-built binary | Yes — built as part of your project |
+| **ABI safety** | ✅ Works with any C++17 toolchain | ❌ Must match compiler versions |
+| **RunLoop support** | Not available | ✅ Full Vortex integration |
+| **Generated code uses** | `aether_ipc.h` (C API handles) | `ServiceBase`/`ClientBase` (C++ internals) |
+| **User-facing API** | Virtual handlers + typed methods | Virtual handlers + typed methods |
+| **Best for** | Shipping products, cross-team use | Single-team projects built from one tree |
 
 ## Key properties
 
@@ -203,12 +287,15 @@ integration for single-threaded event-driven operation.
 
 ## Examples
 
-| Example | Description |
-|---------|-------------|
-| [`examples/sdk-usage/`](examples/sdk-usage/) | **Start here** — C++ project using the SDK release artifact (RAII wrappers, RPC, notifications) |
-| [`examples/c-echo/`](examples/c-echo/) | Minimal C echo server + client using the C API |
-| [`examples/echo/`](examples/echo/) | Low-level C++ (`ServiceBase`/`ClientBase`) + ipcgen codegen (source build) |
-| [`examples/exhaust-analyzer/`](examples/exhaust-analyzer/) | Qt-based codegen example with structs and notifications |
+> **Not sure where to start?** See [`examples/README.md`](examples/README.md)
+> for guidance on which example fits your use case.
+
+| Example | Audience | Description |
+|---------|----------|-------------|
+| [`examples/sdk-usage/`](examples/sdk-usage/) | SDK consumers | IDL → `ipcgen --backend c_api` → C++ server/client using the SDK release |
+| [`examples/echo/`](examples/echo/) | Source builders | IDL → `ipcgen` (default backend) → `ServiceBase`/`ClientBase` |
+| [`examples/c-echo/`](examples/c-echo/) | C developers | Raw C API echo server + client (no codegen) |
+| [`examples/exhaust-analyzer/`](examples/exhaust-analyzer/) | Source builders | Qt5 GUI with structs, enums, and notifications |
 
 ## Documentation
 
@@ -245,124 +332,6 @@ ctest --test-dir build --output-on-failure
 ```bash
 python3 build.py -t    # runs everything
 ```
-
-## C API
-
-Aether ships a stable C API (`aether_ipc.h`) with opaque handles for
-ABI-safe distribution. This is the public interface for SDK consumers.
-See [`examples/c-echo/`](examples/c-echo/) for a minimal C example, or
-[`examples/sdk-usage/`](examples/sdk-usage/) for a full C++ project
-using the SDK.
-
-## Using the SDK release
-
-Pre-built SDK tarballs are published as
-[GitHub Release](https://github.com/Mrunmoy/ms-ipc/releases) assets.
-The SDK exposes a stable **C API** (`aether_ipc.h`) so your C++ project
-isn't tied to a specific compiler or standard library version.
-
-### Download and extract
-
-```bash
-gh release download v1.1.0 -R Mrunmoy/ms-ipc -p '*.tar.gz'
-tar xzf aether-sdk-*-linux-x86_64.tar.gz
-```
-
-The tarball contains:
-
-```
-aether-sdk-1.1.0-linux-x86_64/
-├── include/
-│   └── aether_ipc.h          # C API header (only public header)
-├── lib/
-│   ├── libaether.a            # Fat static archive (all deps bundled)
-│   ├── libaether.so           # Shared library
-│   ├── pkgconfig/aether.pc
-│   └── cmake/aether/          # find_package() support
-└── example/                   # C echo server + client
-```
-
-### Write C++ code using the C API
-
-The recommended pattern is to wrap the C handles in RAII classes. Define your
-protocol in a shared header, then write typed C++ wrappers:
-
-```cpp
-#include "aether_ipc.h"
-#include <cstdio>
-#include <cstring>
-
-// RAII wrapper around aether_client_t
-class MyClient {
-public:
-    MyClient(const char *name) {
-        aether_client_create(name, nullptr, nullptr, &m_cli);
-    }
-    ~MyClient() { aether_client_destroy(m_cli); }
-
-    bool connect() { return aether_client_connect(m_cli) == AETHER_SUCCESS; }
-
-    // Typed RPC — hides raw byte marshaling
-    int getTemperature(float *celsius) {
-        uint8_t resp[64]{};
-        uint32_t resp_len = 0;
-        int rc = aether_client_call(m_cli, SVC_ID, METHOD_GET_TEMP,
-                                    nullptr, 0, resp, sizeof(resp),
-                                    &resp_len, 2000);
-        if (rc == AETHER_SUCCESS)
-            std::memcpy(celsius, resp, sizeof(float));
-        return rc;
-    }
-
-private:
-    aether_client_t m_cli = nullptr;
-};
-```
-
-> See [`examples/sdk-usage/`](examples/sdk-usage/) for a complete working
-> project with server, client, notifications, and a CMakeLists.txt you can
-> copy into your own project.
-
-### Link with CMake
-
-```cmake
-set(AETHER_SDK "/path/to/aether-sdk-1.1.0-linux-x86_64" CACHE PATH "Aether SDK")
-
-add_executable(my_app main.cpp)
-target_include_directories(my_app PRIVATE ${AETHER_SDK}/include)
-target_link_libraries(my_app ${AETHER_SDK}/lib/libaether.a stdc++ pthread)
-target_compile_features(my_app PRIVATE cxx_std_17)
-```
-
-### Link with pkg-config
-
-```bash
-export PKG_CONFIG_PATH=/path/to/aether-sdk-1.1.0-linux-x86_64/lib/pkgconfig
-
-g++ -std=c++17 -o my_app main.cpp $(pkg-config --cflags --libs aether) -lpthread
-```
-
-### Link manually
-
-```bash
-SDK=/path/to/aether-sdk-1.1.0-linux-x86_64
-
-g++ -std=c++17 -o my_app main.cpp \
-    -I$SDK/include $SDK/lib/libaether.a -lpthread
-```
-
-> **Note:** The fat static archive (`libaether.a`) bundles Ouroboros and
-> Vortex, so no additional library files are needed.
-
-### Why a C API for a C++ library?
-
-C++ libraries bake in a specific ABI — name mangling, vtable layout,
-`std::string`/`std::vector` internals — which change between compiler
-versions and standard library implementations. The C API with opaque handles
-gives you a stable binary interface: build the SDK once, use it from any
-C++17 toolchain. The trade-off is writing a thin RAII wrapper on the consumer
-side (as shown above), but you never have to rebuild the SDK when you upgrade
-your compiler.
 
 ## Dependencies
 
