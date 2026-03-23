@@ -280,7 +280,9 @@ integration for single-threaded event-driven operation.
 ## Key properties
 
 - **Shared memory transport** — data flows through lock-free ring buffers, not sockets
+- **Transport abstraction** — `ITransport` interface enables serial, USB, and network transports alongside SHM
 - **Embedded-friendly** — no `std::string`, no heap allocations in the transport layer
+- **aether-lite** — standalone C99 bare-metal runtime for ARM Cortex-M / AVR targets (same wire protocol)
 - **Fixed-size wire format** — all types are POD; structs use `memcpy` serialization
 - **RunLoop support** — optionally drive server and client from a shared event loop with zero internal threads
 - **Notifications** — server can broadcast to all connected clients; clients receive typed callbacks
@@ -327,7 +329,7 @@ ctest --test-dir build --output-on-failure
 
 ## Tests
 
-268 tests total: 101 C++ (Google Test) + 167 Python (pytest).
+268 tests total: 120 C++ (Google Test) + 167 Python (pytest).
 
 ```bash
 python3 build.py -t    # runs everything
@@ -340,6 +342,29 @@ python3 build.py -t    # runs everything
 | [ouroboros](https://github.com/Mrunmoy/Ouroboros) | Lock-free SPSC ring buffers (submodule) |
 | [vortex](https://github.com/Mrunmoy/Vortex) | Event loop for fd watching (submodule) |
 | [Google Test](https://github.com/google/googletest) v1.14.0 | C++ testing (submodule, tests only) |
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Generated code (ipcgen)                                 │
+│  ├── C++ server/client (ServiceBase / ClientBase)        │
+│  ├── C API (aether_ipc.h)                                │
+│  └── C bare-metal (planned: c_bare_metal backend)        │
+├──────────────────────────────────────────────────────────┤
+│  Runtime                                                 │
+│  ├── ServiceBase / ClientBase (SHM transport)            │
+│  ├── TransportClientBase (ITransport-based connections)  │
+│  └── aether-lite (C99 bare-metal, same wire protocol)    │
+├──────────────────────────────────────────────────────────┤
+│  Transport layer                                         │
+│  ├── ITransport interface                                │
+│  ├── SHM: Connection + ring buffers + UDS signals        │
+│  └── Serial: (planned) termios + CRC32 framing           │
+├──────────────────────────────────────────────────────────┤
+│  Platform: Linux abstractions (UDS, memfd, SCM_RIGHTS)   │
+└──────────────────────────────────────────────────────────┘
+```
 
 ## License
 
