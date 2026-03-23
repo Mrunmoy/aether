@@ -49,7 +49,7 @@ namespace aether::ipc::platform
 
     // ── Unix Domain Sockets ─────────────────────────────────────────
 
-    int serverSocket(const char *name)
+    Handle serverSocket(const char *name)
     {
         int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
         if (fd < 0)
@@ -75,7 +75,7 @@ namespace aether::ipc::platform
         return fd;
     }
 
-    int clientSocket(const char *name)
+    Handle clientSocket(const char *name)
     {
         int fd = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
         if (fd < 0)
@@ -95,9 +95,12 @@ namespace aether::ipc::platform
         return fd;
     }
 
-    int acceptClient(int listenFd) { return accept4(listenFd, nullptr, nullptr, SOCK_CLOEXEC); }
+    Handle acceptClient(Handle listenFd)
+    {
+        return accept4(static_cast<int>(listenFd), nullptr, nullptr, SOCK_CLOEXEC);
+    }
 
-    int sendFd(int sockFd, int fdToSend, const void *data, uint32_t dataLen)
+    int sendFd(Handle sockFd, Handle fdToSend, const void *data, uint32_t dataLen)
     {
         msghdr msg{};
 
@@ -119,13 +122,14 @@ namespace aether::ipc::platform
         cmsg->cmsg_level = SOL_SOCKET;
         cmsg->cmsg_type = SCM_RIGHTS;
         cmsg->cmsg_len = CMSG_LEN(sizeof(int));
-        std::memcpy(CMSG_DATA(cmsg), &fdToSend, sizeof(int));
+        int nativeFd = static_cast<int>(fdToSend);
+        std::memcpy(CMSG_DATA(cmsg), &nativeFd, sizeof(int));
 
-        ssize_t n = sendmsg(sockFd, &msg, MSG_NOSIGNAL);
+        ssize_t n = sendmsg(static_cast<int>(sockFd), &msg, MSG_NOSIGNAL);
         return (n > 0) ? 0 : -1;
     }
 
-    int recvFd(int sockFd, int *receivedFd, void *data, uint32_t dataLen)
+    int recvFd(Handle sockFd, Handle *receivedFd, void *data, uint32_t dataLen)
     {
         msghdr msg{};
 
@@ -144,7 +148,7 @@ namespace aether::ipc::platform
         msg.msg_control = control;
         msg.msg_controllen = sizeof(control);
 
-        ssize_t n = recvmsg(sockFd, &msg, 0);
+        ssize_t n = recvmsg(static_cast<int>(sockFd), &msg, 0);
         if (n <= 0)
         {
             return -1;
@@ -168,7 +172,7 @@ namespace aether::ipc::platform
             return -1;
         }
 
-        *receivedFd = -1;
+        *receivedFd = kInvalidHandle;
         bool firstFdTaken = false;
         for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg))
         {
@@ -180,7 +184,7 @@ namespace aether::ipc::platform
                 {
                     if (!firstFdTaken)
                     {
-                        *receivedFd = fds[i];
+                        *receivedFd = static_cast<Handle>(fds[i]);
                         firstFdTaken = true;
                     }
                     else
@@ -194,10 +198,10 @@ namespace aether::ipc::platform
         return static_cast<int>(n);
     }
 
-    int sendSignal(int sockFd)
+    int sendSignal(Handle sockFd)
     {
         uint8_t byte = 1;
-        ssize_t n = send(sockFd, &byte, 1, MSG_NOSIGNAL | MSG_DONTWAIT);
+        ssize_t n = send(static_cast<int>(sockFd), &byte, 1, MSG_NOSIGNAL | MSG_DONTWAIT);
         if (n == 1)
             return 0;
         // EAGAIN/EWOULDBLOCK: the peer's receive buffer already holds a pending
@@ -210,14 +214,14 @@ namespace aether::ipc::platform
         return -1;
     }
 
-    int recvSignal(int sockFd)
+    int recvSignal(Handle sockFd)
     {
         uint8_t byte = 0;
-        ssize_t n = recv(sockFd, &byte, 1, 0);
+        ssize_t n = recv(static_cast<int>(sockFd), &byte, 1, 0);
         return (n == 1) ? 0 : -1;
     }
 
-    int setSocketTimeouts(int sockFd, uint32_t timeoutMs)
+    int setSocketTimeouts(Handle sockFd, uint32_t timeoutMs)
     {
         timeval tv{};
         tv.tv_sec = static_cast<time_t>(timeoutMs / 1000);
@@ -226,16 +230,22 @@ namespace aether::ipc::platform
         // Only set SO_SNDTIMEO. The receiver threads intentionally block on
         // recv() and rely on shutdown() to unblock — SO_RCVTIMEO would cause
         // spurious disconnect detection (EAGAIN misread as peer close).
-        if (setsockopt(sockFd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0)
+        if (setsockopt(static_cast<int>(sockFd), SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv))
+            != 0)
         {
             return -1;
         }
         return 0;
     }
 
+    int shutdownConnection(Handle sockFd)
+    {
+        return (shutdown(static_cast<int>(sockFd), SHUT_RDWR) == 0) ? 0 : -1;
+    }
+
     // ── Shared Memory ───────────────────────────────────────────────
 
-    int shmCreate(uint32_t size)
+    Handle shmCreate(uint32_t size, const char * /*name*/)
     {
         int fd = static_cast<int>(syscall(SYS_memfd_create, "aether_shm", MFD_CLOEXEC));
         if (fd < 0)
@@ -254,11 +264,25 @@ namespace aether::ipc::platform
 
     // ── File Descriptor ─────────────────────────────────────────────
 
-    void closeFd(int fd)
+    void *mapSharedMemory(Handle shmFd, uint32_t size)
+    {
+        return mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                    static_cast<int>(shmFd), 0);
+    }
+
+    void unmapSharedMemory(void *base, uint32_t size)
+    {
+        if (base != nullptr && base != MAP_FAILED)
+        {
+            munmap(base, size);
+        }
+    }
+
+    void closeFd(Handle fd)
     {
         if (fd >= 0)
         {
-            close(fd);
+            close(static_cast<int>(fd));
         }
     }
 

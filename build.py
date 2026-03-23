@@ -102,7 +102,7 @@ def test():
     # C++ tests (core + codegen examples)
     run(["ctest", "--test-dir", BUILD_DIR, "--output-on-failure"], cwd=ROOT)
     # Python tests for the code generator
-    run([sys.executable, "-m", "pytest", "tools/ipcgen/test/", "-v"], cwd=ROOT)
+    run([sys.executable, "-m", "pytest", "-p", "no:randomly", "tools/ipcgen/test/", "-v"], cwd=ROOT)
 
 
 def package():

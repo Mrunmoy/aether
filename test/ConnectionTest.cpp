@@ -15,11 +15,11 @@ using namespace aether::ipc::platform;
 // Helper: run server accept in a background thread.
 struct AcceptThread
 {
-    int listenFd;
+    Handle listenFd;
     Connection conn;
     std::thread thread;
 
-    explicit AcceptThread(int fd) : listenFd(fd)
+    explicit AcceptThread(Handle fd) : listenFd(fd)
     {
         thread = std::thread([this] { conn = acceptConnection(listenFd); });
     }
@@ -39,8 +39,8 @@ struct AcceptThread
 
 TEST(ConnectionTest, BasicHandshake)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     AcceptThread acceptor(srv);
 
@@ -70,8 +70,8 @@ TEST(ConnectionTest, BasicHandshake)
 
 TEST(ConnectionTest, RingBufferDataFlow)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     AcceptThread acceptor(srv);
     Connection client = connectToServer(SVC_NAME);
@@ -111,22 +111,23 @@ TEST(ConnectionTest, RingBufferDataFlow)
 
 TEST(ConnectionTest, VersionMismatch)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     // Server accept thread
     Connection serverConn;
     std::thread serverThread([&] { serverConn = acceptConnection(srv); });
 
     // Manual client handshake with wrong version.
-    int clientFd = clientSocket(SVC_NAME);
-    ASSERT_GE(clientFd, 0);
+    Handle clientFd = clientSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(clientFd));
 
-    int shmFd = shmCreate(2 * sizeof(IpcRing));
-    ASSERT_GE(shmFd, 0);
+    Handle shmFd = shmCreate(2 * sizeof(IpcRing));
+    ASSERT_TRUE(isValidHandle(shmFd));
 
-    uint16_t badVersion = 999;
-    EXPECT_EQ(sendFd(clientFd, shmFd, &badVersion, sizeof(badVersion)), 0);
+    SharedMemoryHandshake hs{};
+    hs.version = 999;
+    EXPECT_EQ(sendFd(clientFd, shmFd, &hs, sizeof(hs)), 0);
 
     // Server should reject — recvSignal will fail because server closes socket.
     // Give server thread time to process.
@@ -145,8 +146,8 @@ TEST(ConnectionTest, VersionMismatch)
 
 TEST(ConnectionTest, MultipleClients)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     constexpr int N = 3;
     Connection serverConns[N];
@@ -189,8 +190,8 @@ TEST(ConnectionTest, MultipleClients)
 
 TEST(ConnectionTest, ConnectionClose)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     AcceptThread acceptor(srv);
     Connection client = connectToServer(SVC_NAME);
@@ -201,8 +202,8 @@ TEST(ConnectionTest, ConnectionClose)
     client.close();
 
     EXPECT_FALSE(client.valid());
-    EXPECT_EQ(client.socketFd, -1);
-    EXPECT_EQ(client.shmFd, -1);
+    EXPECT_EQ(client.socketFd, kInvalidHandle);
+    EXPECT_EQ(client.shmFd, kInvalidHandle);
     EXPECT_EQ(client.shmBase, nullptr);
     EXPECT_EQ(client.txRing, nullptr);
     EXPECT_EQ(client.rxRing, nullptr);
@@ -217,8 +218,8 @@ TEST(ConnectionTest, ConnectionClose)
 
 TEST(ConnectionTest, DoubleClose)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     AcceptThread acceptor(srv);
     Connection client = connectToServer(SVC_NAME);
@@ -232,8 +233,8 @@ TEST(ConnectionTest, DoubleClose)
     // Second close — must not crash or double-free.
     client.close();
     EXPECT_FALSE(client.valid());
-    EXPECT_EQ(client.socketFd, -1);
-    EXPECT_EQ(client.shmFd, -1);
+    EXPECT_EQ(client.socketFd, kInvalidHandle);
+    EXPECT_EQ(client.shmFd, kInvalidHandle);
     EXPECT_EQ(client.shmBase, nullptr);
     EXPECT_EQ(client.shmSize, 0u);
     EXPECT_EQ(client.txRing, nullptr);
@@ -249,8 +250,8 @@ TEST(ConnectionTest, DoubleClose)
 
 TEST(ConnectionTest, MoveAssignment)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     AcceptThread acceptor(srv);
     Connection client = connectToServer(SVC_NAME);
@@ -263,14 +264,14 @@ TEST(ConnectionTest, MoveAssignment)
 
     // Destination should be valid.
     EXPECT_TRUE(dest.valid());
-    EXPECT_GE(dest.socketFd, 0);
+    EXPECT_TRUE(isValidHandle(dest.socketFd));
     EXPECT_NE(dest.shmBase, nullptr);
     EXPECT_NE(dest.txRing, nullptr);
     EXPECT_NE(dest.rxRing, nullptr);
 
     // Source should be invalidated.
     EXPECT_FALSE(client.valid());
-    EXPECT_EQ(client.socketFd, -1);
+    EXPECT_EQ(client.socketFd, kInvalidHandle);
     EXPECT_EQ(client.shmBase, nullptr);
     EXPECT_EQ(client.txRing, nullptr);
     EXPECT_EQ(client.rxRing, nullptr);
@@ -286,8 +287,8 @@ TEST(ConnectionTest, MoveAssignment)
 
 TEST(ConnectionTest, MoveConstructor)
 {
-    int srv = serverSocket(SVC_NAME);
-    ASSERT_GE(srv, 0);
+    Handle srv = serverSocket(SVC_NAME);
+    ASSERT_TRUE(isValidHandle(srv));
 
     AcceptThread acceptor(srv);
     Connection client = connectToServer(SVC_NAME);
@@ -299,14 +300,14 @@ TEST(ConnectionTest, MoveConstructor)
 
     // Destination should be valid.
     EXPECT_TRUE(dest.valid());
-    EXPECT_GE(dest.socketFd, 0);
+    EXPECT_TRUE(isValidHandle(dest.socketFd));
     EXPECT_NE(dest.shmBase, nullptr);
     EXPECT_NE(dest.txRing, nullptr);
     EXPECT_NE(dest.rxRing, nullptr);
 
     // Source should be invalidated.
     EXPECT_FALSE(client.valid());
-    EXPECT_EQ(client.socketFd, -1);
+    EXPECT_EQ(client.socketFd, kInvalidHandle);
     EXPECT_EQ(client.shmBase, nullptr);
     EXPECT_EQ(client.txRing, nullptr);
     EXPECT_EQ(client.rxRing, nullptr);

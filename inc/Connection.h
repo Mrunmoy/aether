@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Platform.h"
 #include "Types.h"
 #include <cstdint>
 
@@ -7,7 +8,7 @@ namespace aether::ipc
 {
 
     // Represents one side of an established IPC connection.
-    // Holds the UDS socket (signaling), shared memory fd, mmap'd region,
+    // Holds the signaling handle, shared memory handle, mapped region,
     // and pointers to the two ring buffers (tx and rx).
     //
     // This is internal infrastructure — not exposed to users.
@@ -16,10 +17,10 @@ namespace aether::ipc
 
     struct Connection
     {
-        int socketFd = -1;       // UDS socket for signaling
-        int shmFd = -1;          // shared memory file descriptor
-        void *shmBase = nullptr; // mmap'd base pointer
-        uint32_t shmSize = 0;    // total shared memory region size
+        platform::Handle socketFd = platform::kInvalidHandle; // signaling handle
+        platform::Handle shmFd = platform::kInvalidHandle;     // shared memory handle
+        void *shmBase = nullptr;                               // mapped base pointer
+        uint32_t shmSize = 0;                                  // total shared memory region size
 
         IpcRing *txRing = nullptr; // ring buffer for sending
         IpcRing *rxRing = nullptr; // ring buffer for receiving
@@ -35,8 +36,8 @@ namespace aether::ipc
             : socketFd(other.socketFd), shmFd(other.shmFd), shmBase(other.shmBase),
               shmSize(other.shmSize), txRing(other.txRing), rxRing(other.rxRing)
         {
-            other.socketFd = -1;
-            other.shmFd = -1;
+            other.socketFd = platform::kInvalidHandle;
+            other.shmFd = platform::kInvalidHandle;
             other.shmBase = nullptr;
             other.shmSize = 0;
             other.txRing = nullptr;
@@ -54,8 +55,8 @@ namespace aether::ipc
                 shmSize = other.shmSize;
                 txRing = other.txRing;
                 rxRing = other.rxRing;
-                other.socketFd = -1;
-                other.shmFd = -1;
+                other.socketFd = platform::kInvalidHandle;
+                other.shmFd = platform::kInvalidHandle;
                 other.shmBase = nullptr;
                 other.shmSize = 0;
                 other.txRing = nullptr;
@@ -64,7 +65,7 @@ namespace aether::ipc
             return *this;
         }
 
-        bool valid() const { return socketFd >= 0 && shmBase != nullptr; }
+        bool valid() const { return platform::isValidHandle(socketFd) && shmBase != nullptr; }
 
         // Clean up: munmap, close fds, reset all fields.
         void close();
@@ -75,8 +76,8 @@ namespace aether::ipc
 
     // Server side: accept one client connection and perform handshake.
     // listenFd: listening socket from platform::serverSocket().
-    // Returns valid Connection on success, invalid (socketFd == -1) on failure.
-    Connection acceptConnection(int listenFd);
+    // Returns valid Connection on success, invalid (socketFd == kInvalidHandle) on failure.
+    Connection acceptConnection(platform::Handle listenFd);
 
     // Client side: connect to server and perform handshake.
     // name: service name (same name passed to platform::serverSocket).

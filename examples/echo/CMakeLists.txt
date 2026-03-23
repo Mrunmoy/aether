@@ -1,8 +1,8 @@
 add_executable(echo_server echo_server.cpp)
-target_link_libraries(echo_server PRIVATE aether pthread)
+target_link_libraries(echo_server PRIVATE aether Threads::Threads)
 
 add_executable(echo_client echo_client.cpp)
-target_link_libraries(echo_client PRIVATE aether pthread)
+target_link_libraries(echo_client PRIVATE aether Threads::Threads)
 
 # ── Code-gen examples (DeviceMonitor) ─────────────────────────────────
 # Generated from example/DeviceMonitor.idl via tools/ipcgen.py.
@@ -17,7 +17,7 @@ target_include_directories(codegen_server_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/gen/server
     ${CMAKE_CURRENT_SOURCE_DIR}/gen
 )
-target_link_libraries(codegen_server_tests PRIVATE aether GTest::gtest_main pthread)
+target_link_libraries(codegen_server_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 add_executable(codegen_client_tests
     CodeGenClientTest.cpp
@@ -27,7 +27,7 @@ target_include_directories(codegen_client_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/gen/client
     ${CMAKE_CURRENT_SOURCE_DIR}/gen
 )
-target_link_libraries(codegen_client_tests PRIVATE aether GTest::gtest_main pthread)
+target_link_libraries(codegen_client_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
 gtest_discover_tests(codegen_server_tests)

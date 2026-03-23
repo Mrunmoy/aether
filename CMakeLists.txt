@@ -9,12 +9,28 @@ project(aether
 # ── Dependencies ─────────────────────────────────────────────────────
 # Enable PIC globally so deps can also be linked into the shared library.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+find_package(Threads REQUIRED)
 add_subdirectory(deps/ouroboros)
 add_subdirectory(deps/vortex)
 
+if(WIN32)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
+if(WIN32)
+    set(AETHER_PKGCONFIG_THREADS_LIB "")
+else()
+    set(AETHER_PKGCONFIG_THREADS_LIB "-lpthread")
+endif()
+
+set(AETHER_PLATFORM_SOURCES src/PlatformLinux.cpp)
+if(WIN32)
+    set(AETHER_PLATFORM_SOURCES src/PlatformWindows.cpp)
+endif()
+
 # ── Static library ───────────────────────────────────────────────────
 add_library(aether STATIC
-    src/PlatformLinux.cpp
+    ${AETHER_PLATFORM_SOURCES}
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
@@ -26,11 +42,11 @@ target_include_directories(aether PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_features(aether PUBLIC cxx_std_17)
-target_link_libraries(aether PUBLIC ouroboros vortex PRIVATE pthread)
+target_link_libraries(aether PUBLIC ouroboros vortex Threads::Threads)
 
 # ── Shared library ───────────────────────────────────────────────────
 add_library(aether_shared SHARED
-    src/PlatformLinux.cpp
+    ${AETHER_PLATFORM_SOURCES}
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
@@ -42,7 +58,7 @@ target_include_directories(aether_shared PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_features(aether_shared PUBLIC cxx_std_17)
-target_link_libraries(aether_shared PRIVATE ouroboros vortex pthread)
+target_link_libraries(aether_shared PRIVATE ouroboros vortex Threads::Threads)
 set_target_properties(aether_shared PROPERTIES
     OUTPUT_NAME aether
     VERSION     ${PROJECT_VERSION}
@@ -55,6 +71,7 @@ include(GNUInstallDirs)
 install(TARGETS aether aether_shared
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 # Only install the C API header for SDK consumers

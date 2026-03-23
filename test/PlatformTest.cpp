@@ -25,17 +25,17 @@ using namespace aether::ipc;
 
 TEST(PlatformTest, ServerSocketCreation)
 {
-    int fd = serverSocket(SOCK_NAME);
+    Handle fd = serverSocket(SOCK_NAME);
     ASSERT_GE(fd, 0);
     closeFd(fd);
 }
 
 TEST(PlatformTest, ClientConnects)
 {
-    int srv = serverSocket(SOCK_NAME);
+    Handle srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
-    int cli = clientSocket(SOCK_NAME);
+    Handle cli = clientSocket(SOCK_NAME);
     ASSERT_GE(cli, 0);
 
     closeFd(cli);
@@ -44,13 +44,13 @@ TEST(PlatformTest, ClientConnects)
 
 TEST(PlatformTest, AcceptClient)
 {
-    int srv = serverSocket(SOCK_NAME);
+    Handle srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
-    int cli = clientSocket(SOCK_NAME);
+    Handle cli = clientSocket(SOCK_NAME);
     ASSERT_GE(cli, 0);
 
-    int accepted = acceptClient(srv);
+    Handle accepted = acceptClient(srv);
     ASSERT_GE(accepted, 0);
 
     closeFd(accepted);
@@ -60,13 +60,13 @@ TEST(PlatformTest, AcceptClient)
 
 TEST(PlatformTest, SendRecvSignal)
 {
-    int srv = serverSocket(SOCK_NAME);
+    Handle srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
-    int cli = clientSocket(SOCK_NAME);
+    Handle cli = clientSocket(SOCK_NAME);
     ASSERT_GE(cli, 0);
 
-    int accepted = acceptClient(srv);
+    Handle accepted = acceptClient(srv);
     ASSERT_GE(accepted, 0);
 
     // Client sends signal, server receives it.
@@ -84,17 +84,17 @@ TEST(PlatformTest, SendRecvSignal)
 
 TEST(PlatformTest, SendRecvFd)
 {
-    int srv = serverSocket(SOCK_NAME);
+    Handle srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
-    int cli = clientSocket(SOCK_NAME);
+    Handle cli = clientSocket(SOCK_NAME);
     ASSERT_GE(cli, 0);
 
-    int accepted = acceptClient(srv);
+    Handle accepted = acceptClient(srv);
     ASSERT_GE(accepted, 0);
 
     // Create a shared memory region and write a magic value.
-    int shmFd = shmCreate(4096);
+    Handle shmFd = shmCreate(4096);
     ASSERT_GE(shmFd, 0);
 
     void *writerMap = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
@@ -107,7 +107,7 @@ TEST(PlatformTest, SendRecvFd)
     EXPECT_EQ(sendFd(cli, shmFd, &version, sizeof(version)), 0);
 
     // Server receives the FD and ancillary data.
-    int receivedFd = -1;
+    Handle receivedFd = kInvalidHandle;
     uint16_t receivedVersion = 0;
     int n = recvFd(accepted, &receivedFd, &receivedVersion, sizeof(receivedVersion));
     EXPECT_GT(n, 0);
@@ -132,22 +132,22 @@ TEST(PlatformTest, SendRecvFd)
 
 TEST(PlatformTest, SendRecvFdNoAncillaryData)
 {
-    int srv = serverSocket(SOCK_NAME);
+    Handle srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
-    int cli = clientSocket(SOCK_NAME);
+    Handle cli = clientSocket(SOCK_NAME);
     ASSERT_GE(cli, 0);
 
-    int accepted = acceptClient(srv);
+    Handle accepted = acceptClient(srv);
     ASSERT_GE(accepted, 0);
 
     // Send FD with no ancillary data (dataLen = 0).
-    int shmFd = shmCreate(4096);
+    Handle shmFd = shmCreate(4096);
     ASSERT_GE(shmFd, 0);
 
     EXPECT_EQ(sendFd(cli, shmFd, nullptr, 0), 0);
 
-    int receivedFd = -1;
+    Handle receivedFd = kInvalidHandle;
     int n = recvFd(accepted, &receivedFd, nullptr, 0);
     EXPECT_GT(n, 0);
     EXPECT_GE(receivedFd, 0);
@@ -161,7 +161,7 @@ TEST(PlatformTest, SendRecvFdNoAncillaryData)
 
 TEST(PlatformTest, ConnectToNonexistent)
 {
-    int fd = clientSocket("no_such_service_exists");
+    Handle fd = clientSocket("no_such_service_exists");
     EXPECT_EQ(fd, -1);
 }
 
@@ -171,14 +171,14 @@ TEST(PlatformTest, ConnectToNonexistent)
 
 TEST(PlatformTest, ShmCreate)
 {
-    int fd = shmCreate(4096);
+    Handle fd = shmCreate(4096);
     ASSERT_GE(fd, 0);
     closeFd(fd);
 }
 
 TEST(PlatformTest, ShmWriteAndMmap)
 {
-    int fd = shmCreate(4096);
+    Handle fd = shmCreate(4096);
     ASSERT_GE(fd, 0);
 
     void *ptr = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -199,7 +199,7 @@ TEST(PlatformTest, ShmWriteAndMmap)
 TEST(PlatformTest, ShmZeroSize)
 {
     // memfd_create with ftruncate(0) should succeed — valid but empty region.
-    int fd = shmCreate(0);
+    Handle fd = shmCreate(0);
     ASSERT_GE(fd, 0);
     closeFd(fd);
 }
@@ -271,7 +271,7 @@ TEST(PlatformTest, SetSocketTimeouts)
 
 TEST(PlatformTest, PendingWakeupDrainsQueuedFrameBurst)
 {
-    int srv = serverSocket(SOCK_NAME);
+    Handle srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
     Connection server;

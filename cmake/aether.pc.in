@@ -5,5 +5,5 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 Name: aether
 Description: @PROJECT_DESCRIPTION@
 Version: @PROJECT_VERSION@
-Libs: -L${libdir} -laether -lpthread
+Libs: -L${libdir} -laether @AETHER_PKGCONFIG_THREADS_LIB@
 Cflags: -I${includedir}
