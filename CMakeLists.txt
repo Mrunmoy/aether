@@ -93,6 +93,12 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/aether
 )
 
+# ── Aether-Lite (C99 bare-metal embedded runtime) ────────────────
+option(AETHER_BUILD_LITE "Build aether-lite C99 embedded runtime" OFF)
+if(AETHER_BUILD_LITE)
+    add_subdirectory(aether-lite)
+endif()
+
 # ── Tests (only when building standalone) ────────────────────────────
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     enable_testing()
