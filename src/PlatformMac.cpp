@@ -80,7 +80,7 @@ namespace aether::ipc::platform
         }
     } // namespace
 
-    int serverSocket(const char *name)
+    Handle serverSocket(const char *name)
     {
         int fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (fd < 0)
@@ -112,7 +112,7 @@ namespace aether::ipc::platform
         return fd;
     }
 
-    int clientSocket(const char *name)
+    Handle clientSocket(const char *name)
     {
         int fd = socket(AF_UNIX, SOCK_STREAM, 0);
         if (fd < 0)
@@ -135,7 +135,7 @@ namespace aether::ipc::platform
         return fd;
     }
 
-    int acceptClient(int listenFd)
+    Handle acceptClient(Handle listenFd)
     {
         // Use poll() so accept() doesn't block indefinitely — on macOS,
         // shutdown(SHUT_RDWR) on a listening socket returns ENOTCONN and
@@ -168,7 +168,7 @@ namespace aether::ipc::platform
         return fd;
     }
 
-    int sendFd(int sockFd, int fdToSend, const void *data, uint32_t dataLen)
+    int sendFd(Handle sockFd, Handle fdToSend, const void *data, uint32_t dataLen)
     {
         msghdr msg{};
 
@@ -188,7 +188,8 @@ namespace aether::ipc::platform
         cmsg->cmsg_level = SOL_SOCKET;
         cmsg->cmsg_type = SCM_RIGHTS;
         cmsg->cmsg_len = CMSG_LEN(sizeof(int));
-        std::memcpy(CMSG_DATA(cmsg), &fdToSend, sizeof(int));
+        int nativeFd = static_cast<int>(fdToSend);
+        std::memcpy(CMSG_DATA(cmsg), &nativeFd, sizeof(int));
 
         ssize_t n;
         do {
@@ -197,7 +198,7 @@ namespace aether::ipc::platform
         return (n == static_cast<ssize_t>(iov.iov_len)) ? 0 : -1;
     }
 
-    int recvFd(int sockFd, int *receivedFd, void *data, uint32_t dataLen)
+    int recvFd(Handle sockFd, Handle *receivedFd, void *data, uint32_t dataLen)
     {
         msghdr msg{};
 
@@ -240,7 +241,7 @@ namespace aether::ipc::platform
             return -1;
         }
 
-        *receivedFd = -1;
+        *receivedFd = kInvalidHandle;
         bool firstFdTaken = false;
         for (cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg))
         {
@@ -266,7 +267,7 @@ namespace aether::ipc::platform
         return (firstFdTaken && n == static_cast<ssize_t>(iov.iov_len)) ? static_cast<int>(n) : -1;
     }
 
-    int sendSignal(int sockFd)
+    int sendSignal(Handle sockFd)
     {
         uint8_t byte = 1;
         ssize_t n;
@@ -284,7 +285,7 @@ namespace aether::ipc::platform
         return -1;
     }
 
-    int recvSignal(int sockFd)
+    int recvSignal(Handle sockFd)
     {
         uint8_t byte = 0;
         ssize_t n;
@@ -294,7 +295,7 @@ namespace aether::ipc::platform
         return (n == 1) ? 0 : -1;
     }
 
-    int setSocketTimeouts(int sockFd, uint32_t timeoutMs)
+    int setSocketTimeouts(Handle sockFd, uint32_t timeoutMs)
     {
         timeval tv{};
         tv.tv_sec = static_cast<time_t>(timeoutMs / 1000);
@@ -307,22 +308,27 @@ namespace aether::ipc::platform
         return 0;
     }
 
-    int shmCreate(uint32_t size)
+    int shutdownConnection(Handle sockFd)
+    {
+        return (shutdown(sockFd, SHUT_RDWR) == 0) ? 0 : -1;
+    }
+
+    Handle shmCreate(uint32_t size, const char * /*name*/)
     {
         static std::atomic<uint64_t> counter{0};
 
-        std::string name = kShmPrefix;
-        name += std::to_string(getpid());
-        name += "_";
-        name += std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
+        std::string shmName = kShmPrefix;
+        shmName += std::to_string(getpid());
+        shmName += "_";
+        shmName += std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
 
-        int fd = shm_open(name.c_str(), O_RDWR | O_CREAT | O_EXCL, 0600);
+        int fd = shm_open(shmName.c_str(), O_RDWR | O_CREAT | O_EXCL, 0600);
         if (fd < 0)
         {
             return -1;
         }
 
-        shm_unlink(name.c_str());
+        shm_unlink(shmName.c_str());
 
         if (!setCloExec(fd))
         {
@@ -339,7 +345,20 @@ namespace aether::ipc::platform
         return fd;
     }
 
-    void closeFd(int fd)
+    void *mapSharedMemory(Handle shmFd, uint32_t size)
+    {
+        return mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
+    }
+
+    void unmapSharedMemory(void *base, uint32_t size)
+    {
+        if (base != nullptr && base != MAP_FAILED)
+        {
+            munmap(base, size);
+        }
+    }
+
+    void closeFd(Handle fd)
     {
         if (fd < 0)
         {

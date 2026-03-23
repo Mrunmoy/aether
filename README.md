@@ -1,8 +1,14 @@
 # aether
 
-A lightweight IPC framework for Linux and macOS that lets you define service interfaces
+A lightweight IPC framework for Linux, macOS, and Windows that lets you define service interfaces
 in a simple IDL and generates type-safe C++ server and client code. Built on
 shared memory for high performance, with zero manual serialization.
+
+Supported hosts today:
+- Linux with full threaded and `RunLoop` support
+- Windows with shared-memory plus named-pipe transport in threaded mode
+
+`RunLoop` integration is not implemented on Windows yet.
 
 ## Background
 
@@ -108,7 +114,7 @@ No message IDs, no serialization, no raw byte buffers.
 
 - C++17 compiler (GCC 7+, Clang 5+)
 - CMake 3.14+
-- Linux or macOS
+- Linux, macOS, or Windows
 - Python 3 (for build script and code generator)
 
 ### Clone and build

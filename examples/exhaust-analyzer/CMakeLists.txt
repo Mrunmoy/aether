@@ -11,7 +11,7 @@ target_include_directories(exhaust_server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/gen/server
     ${CMAKE_CURRENT_SOURCE_DIR}/gen
 )
-target_link_libraries(exhaust_server PRIVATE aether pthread)
+target_link_libraries(exhaust_server PRIVATE aether Threads::Threads)
 
 # ── Client (Qt5 Widgets) ─────────────────────────────────
 add_executable(exhaust_client
@@ -22,4 +22,4 @@ target_include_directories(exhaust_client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/gen/client
     ${CMAKE_CURRENT_SOURCE_DIR}/gen
 )
-target_link_libraries(exhaust_client PRIVATE aether Qt5::Widgets pthread)
+target_link_libraries(exhaust_client PRIVATE aether Qt5::Widgets Threads::Threads)

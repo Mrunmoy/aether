@@ -21,6 +21,16 @@ find_package(Threads REQUIRED)
 add_subdirectory(deps/ouroboros)
 add_subdirectory(deps/vortex)
 
+if(WIN32)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
+if(WIN32)
+    set(AETHER_PKGCONFIG_THREADS_LIB "")
+else()
+    set(AETHER_PKGCONFIG_THREADS_LIB "-lpthread")
+endif()
+
 if(APPLE)
     set(AETHER_PLATFORM_SRC src/PlatformMac.cpp)
 elseif(WIN32)
@@ -74,6 +84,7 @@ include(GNUInstallDirs)
 install(TARGETS aether aether_shared
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 # Only install the C API header for SDK consumers

@@ -1,8 +1,6 @@
 #include "ClientBase.h"
 #include "Platform.h"
 
-#include <sys/socket.h>
-
 namespace aether::ipc
 {
 
@@ -23,6 +21,14 @@ namespace aether::ipc
         {
             return false;
         }
+#if defined(_WIN32)
+        if (m_loop != nullptr)
+        {
+            // Windows transport currently supports the threaded mode only.
+            // Named-pipe readiness is not wired into the RunLoop backend yet.
+            return false;
+        }
+#endif
         if (!m_loop && m_receiverThread.joinable())
         {
             // Reconnect after a server-side disconnect leaves the old receiver
@@ -38,11 +44,13 @@ namespace aether::ipc
 
         m_running.store(true, std::memory_order_release);
 
+#if !defined(_WIN32)
         if (m_loop)
         {
             m_loop->addSource(m_conn.socketFd, [this] { onDataReady(); });
         }
         else
+#endif
         {
             m_receiverThread = std::thread([this] { receiverLoop(); });
         }
@@ -53,6 +61,7 @@ namespace aether::ipc
     {
         bool wasRunning = m_running.exchange(false);
 
+#if !defined(_WIN32)
         if (m_loop)
         {
             if (wasRunning)
@@ -63,11 +72,12 @@ namespace aether::ipc
             std::lock_guard<std::mutex> hlock(m_handlerMutex);
         }
         else
+#endif
         {
-            if (wasRunning && m_conn.socketFd >= 0)
+            if (wasRunning && platform::isValidHandle(m_conn.socketFd))
             {
                 // Unblock receiver thread by shutting down the socket.
-                shutdown(m_conn.socketFd, SHUT_RDWR);
+                platform::shutdownConnection(m_conn.socketFd);
             }
 
             // Always join: the thread may have already exited (server disconnect),
