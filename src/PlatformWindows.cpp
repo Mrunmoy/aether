@@ -29,7 +29,6 @@ namespace aether::ipc::platform
         std::mutex g_listenerMutex;
         std::unordered_map<Handle, ListenerEntry> g_listeners;
         std::atomic<uintptr_t> g_nextListenerToken{1};
-        std::atomic<uint32_t> g_nextSharedMemoryId{1};
 
         uint64_t fnv1a64(const char *name)
         {
@@ -63,54 +62,96 @@ namespace aether::ipc::platform
             return "Local\\aether_stop_" + hex64(hash);
         }
 
-        std::string sharedMemoryName(const char *serviceName)
-        {
-            const uint64_t hash = fnv1a64(serviceName);
-            char buf[128];
-            std::snprintf(buf, sizeof(buf), "Local\\aether_shm_%s_%08X_%08X",
-                          hex64(hash).c_str(), static_cast<unsigned>(GetCurrentProcessId()),
-                          static_cast<unsigned>(g_nextSharedMemoryId.fetch_add(
-                              1, std::memory_order_relaxed)));
-            return std::string(buf);
-        }
-
+        // readExact and writeExact use overlapped I/O because all pipe handles in
+        // this backend are created with FILE_FLAG_OVERLAPPED.  Using synchronous
+        // ReadFile/WriteFile (lpOverlapped = NULL) on an overlapped handle is
+        // explicitly documented as undefined behaviour in the Windows SDK, and —
+        // critically — CancelIoEx only cancels *asynchronous* I/O, so
+        // shutdownConnection would silently fail to unblock the receiver thread if
+        // we mixed overlapped handles with synchronous calls.
         bool readExact(Handle h, void *data, uint32_t size)
         {
+            HANDLE hFile = reinterpret_cast<HANDLE>(h);
             auto *out = static_cast<uint8_t *>(data);
             uint32_t done = 0;
+
+            OVERLAPPED ov{};
+            ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+            if (ov.hEvent == nullptr)
+            {
+                return false;
+            }
+
             while (done < size)
             {
                 DWORD chunk = 0;
-                if (!ReadFile(reinterpret_cast<HANDLE>(h), out + done, size - done, &chunk, nullptr))
+                ResetEvent(ov.hEvent);
+                if (!ReadFile(hFile, out + done, size - done, &chunk, &ov))
                 {
-                    return false;
+                    DWORD err = GetLastError();
+                    if (err != ERROR_IO_PENDING)
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
+                    if (!GetOverlappedResult(hFile, &ov, &chunk, TRUE))
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
                 }
                 if (chunk == 0)
                 {
+                    CloseHandle(ov.hEvent);
                     return false;
                 }
                 done += chunk;
             }
+
+            CloseHandle(ov.hEvent);
             return true;
         }
 
         bool writeExact(Handle h, const void *data, uint32_t size)
         {
+            HANDLE hFile = reinterpret_cast<HANDLE>(h);
             const auto *in = static_cast<const uint8_t *>(data);
             uint32_t done = 0;
+
+            OVERLAPPED ov{};
+            ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+            if (ov.hEvent == nullptr)
+            {
+                return false;
+            }
+
             while (done < size)
             {
                 DWORD chunk = 0;
-                if (!WriteFile(reinterpret_cast<HANDLE>(h), in + done, size - done, &chunk, nullptr))
+                ResetEvent(ov.hEvent);
+                if (!WriteFile(hFile, in + done, size - done, &chunk, &ov))
                 {
-                    return false;
+                    DWORD err = GetLastError();
+                    if (err != ERROR_IO_PENDING)
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
+                    if (!GetOverlappedResult(hFile, &ov, &chunk, TRUE))
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
                 }
                 if (chunk == 0)
                 {
+                    CloseHandle(ov.hEvent);
                     return false;
                 }
                 done += chunk;
             }
+
+            CloseHandle(ov.hEvent);
             return true;
         }
 
@@ -157,7 +198,7 @@ namespace aether::ipc::platform
         for (int attempt = 0; attempt < 250; ++attempt)
         {
             HANDLE h = CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                                   OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
             if (h != INVALID_HANDLE_VALUE)
             {
                 return reinterpret_cast<Handle>(h);
@@ -280,6 +321,11 @@ namespace aether::ipc::platform
 
     int sendSignal(Handle sockFd)
     {
+        // On Windows, WriteFile on a named pipe blocks until the pipe buffer has
+        // space.  Unlike the Linux path (MSG_DONTWAIT + EAGAIN short-circuit), a
+        // full pipe will stall the caller.  In practice the pipe buffer (4 KB) is
+        // far larger than the single wakeup byte, and the signalling protocol is
+        // unidirectional per frame, so this is not a deadlock risk in normal use.
         uint8_t byte = 1;
         return writeExact(sockFd, &byte, 1) ? 0 : -1;
     }
@@ -304,7 +350,21 @@ namespace aether::ipc::platform
 
     Handle shmCreate(uint32_t size, const char *name)
     {
-        std::string mappingName = (name != nullptr) ? std::string(name) : sharedMemoryName("aether");
+        std::string mappingName;
+        if (name != nullptr)
+        {
+            mappingName = name;
+        }
+        else
+        {
+            // Caller did not supply a name; generate a process-unique one.
+            static std::atomic<uint32_t> s_nextId{1};
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "Local\\aether_shm_%08X_%08X",
+                          static_cast<unsigned>(GetCurrentProcessId()),
+                          static_cast<unsigned>(s_nextId.fetch_add(1, std::memory_order_relaxed)));
+            mappingName = buf;
+        }
         HANDLE h = CreateFileMappingA(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, size,
                                       mappingName.c_str());
         if (h == nullptr)
