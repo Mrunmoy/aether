@@ -26,3 +26,10 @@ target_link_libraries(ipc_tests PRIVATE aether GTest::gtest_main pthread)
 
 include(GoogleTest)
 gtest_discover_tests(ipc_tests)
+
+# ── Aether-Lite tests ───────────────────────────────────────────
+if(TARGET aether_lite)
+    add_executable(aether_lite_tests AetherLiteTest.cpp)
+    target_link_libraries(aether_lite_tests PRIVATE aether_lite GTest::gtest_main)
+    gtest_discover_tests(aether_lite_tests)
+endif()
