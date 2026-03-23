@@ -15,6 +15,12 @@
 using namespace aether::ipc::platform;
 using namespace aether::ipc;
 
+#if defined(__APPLE__)
+static constexpr int kSignalSocketType = SOCK_STREAM;
+#else
+static constexpr int kSignalSocketType = SOCK_SEQPACKET;
+#endif
+
 // Unique socket name per test to avoid collisions when tests run in parallel.
 // Uses the test name provided by gtest.
 #define SOCK_NAME (::testing::UnitTest::GetInstance()->current_test_info()->name())
@@ -198,7 +204,7 @@ TEST(PlatformTest, ShmWriteAndMmap)
 
 TEST(PlatformTest, ShmZeroSize)
 {
-    // memfd_create with ftruncate(0) should succeed — valid but empty region.
+    // Zero-sized shared memory regions should still be representable.
     int fd = shmCreate(0);
     ASSERT_GE(fd, 0);
     closeFd(fd);
@@ -221,7 +227,12 @@ TEST(PlatformTest, CloseFdNegativeOne)
 TEST(PlatformTest, SendSignalToClosedSocket)
 {
     int fds[2];
-    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+    ASSERT_EQ(socketpair(AF_UNIX, kSignalSocketType, 0, fds), 0);
+
+#if defined(__APPLE__)
+    int enable = 1;
+    ASSERT_EQ(setsockopt(fds[0], SOL_SOCKET, SO_NOSIGPIPE, &enable, sizeof(enable)), 0);
+#endif
 
     // Close the receiving end.
     closeFd(fds[1]);
@@ -235,7 +246,7 @@ TEST(PlatformTest, SendSignalToClosedSocket)
 TEST(PlatformTest, RecvSignalFromClosedSocket)
 {
     int fds[2];
-    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+    ASSERT_EQ(socketpair(AF_UNIX, kSignalSocketType, 0, fds), 0);
 
     // Close the sending end.
     closeFd(fds[1]);
@@ -253,7 +264,7 @@ TEST(PlatformTest, RecvSignalFromClosedSocket)
 TEST(PlatformTest, SetSocketTimeouts)
 {
     int fds[2];
-    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+    ASSERT_EQ(socketpair(AF_UNIX, kSignalSocketType, 0, fds), 0);
 
     // Setting send timeout should succeed.
     EXPECT_EQ(setSocketTimeouts(fds[0], 100), 0);
@@ -268,6 +279,42 @@ TEST(PlatformTest, SetSocketTimeouts)
     closeFd(fds[0]);
     closeFd(fds[1]);
 }
+
+#if defined(__APPLE__)
+TEST(PlatformTest, ServerSocketPathCanBeReusedAfterClose)
+{
+    int srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+    closeFd(srv);
+
+    int rebound = serverSocket(SOCK_NAME);
+    ASSERT_GE(rebound, 0);
+    closeFd(rebound);
+}
+
+TEST(PlatformTest, ClosingAcceptedClientDoesNotUnlinkListener)
+{
+    int srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+
+    int cli1 = clientSocket(SOCK_NAME);
+    ASSERT_GE(cli1, 0);
+    int accepted1 = acceptClient(srv);
+    ASSERT_GE(accepted1, 0);
+
+    closeFd(accepted1);
+    closeFd(cli1);
+
+    int cli2 = clientSocket(SOCK_NAME);
+    ASSERT_GE(cli2, 0);
+    int accepted2 = acceptClient(srv);
+    ASSERT_GE(accepted2, 0);
+
+    closeFd(accepted2);
+    closeFd(cli2);
+    closeFd(srv);
+}
+#endif
 
 TEST(PlatformTest, PendingWakeupDrainsQueuedFrameBurst)
 {

@@ -7,12 +7,12 @@ namespace aether::ipc::platform
 
     // ── Unix Domain Sockets ─────────────────────────────────────────
 
-    // Create a listening UDS socket bound to abstract namespace.
-    // Linux: SOCK_SEQPACKET, path = \0ipc_<name>
+    // Create a listening same-machine signaling endpoint.
+    // Linux uses an abstract UDS name; macOS uses a pathname UDS.
     // Returns fd >= 0 on success, -1 on failure.
     int serverSocket(const char *name);
 
-    // Connect to a UDS server in abstract namespace.
+    // Connect to a signaling endpoint created by serverSocket().
     // Returns fd >= 0 on success, -1 on failure.
     int clientSocket(const char *name);
 
@@ -20,11 +20,11 @@ namespace aether::ipc::platform
     // Returns fd >= 0 on success, -1 on failure.
     int acceptClient(int listenFd);
 
-    // Send a file descriptor + ancillary data over UDS (SCM_RIGHTS).
+    // Send a file descriptor + ancillary data over the signaling socket.
     // Returns 0 on success, -1 on failure.
     int sendFd(int sockFd, int fdToSend, const void *data, uint32_t dataLen);
 
-    // Receive a file descriptor + ancillary data over UDS (SCM_RIGHTS).
+    // Receive a file descriptor + ancillary data over the signaling socket.
     // Sets *receivedFd on success.
     // Returns bytes received (> 0) on success, -1 on failure.
     int recvFd(int sockFd, int *receivedFd, void *data, uint32_t dataLen);
@@ -46,8 +46,7 @@ namespace aether::ipc::platform
 
     // ── Shared Memory ───────────────────────────────────────────────
 
-    // Create anonymous shared memory region of `size` bytes.
-    // Linux: memfd_create + ftruncate.
+    // Create anonymous or connection-owned shared memory region of `size` bytes.
     // Returns fd >= 0 on success, -1 on failure.
     int shmCreate(uint32_t size);
 

@@ -102,7 +102,9 @@ def test():
     # C++ tests (core + codegen examples)
     run(["ctest", "--test-dir", BUILD_DIR, "--output-on-failure"], cwd=ROOT)
     # Python tests for the code generator
-    run([sys.executable, "-m", "pytest", "tools/ipcgen/test/", "-v"], cwd=ROOT)
+    env = os.environ.copy()
+    env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    run([sys.executable, "-m", "pytest", "tools/ipcgen/test/", "-v"], cwd=ROOT, env=env)
 
 
 def package():
