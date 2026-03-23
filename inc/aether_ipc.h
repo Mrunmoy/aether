@@ -34,6 +34,11 @@ extern "C"
 #define AETHER_ERR_RING_FULL        -6
 #define AETHER_ERR_STOPPED          -7
 #define AETHER_ERR_INVALID_ARGUMENT -8
+#define AETHER_ERR_TRANSPORT        -9
+#define AETHER_ERR_CRC             -10
+#define AETHER_ERR_NOT_SUPPORTED   -11
+#define AETHER_ERR_NO_SPACE        -12
+#define AETHER_ERR_OVERFLOW        -13
 
 /* ── Opaque handles ────────────────────────────────────────────────── */
 
