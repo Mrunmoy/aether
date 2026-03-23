@@ -19,6 +19,7 @@ add_library(aether STATIC
     src/FrameIO.cpp
     src/ServiceBase.cpp
     src/ClientBase.cpp
+    src/TransportClientBase.cpp
     src/CApi.cpp
 )
 target_include_directories(aether PUBLIC
@@ -35,6 +36,7 @@ add_library(aether_shared SHARED
     src/FrameIO.cpp
     src/ServiceBase.cpp
     src/ClientBase.cpp
+    src/TransportClientBase.cpp
     src/CApi.cpp
 )
 target_include_directories(aether_shared PUBLIC
