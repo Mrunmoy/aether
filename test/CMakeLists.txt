@@ -20,6 +20,7 @@ add_executable(ipc_tests
     ClientBaseTest.cpp
     CApiTest.cpp
     EndianTest.cpp
+    TransportClientBaseTest.cpp
 )
 target_link_libraries(ipc_tests PRIVATE aether GTest::gtest_main pthread)
 
