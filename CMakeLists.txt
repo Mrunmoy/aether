@@ -12,9 +12,17 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(deps/ouroboros)
 add_subdirectory(deps/vortex)
 
+if(APPLE)
+    set(AETHER_PLATFORM_SRC src/PlatformMac.cpp)
+elseif(WIN32)
+    set(AETHER_PLATFORM_SRC src/PlatformWindows.cpp)
+else()
+    set(AETHER_PLATFORM_SRC src/PlatformLinux.cpp)
+endif()
+
 # ── Static library ───────────────────────────────────────────────────
 add_library(aether STATIC
-    src/PlatformLinux.cpp
+    ${AETHER_PLATFORM_SRC}
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
@@ -31,7 +39,7 @@ target_link_libraries(aether PUBLIC ouroboros vortex PRIVATE pthread)
 
 # ── Shared library ───────────────────────────────────────────────────
 add_library(aether_shared SHARED
-    src/PlatformLinux.cpp
+    ${AETHER_PLATFORM_SRC}
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
