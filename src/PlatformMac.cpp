@@ -41,18 +41,20 @@ namespace aether::ipc::platform
 
         std::string buildSocketPath(const char *name)
         {
-        std::string path = kSocketPrefix;
-        path += std::to_string(getuid());
-        path += "_";
-        path += name;
-
-            for (char &ch : path)
+            // Sanitize only the caller-supplied name; never touch the fixed prefix.
+            std::string safeName = name;
+            for (char &ch : safeName)
             {
                 if (ch == '/' || ch == '\\' || ch == ':' || ch == ' ')
                 {
                     ch = '_';
                 }
             }
+
+            std::string path = kSocketPrefix;
+            path += std::to_string(getuid());
+            path += "_";
+            path += safeName;
 
             sockaddr_un addr{};
             if (path.size() >= sizeof(addr.sun_path))
