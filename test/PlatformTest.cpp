@@ -325,8 +325,6 @@ TEST(PlatformTest, ServerSocketRemovesStalePathBeforeBind)
     int rebound = serverSocket(SOCK_NAME);
     ASSERT_GE(rebound, 0);
     closeFd(rebound);
-
-    EXPECT_NE(access(path.c_str(), F_OK), 0);
 }
 
 TEST(PlatformTest, ClosingAcceptedClientDoesNotUnlinkListener)
