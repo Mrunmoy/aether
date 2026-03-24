@@ -322,6 +322,13 @@ TEST(PlatformTest, ClosingAcceptedClientDoesNotUnlinkListener)
 
 TEST(PlatformTest, PendingWakeupDrainsQueuedFrameBurst)
 {
+#if defined(__APPLE__)
+    // macOS UDS enforces large minimum buffer sizes that cannot be shrunk to
+    // 1 KB via setsockopt.  The saturation loop below never hits EAGAIN, so
+    // the test cannot exercise the intended "buffer-full + ring-burst" path.
+    GTEST_SKIP() << "Buffer saturation unreliable on macOS SOCK_STREAM";
+#endif
+
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
