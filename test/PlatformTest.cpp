@@ -9,6 +9,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
