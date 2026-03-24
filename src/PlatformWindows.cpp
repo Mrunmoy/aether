@@ -199,7 +199,7 @@ namespace aether::ipc::platform
         for (int attempt = 0; attempt < 50; ++attempt)
         {
             HANDLE h = CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                                   OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
             if (h != INVALID_HANDLE_VALUE)
             {
                 return reinterpret_cast<Handle>(h);
