@@ -78,19 +78,39 @@ namespace aether::ipc::platform
         {
             auto *out = static_cast<uint8_t *>(data);
             uint32_t done = 0;
+            OVERLAPPED ov{};
+            ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+            if (ov.hEvent == nullptr)
+            {
+                return false;
+            }
             while (done < size)
             {
+                ResetEvent(ov.hEvent);
+                ov.Offset = 0;
+                ov.OffsetHigh = 0;
                 DWORD chunk = 0;
-                if (!ReadFile(reinterpret_cast<HANDLE>(h), out + done, size - done, &chunk, nullptr))
+                if (!ReadFile(reinterpret_cast<HANDLE>(h), out + done, size - done, &chunk, &ov))
                 {
-                    return false;
+                    if (GetLastError() != ERROR_IO_PENDING)
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
+                    if (!GetOverlappedResult(reinterpret_cast<HANDLE>(h), &ov, &chunk, TRUE))
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
                 }
                 if (chunk == 0)
                 {
+                    CloseHandle(ov.hEvent);
                     return false;
                 }
                 done += chunk;
             }
+            CloseHandle(ov.hEvent);
             return true;
         }
 
@@ -98,19 +118,39 @@ namespace aether::ipc::platform
         {
             const auto *in = static_cast<const uint8_t *>(data);
             uint32_t done = 0;
+            OVERLAPPED ov{};
+            ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+            if (ov.hEvent == nullptr)
+            {
+                return false;
+            }
             while (done < size)
             {
+                ResetEvent(ov.hEvent);
+                ov.Offset = 0;
+                ov.OffsetHigh = 0;
                 DWORD chunk = 0;
-                if (!WriteFile(reinterpret_cast<HANDLE>(h), in + done, size - done, &chunk, nullptr))
+                if (!WriteFile(reinterpret_cast<HANDLE>(h), in + done, size - done, &chunk, &ov))
                 {
-                    return false;
+                    if (GetLastError() != ERROR_IO_PENDING)
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
+                    if (!GetOverlappedResult(reinterpret_cast<HANDLE>(h), &ov, &chunk, TRUE))
+                    {
+                        CloseHandle(ov.hEvent);
+                        return false;
+                    }
                 }
                 if (chunk == 0)
                 {
+                    CloseHandle(ov.hEvent);
                     return false;
                 }
                 done += chunk;
             }
+            CloseHandle(ov.hEvent);
             return true;
         }
 
@@ -360,9 +400,7 @@ namespace aether::ipc::platform
             }
             uint8_t drain[64];
             DWORD toRead = (avail < sizeof(drain)) ? avail : sizeof(drain);
-            DWORD got = 0;
-            if (!ReadFile(reinterpret_cast<HANDLE>(sockFd), drain, toRead, &got, nullptr)
-                || got == 0)
+            if (!readExact(sockFd, drain, toRead))
             {
                 break;
             }
