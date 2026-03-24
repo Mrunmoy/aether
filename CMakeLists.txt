@@ -18,6 +18,14 @@ endif()
 # Enable PIC globally so deps can also be linked into the shared library.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(Threads REQUIRED)
+
+# On Windows, place all .exe and .dll outputs in the same directory so
+# test executables can find dependency DLLs (e.g. vortex.dll) at both
+# build time (gtest_discover_tests) and ctest time.
+if(WIN32)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+endif()
+
 add_subdirectory(deps/ouroboros)
 add_subdirectory(deps/vortex)
 
