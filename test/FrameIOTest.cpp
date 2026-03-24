@@ -271,7 +271,7 @@ TEST(FrameIOTest, OversizedPayloadBytesRejected)
     FrameHeader hdr = makeHeader(FRAME_REQUEST, 1, 1, 1, 0);
     hdr.payloadBytes = kRingSize; // exactly equal to ring size — no room for header
 
-    ring->write(reinterpret_cast<const uint8_t *>(&hdr), sizeof(FrameHeader));
+    ASSERT_TRUE(ring->write(reinterpret_cast<const uint8_t *>(&hdr), sizeof(FrameHeader)));
 
     // Both readFrame and readFrameAlloc should reject the oversized payload.
     FrameHeader outHdr{};
@@ -281,7 +281,7 @@ TEST(FrameIOTest, OversizedPayloadBytesRejected)
     // Use a fresh ring for the second test (readFrame did not consume
     // the data — it rejected after peek — but a separate ring is cleaner).
     auto ring2 = std::make_unique<IpcRing>();
-    ring2->write(reinterpret_cast<const uint8_t *>(&hdr), sizeof(FrameHeader));
+    ASSERT_TRUE(ring2->write(reinterpret_cast<const uint8_t *>(&hdr), sizeof(FrameHeader)));
 
     std::vector<uint8_t> payload;
     EXPECT_EQ(readFrameAlloc(ring2.get(), &outHdr, &payload), IPC_ERR_DISCONNECTED);

@@ -32,8 +32,8 @@ public:
     int GetDeviceInfo(uint32_t deviceId, DeviceInfo *info, uint32_t timeoutMs = 2000);
 
 protected:
-    virtual void onDeviceConnected(DeviceInfo info) {}
-    virtual void onDeviceDisconnected(uint32_t deviceId) {}
+    virtual void onDeviceConnected(DeviceInfo /*info*/) {}
+    virtual void onDeviceDisconnected(uint32_t /*deviceId*/) {}
 
     void onNotification(uint32_t serviceId, uint32_t messageId,
                         const std::vector<uint8_t> &payload) override;

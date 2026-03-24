@@ -6,6 +6,13 @@ project(aether
     DESCRIPTION "IPC framework — UDS signaling, shared memory transport, FD passing"
 )
 
+# ── Compiler warnings ────────────────────────────────────────────────
+if(MSVC)
+    add_compile_options(/W4 /WX)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
+
 # ── Dependencies ─────────────────────────────────────────────────────
 # Enable PIC globally so deps can also be linked into the shared library.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

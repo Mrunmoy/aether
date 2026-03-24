@@ -202,7 +202,7 @@ TEST(CodeGenClientTest, DeviceConnectedNotification)
     ASSERT_TRUE(client.connect());
     settle();
 
-    DeviceInfo info{7, USB, 0x1111, 0x2222, {0x01, 0x02, 0x03, 0x04, 0x05, 0x06}};
+    DeviceInfo info{7, USB, 0x1111, 0x2222, {0x01, 0x02, 0x03, 0x04, 0x05, 0x06}, ""};
     ASSERT_EQ(svc.testNotifyDeviceConnected(info), IPC_SUCCESS);
 
     {

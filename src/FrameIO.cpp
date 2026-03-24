@@ -24,13 +24,19 @@ namespace aether::ipc
         }
 
         // Consume header
-        ring->skip(sizeof(FrameHeader));
+        if (!ring->skip(sizeof(FrameHeader)))
+        {
+            return IPC_ERR_DISCONNECTED;
+        }
 
         // Read payload
         payload->resize(hdr.payloadBytes);
         if (hdr.payloadBytes > 0)
         {
-            ring->read(payload->data(), hdr.payloadBytes);
+            if (!ring->read(payload->data(), hdr.payloadBytes))
+            {
+                return IPC_ERR_DISCONNECTED;
+            }
         }
 
         *header = hdr;

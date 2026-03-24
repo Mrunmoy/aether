@@ -36,11 +36,17 @@ namespace aether::ipc
             return IPC_ERR_RING_FULL;
         }
 
-        ring->write(reinterpret_cast<const uint8_t *>(&header), sizeof(FrameHeader));
+        if (!ring->write(reinterpret_cast<const uint8_t *>(&header), sizeof(FrameHeader)))
+        {
+            return IPC_ERR_RING_FULL;
+        }
 
         if (payloadBytes > 0 && payload != nullptr)
         {
-            ring->write(payload, payloadBytes);
+            if (!ring->write(payload, payloadBytes))
+            {
+                return IPC_ERR_RING_FULL;
+            }
         }
 
         return IPC_SUCCESS;
@@ -95,12 +101,18 @@ namespace aether::ipc
         }
 
         // Consume header
-        ring->skip(sizeof(FrameHeader));
+        if (!ring->skip(sizeof(FrameHeader)))
+        {
+            return IPC_ERR_DISCONNECTED;
+        }
 
         // Read payload
         if (hdr.payloadBytes > 0)
         {
-            ring->read(payload, hdr.payloadBytes);
+            if (!ring->read(payload, hdr.payloadBytes))
+            {
+                return IPC_ERR_DISCONNECTED;
+            }
         }
 
         *header = hdr;
