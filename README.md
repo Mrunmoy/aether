@@ -1,6 +1,6 @@
 # aether
 
-A lightweight IPC framework for Linux that lets you define service interfaces
+A lightweight IPC framework for Linux and macOS that lets you define service interfaces
 in a simple IDL and generates type-safe C++ server and client code. Built on
 shared memory for high performance, with zero manual serialization.
 
@@ -22,7 +22,7 @@ in sync.
 
 ## Why aether
 
-Communicating between processes on Linux usually means choosing between
+Communicating between processes on the desktop usually means choosing between
 heavyweight frameworks (D-Bus, gRPC) or hand-rolling sockets with custom
 serialization. Both paths lead to boilerplate, fragile byte packing, and
 wasted time debugging wire format mismatches.
@@ -108,7 +108,7 @@ No message IDs, no serialization, no raw byte buffers.
 
 - C++17 compiler (GCC 7+, Clang 5+)
 - CMake 3.14+
-- Linux
+- Linux or macOS
 - Python 3 (for build script and code generator)
 
 ### Clone and build
@@ -118,6 +118,11 @@ git clone --recursive https://github.com/Mrunmoy/ms-ipc.git aether
 cd aether
 python3 build.py -t    # build + run all tests
 ```
+
+On macOS, local services use deterministic pathname Unix sockets under `/tmp`
+instead of Linux abstract sockets. The server unlinks any stale socket path
+before bind and removes it again on normal shutdown, so restarting a crashed
+service on the same name reclaims the path automatically.
 
 ### Generate code from IDL
 

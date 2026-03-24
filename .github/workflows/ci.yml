@@ -7,7 +7,7 @@ on:
     branches: [main, fix/ipc-robustness-hardening]
 
 jobs:
-  build:
+  linux-build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -48,4 +48,40 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install 'pytest>=7'
+          export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+          python3 -m pytest tools/ipcgen/test/ -v
+
+  macos-build:
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_BUILD_EXAMPLES=ON
+
+      - name: Build
+        run: cmake --build build -j3
+
+      - name: Unit & integration tests
+        run: ctest --test-dir build --output-on-failure --timeout 30
+
+      - name: Codegen tests
+        timeout-minutes: 2
+        run: |
+          build/examples/echo/codegen_server_tests
+          build/examples/echo/codegen_client_tests
+
+      - name: ipcgen pytest suite
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install 'pytest>=7'
+          export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
           python3 -m pytest tools/ipcgen/test/ -v

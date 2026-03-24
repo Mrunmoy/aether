@@ -6,14 +6,25 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <string>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
 
+#if defined(__APPLE__) && !defined(MSG_NOSIGNAL)
+#define MSG_NOSIGNAL 0
+#endif
+
 using namespace aether::ipc::platform;
 using namespace aether::ipc;
+
+#if defined(__APPLE__)
+static constexpr int kSignalSocketType = SOCK_STREAM;
+#else
+static constexpr int kSignalSocketType = SOCK_SEQPACKET;
+#endif
 
 // Unique socket name per test to avoid collisions when tests run in parallel.
 // Uses the test name provided by gtest.
@@ -198,7 +209,7 @@ TEST(PlatformTest, ShmWriteAndMmap)
 
 TEST(PlatformTest, ShmZeroSize)
 {
-    // memfd_create with ftruncate(0) should succeed — valid but empty region.
+    // Zero-sized shared memory regions should still be representable.
     int fd = shmCreate(0);
     ASSERT_GE(fd, 0);
     closeFd(fd);
@@ -221,7 +232,12 @@ TEST(PlatformTest, CloseFdNegativeOne)
 TEST(PlatformTest, SendSignalToClosedSocket)
 {
     int fds[2];
-    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+    ASSERT_EQ(socketpair(AF_UNIX, kSignalSocketType, 0, fds), 0);
+
+#if defined(__APPLE__)
+    int enable = 1;
+    ASSERT_EQ(setsockopt(fds[0], SOL_SOCKET, SO_NOSIGPIPE, &enable, sizeof(enable)), 0);
+#endif
 
     // Close the receiving end.
     closeFd(fds[1]);
@@ -235,7 +251,7 @@ TEST(PlatformTest, SendSignalToClosedSocket)
 TEST(PlatformTest, RecvSignalFromClosedSocket)
 {
     int fds[2];
-    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+    ASSERT_EQ(socketpair(AF_UNIX, kSignalSocketType, 0, fds), 0);
 
     // Close the sending end.
     closeFd(fds[1]);
@@ -253,7 +269,7 @@ TEST(PlatformTest, RecvSignalFromClosedSocket)
 TEST(PlatformTest, SetSocketTimeouts)
 {
     int fds[2];
-    ASSERT_EQ(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds), 0);
+    ASSERT_EQ(socketpair(AF_UNIX, kSignalSocketType, 0, fds), 0);
 
     // Setting send timeout should succeed.
     EXPECT_EQ(setSocketTimeouts(fds[0], 100), 0);
@@ -269,8 +285,77 @@ TEST(PlatformTest, SetSocketTimeouts)
     closeFd(fds[1]);
 }
 
+#if defined(__APPLE__)
+TEST(PlatformTest, ServerSocketPathCanBeReusedAfterClose)
+{
+    int srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+    closeFd(srv);
+
+    int rebound = serverSocket(SOCK_NAME);
+    ASSERT_GE(rebound, 0);
+    closeFd(rebound);
+}
+
+TEST(PlatformTest, ServerSocketRemovesStalePathBeforeBind)
+{
+    int srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+
+    sockaddr_un addr{};
+    socklen_t len = sizeof(addr);
+    ASSERT_EQ(getsockname(srv, reinterpret_cast<sockaddr *>(&addr), &len), 0);
+    ASSERT_EQ(addr.sun_family, AF_UNIX);
+    ASSERT_NE(addr.sun_path[0], '\0');
+
+    std::string path = addr.sun_path;
+    ASSERT_FALSE(path.empty());
+
+    // Simulate a crashed server by bypassing closeFd() and leaving the pathname
+    // socket behind. The next bind for the same service name should unlink it.
+    ASSERT_EQ(::close(srv), 0);
+    EXPECT_EQ(access(path.c_str(), F_OK), 0);
+
+    int rebound = serverSocket(SOCK_NAME);
+    ASSERT_GE(rebound, 0);
+    closeFd(rebound);
+
+    EXPECT_NE(access(path.c_str(), F_OK), 0);
+}
+
+TEST(PlatformTest, ClosingAcceptedClientDoesNotUnlinkListener)
+{
+    int srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+
+    int cli1 = clientSocket(SOCK_NAME);
+    ASSERT_GE(cli1, 0);
+    int accepted1 = acceptClient(srv);
+    ASSERT_GE(accepted1, 0);
+
+    closeFd(accepted1);
+    closeFd(cli1);
+
+    int cli2 = clientSocket(SOCK_NAME);
+    ASSERT_GE(cli2, 0);
+    int accepted2 = acceptClient(srv);
+    ASSERT_GE(accepted2, 0);
+
+    closeFd(accepted2);
+    closeFd(cli2);
+    closeFd(srv);
+}
+#endif
+
 TEST(PlatformTest, PendingWakeupDrainsQueuedFrameBurst)
 {
+#if defined(__APPLE__)
+    // macOS UDS enforces large minimum buffer sizes that cannot be shrunk to
+    // 1 KB via setsockopt.  The saturation loop below never hits EAGAIN, so
+    // the test cannot exercise the intended "buffer-full + ring-burst" path.
+    GTEST_SKIP() << "Buffer saturation unreliable on macOS SOCK_STREAM";
+#endif
+
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 

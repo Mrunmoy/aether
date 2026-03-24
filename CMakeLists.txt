@@ -9,12 +9,21 @@ project(aether
 # ── Dependencies ─────────────────────────────────────────────────────
 # Enable PIC globally so deps can also be linked into the shared library.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+find_package(Threads REQUIRED)
 add_subdirectory(deps/ouroboros)
 add_subdirectory(deps/vortex)
 
+if(APPLE)
+    set(AETHER_PLATFORM_SRC src/PlatformMac.cpp)
+elseif(WIN32)
+    set(AETHER_PLATFORM_SRC src/PlatformWindows.cpp)
+else()
+    set(AETHER_PLATFORM_SRC src/PlatformLinux.cpp)
+endif()
+
 # ── Static library ───────────────────────────────────────────────────
 add_library(aether STATIC
-    src/PlatformLinux.cpp
+    ${AETHER_PLATFORM_SRC}
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
@@ -27,11 +36,11 @@ target_include_directories(aether PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_features(aether PUBLIC cxx_std_17)
-target_link_libraries(aether PUBLIC ouroboros vortex PRIVATE pthread)
+target_link_libraries(aether PUBLIC ouroboros vortex Threads::Threads)
 
 # ── Shared library ───────────────────────────────────────────────────
 add_library(aether_shared SHARED
-    src/PlatformLinux.cpp
+    ${AETHER_PLATFORM_SRC}
     src/Connection.cpp
     src/FrameIO.cpp
     src/ServiceBase.cpp
@@ -44,7 +53,7 @@ target_include_directories(aether_shared PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_features(aether_shared PUBLIC cxx_std_17)
-target_link_libraries(aether_shared PRIVATE ouroboros vortex pthread)
+target_link_libraries(aether_shared PRIVATE ouroboros vortex Threads::Threads)
 set_target_properties(aether_shared PROPERTIES
     OUTPUT_NAME aether
     VERSION     ${PROJECT_VERSION}

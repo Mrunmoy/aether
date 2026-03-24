@@ -86,7 +86,13 @@ static_assert(sizeof(FrameHeader) == 24);
 ## 3. Platform (`inc/Platform.h`)
 
 **Namespace:** `aether::ipc::platform`
-**Files:** `inc/Platform.h`, `src/PlatformLinux.cpp`
+**Files:** `inc/Platform.h`, `src/PlatformLinux.cpp`, `src/PlatformMac.cpp`
+
+**Portability note:** The higher IPC layers keep one platform contract, but the
+backend differs by OS. Linux uses abstract-namespace Unix domain sockets with
+`SOCK_SEQPACKET` and `memfd_create()`. macOS uses pathname Unix domain sockets
+with `SOCK_STREAM`, `SCM_RIGHTS`, `SO_NOSIGPIPE`, and `shm_open()` +
+`ftruncate()` + `mmap()` + immediate `shm_unlink()`.
 
 ### 3.1 serverSocket()
 
