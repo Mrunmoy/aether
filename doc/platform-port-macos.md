@@ -4,7 +4,7 @@ This port keeps the public IPC API and frame protocol unchanged. The work is con
 
 ## Layer Contract
 
-- Signaling socket: use `AF_UNIX` pathname sockets with `SOCK_STREAM`. macOS does not give us Linux abstract-namespace sockets, so the server should bind a deterministic temp path such as `/tmp/aether_<uid>_<hash>.sock`, unlink any stale file before bind, and remove the socket path on stop.
+- Signaling socket: use `AF_UNIX` pathname sockets with `SOCK_STREAM`. macOS does not give us Linux abstract-namespace sockets, so the server binds a deterministic path such as `/tmp/aether_<uid>_<hash>.sock`, unlinks any stale file before bind, and removes the socket path on normal stop.
 - Handshake and FD passing: keep the existing version byte, shared-memory FD transfer, and ACK byte flow. `sendmsg`/`recvmsg` with `SCM_RIGHTS` remain the right mechanism. Because the socket is stream-oriented, reads must tolerate coalesced bytes and short reads.
 - Shared memory: replace `memfd_create` with `shm_open` + `ftruncate` + `mmap`. Immediately `shm_unlink` the object after successful creation so the lifetime stays anonymous and connection-owned.
 - Close and timeout semantics: preserve `shutdown(SHUT_RDWR)` as the disconnect primitive and keep `SO_SNDTIMEO` for send timeouts. On macOS, suppress `SIGPIPE` with `SO_NOSIGPIPE` rather than Linux’s `MSG_NOSIGNAL`.
@@ -28,4 +28,4 @@ Add a dedicated `src/PlatformMac.cpp` and select it from `CMakeLists.txt` with `
 - `test/PlatformTest.cpp`: platform backend tests and macOS-only regressions.
 - `test/ConnectionTest.cpp` and `test/ServiceBaseTest.cpp`: only if the macOS backend exposes new runtime edge cases.
 - `.github/workflows/ci.yml`: add macOS job and keep Linux as the shared baseline.
-- `doc/aether-lld.md` and `README.md`: document macOS-specific behavior and developer setup.
+- `doc/aether-lld.md` and `README.md`: document macOS-specific pathname socket behavior, including stale-path recovery after crashes.

@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <string>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <thread>
@@ -294,6 +295,32 @@ TEST(PlatformTest, ServerSocketPathCanBeReusedAfterClose)
     int rebound = serverSocket(SOCK_NAME);
     ASSERT_GE(rebound, 0);
     closeFd(rebound);
+}
+
+TEST(PlatformTest, ServerSocketRemovesStalePathBeforeBind)
+{
+    int srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+
+    sockaddr_un addr{};
+    socklen_t len = sizeof(addr);
+    ASSERT_EQ(getsockname(srv, reinterpret_cast<sockaddr *>(&addr), &len), 0);
+    ASSERT_EQ(addr.sun_family, AF_UNIX);
+    ASSERT_NE(addr.sun_path[0], '\0');
+
+    std::string path = addr.sun_path;
+    ASSERT_FALSE(path.empty());
+
+    // Simulate a crashed server by bypassing closeFd() and leaving the pathname
+    // socket behind. The next bind for the same service name should unlink it.
+    ASSERT_EQ(::close(srv), 0);
+    EXPECT_EQ(access(path.c_str(), F_OK), 0);
+
+    int rebound = serverSocket(SOCK_NAME);
+    ASSERT_GE(rebound, 0);
+    closeFd(rebound);
+
+    EXPECT_NE(access(path.c_str(), F_OK), 0);
 }
 
 TEST(PlatformTest, ClosingAcceptedClientDoesNotUnlinkListener)

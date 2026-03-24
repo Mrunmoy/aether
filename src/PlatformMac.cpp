@@ -24,6 +24,20 @@ namespace aether::ipc::platform
         constexpr char kSocketPrefix[] = "/tmp/aether_";
         constexpr char kShmPrefix[] = "/aether_shm_";
 
+        uint64_t fnv1a64(const char *name)
+        {
+            constexpr uint64_t kOffset = 14695981039346656037ULL;
+            constexpr uint64_t kPrime = 1099511628211ULL;
+            uint64_t hash = kOffset;
+            for (const unsigned char *p = reinterpret_cast<const unsigned char *>(name); *p != 0;
+                 ++p)
+            {
+                hash ^= *p;
+                hash *= kPrime;
+            }
+            return hash;
+        }
+
         bool setCloExec(int fd)
         {
             int flags = fcntl(fd, F_GETFD);
@@ -42,26 +56,12 @@ namespace aether::ipc::platform
 
         std::string buildSocketPath(const char *name)
         {
-            // Sanitize the service name before appending
-            std::string safeName(name);
-            for (char &ch : safeName)
-            {
-                if (ch == '/' || ch == '\\' || ch == ':' || ch == ' ')
-                {
-                    ch = '_';
-                }
-            }
-            std::string path = kSocketPrefix;
-            path += std::to_string(getuid());
-            path += "_";
-            path += safeName;
-
-            sockaddr_un addr{};
-            if (path.size() >= sizeof(addr.sun_path))
-            {
-                path.resize(sizeof(addr.sun_path) - 1);
-            }
-            return path;
+            const char *safeName = (name != nullptr) ? name : "";
+            char buf[sizeof(sockaddr_un::sun_path)]{};
+            std::snprintf(buf, sizeof(buf), "%s%u_%016llX.sock", kSocketPrefix,
+                          static_cast<unsigned>(getuid()),
+                          static_cast<unsigned long long>(fnv1a64(safeName)));
+            return std::string(buf);
         }
 
         sockaddr_un buildAddr(const char *name)

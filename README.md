@@ -119,6 +119,11 @@ cd aether
 python3 build.py -t    # build + run all tests
 ```
 
+On macOS, local services use deterministic pathname Unix sockets under `/tmp`
+instead of Linux abstract sockets. The server unlinks any stale socket path
+before bind and removes it again on normal shutdown, so restarting a crashed
+service on the same name reclaims the path automatically.
+
 ### Generate code from IDL
 
 ```bash
