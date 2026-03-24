@@ -71,9 +71,10 @@ jobs:
         run: cmake --build build -j3
 
       - name: Unit & integration tests
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --timeout 30
 
       - name: Codegen tests
+        timeout-minutes: 2
         run: |
           build/examples/echo/codegen_server_tests
           build/examples/echo/codegen_client_tests
