@@ -300,6 +300,11 @@ TEST(PlatformTest, ServerSocketPathCanBeReusedAfterClose)
 
 TEST(PlatformTest, ServerSocketRemovesStalePathBeforeBind)
 {
+#if !defined(__APPLE__)
+    // Linux uses abstract namespace sockets (no filesystem path to go stale).
+    GTEST_SKIP() << "Filesystem socket cleanup only applies to macOS";
+#endif
+
     int srv = serverSocket(SOCK_NAME);
     ASSERT_GE(srv, 0);
 
