@@ -34,16 +34,16 @@ namespace aether::ipc
 
     static constexpr uint32_t kShmSize = 2 * sizeof(IpcRing);
     static constexpr uint32_t kSocketTimeoutMs = 5000;
-    static std::atomic<uint32_t> g_nextConnectionId{1};
 
     static std::string makeSharedMemoryName(const char *serviceName)
     {
 #if defined(_WIN32)
+        static std::atomic<uint32_t> nextConnectionId{1};
         const char *safeServiceName = (serviceName != nullptr) ? serviceName : "";
         char buf[128];
         std::snprintf(buf, sizeof(buf), "Local\\aether_shm_%u_%u_%08X",
                       static_cast<unsigned>(GetCurrentProcessId()),
-                      static_cast<unsigned>(g_nextConnectionId.fetch_add(1, std::memory_order_relaxed)),
+                      static_cast<unsigned>(nextConnectionId.fetch_add(1, std::memory_order_relaxed)),
                       static_cast<unsigned>(std::hash<std::string>{}(safeServiceName)));
         return std::string(buf);
 #else
