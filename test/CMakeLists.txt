@@ -22,7 +22,7 @@ add_executable(ipc_tests
     EndianTest.cpp
     TransportClientBaseTest.cpp
 )
-target_link_libraries(ipc_tests PRIVATE aether GTest::gtest_main pthread)
+target_link_libraries(ipc_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
 gtest_discover_tests(ipc_tests)

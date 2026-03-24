@@ -8,6 +8,7 @@
 #include <string>
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -41,18 +42,19 @@ namespace aether::ipc::platform
 
         std::string buildSocketPath(const char *name)
         {
-        std::string path = kSocketPrefix;
-        path += std::to_string(getuid());
-        path += "_";
-        path += name;
-
-            for (char &ch : path)
+            // Sanitize the service name before appending
+            std::string safeName(name);
+            for (char &ch : safeName)
             {
                 if (ch == '/' || ch == '\\' || ch == ':' || ch == ' ')
                 {
                     ch = '_';
                 }
             }
+            std::string path = kSocketPrefix;
+            path += std::to_string(getuid());
+            path += "_";
+            path += safeName;
 
             sockaddr_un addr{};
             if (path.size() >= sizeof(addr.sun_path))
@@ -135,6 +137,24 @@ namespace aether::ipc::platform
 
     int acceptClient(int listenFd)
     {
+        // Use poll() so accept() doesn't block indefinitely — on macOS,
+        // shutdown(SHUT_RDWR) on a listening socket returns ENOTCONN and
+        // close() from another thread may not reliably unblock accept().
+        // A 500ms timeout lets the caller's loop re-check its stop flag.
+        pollfd pfd{};
+        pfd.fd = listenFd;
+        pfd.events = POLLIN;
+
+        int pr;
+        do {
+            pr = poll(&pfd, 1, 500);
+        } while (pr < 0 && errno == EINTR);
+
+        if (pr <= 0)
+        {
+            return -1;
+        }
+
         int fd = accept(listenFd, nullptr, nullptr);
         if (fd < 0)
         {
@@ -170,7 +190,10 @@ namespace aether::ipc::platform
         cmsg->cmsg_len = CMSG_LEN(sizeof(int));
         std::memcpy(CMSG_DATA(cmsg), &fdToSend, sizeof(int));
 
-        ssize_t n = sendmsg(sockFd, &msg, 0);
+        ssize_t n;
+        do {
+            n = sendmsg(sockFd, &msg, 0);
+        } while (n < 0 && errno == EINTR);
         return (n == static_cast<ssize_t>(iov.iov_len)) ? 0 : -1;
     }
 
@@ -191,7 +214,10 @@ namespace aether::ipc::platform
         msg.msg_control = control;
         msg.msg_controllen = sizeof(control);
 
-        ssize_t n = recvmsg(sockFd, &msg, MSG_WAITALL);
+        ssize_t n;
+        do {
+            n = recvmsg(sockFd, &msg, MSG_WAITALL);
+        } while (n < 0 && errno == EINTR);
         if (n <= 0)
         {
             return -1;
@@ -243,7 +269,10 @@ namespace aether::ipc::platform
     int sendSignal(int sockFd)
     {
         uint8_t byte = 1;
-        ssize_t n = send(sockFd, &byte, 1, MSG_DONTWAIT);
+        ssize_t n;
+        do {
+            n = send(sockFd, &byte, 1, MSG_DONTWAIT);
+        } while (n < 0 && errno == EINTR);
         if (n == 1)
         {
             return 0;
@@ -258,7 +287,10 @@ namespace aether::ipc::platform
     int recvSignal(int sockFd)
     {
         uint8_t byte = 0;
-        ssize_t n = recv(sockFd, &byte, 1, MSG_WAITALL);
+        ssize_t n;
+        do {
+            n = recv(sockFd, &byte, 1, MSG_WAITALL);
+        } while (n < 0 && errno == EINTR);
         return (n == 1) ? 0 : -1;
     }
 

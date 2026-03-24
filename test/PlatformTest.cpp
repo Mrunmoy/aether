@@ -12,6 +12,10 @@
 #include <unistd.h>
 #include <vector>
 
+#if defined(__APPLE__) && !defined(MSG_NOSIGNAL)
+#define MSG_NOSIGNAL 0
+#endif
+
 using namespace aether::ipc::platform;
 using namespace aether::ipc;
 

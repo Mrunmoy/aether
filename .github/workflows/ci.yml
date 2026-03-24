@@ -53,6 +53,7 @@ jobs:
 
   macos-build:
     runs-on: macos-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4

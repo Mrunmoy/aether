@@ -9,6 +9,7 @@ project(aether
 # ── Dependencies ─────────────────────────────────────────────────────
 # Enable PIC globally so deps can also be linked into the shared library.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+find_package(Threads REQUIRED)
 add_subdirectory(deps/ouroboros)
 add_subdirectory(deps/vortex)
 
@@ -35,7 +36,7 @@ target_include_directories(aether PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_features(aether PUBLIC cxx_std_17)
-target_link_libraries(aether PUBLIC ouroboros vortex PRIVATE pthread)
+target_link_libraries(aether PUBLIC ouroboros vortex Threads::Threads)
 
 # ── Shared library ───────────────────────────────────────────────────
 add_library(aether_shared SHARED
@@ -52,7 +53,7 @@ target_include_directories(aether_shared PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 target_compile_features(aether_shared PUBLIC cxx_std_17)
-target_link_libraries(aether_shared PRIVATE ouroboros vortex pthread)
+target_link_libraries(aether_shared PRIVATE ouroboros vortex Threads::Threads)
 set_target_properties(aether_shared PROPERTIES
     OUTPUT_NAME aether
     VERSION     ${PROJECT_VERSION}
