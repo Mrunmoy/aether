@@ -421,7 +421,13 @@ namespace aether::ipc::platform
         {
             return SetEvent(entry.stopEvent) ? 0 : -1;
         }
-        return CancelIoEx(reinterpret_cast<HANDLE>(sockFd), nullptr) ? 0 : -1;
+        HANDLE h = reinterpret_cast<HANDLE>(sockFd);
+        if (CancelIoEx(h, nullptr))
+        {
+            return 0;
+        }
+        // ERROR_NOT_FOUND means no pending I/O — that's fine.
+        return (GetLastError() == ERROR_NOT_FOUND) ? 0 : -1;
     }
 
     Handle shmCreate(uint32_t size, const char *name)
