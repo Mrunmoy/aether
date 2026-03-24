@@ -374,6 +374,8 @@ TEST(ServiceBaseTest, ClientDisconnectDoesNotCrash)
 // RunLoop-mode tests
 // ═══════════════════════════════════════════════════════════════════════
 
+#if !defined(_WIN32)
+
 // Helper: run loop in background, auto-stop on scope exit.
 struct RunLoopGuard
 {
@@ -536,6 +538,20 @@ TEST(ServiceBaseTest, RunLoop_StopCleansUp)
 
     client.close();
 }
+
+#else
+
+TEST(ServiceBaseTest, RunLoopModeNotSupportedOnWindows)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLUnsupported");
+
+    EchoService svc(SVC_NAME, &loop);
+    EXPECT_FALSE(svc.start());
+    EXPECT_FALSE(svc.isRunning());
+}
+
+#endif
 
 // ═════════════════════════════════════════════════════════════════════
 // Notify to abruptly dead client does not SIGPIPE/crash

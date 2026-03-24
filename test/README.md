@@ -27,6 +27,8 @@ python3 -m pytest tools/ipcgen/test/ -v
 
 ## Test organization
 
+Windows builds use `PlatformWindowsTest.cpp` instead of `PlatformTest.cpp`.
+
 ### Core C++ tests (test/) — 50 tests
 
 | File | What it tests |

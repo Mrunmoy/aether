@@ -77,7 +77,7 @@ namespace aether::ipc
 
         std::string m_serviceName;
         ms::RunLoop *m_loop = nullptr;
-        int m_listenFd = -1;
+        platform::Handle m_listenFd = platform::kInvalidHandle;
 
         std::atomic<bool> m_running{false};
         std::thread m_acceptThread;

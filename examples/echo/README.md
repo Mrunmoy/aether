@@ -56,15 +56,16 @@ For anything beyond a simple echo, this gets tedious and error-prone fast.
 ### RunLoop mode
 
 Both `ServiceBase` and `ClientBase` accept an optional `ms::RunLoop*`.
-When provided, they register fds on the RunLoop instead of spawning
-internal threads — useful for single-threaded event-driven architectures:
+On Linux, when provided, they register fds on the RunLoop instead of spawning
+internal threads. On Windows, the current backend rejects RunLoop mode because
+named pipes are not waitable RunLoop sources:
 
 ```cpp
 ms::RunLoop loop;
 loop.init("app");
 
 EchoService service("echo", &loop);
-service.start();                    // no threads — fd registered on RunLoop
+service.start();                    // Linux: no threads — fd registered on RunLoop
 
 std::thread loopThread([&loop] { loop.run(); });
 // ... clients can connect and call from other threads ...

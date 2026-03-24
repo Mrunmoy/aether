@@ -203,8 +203,8 @@ TEST(ClientBaseTest, InvalidMethodReturnsError)
 
 TEST(ClientBaseTest, UnknownSequenceResponseIsIgnored)
 {
-    int listenFd = serverSocket(SVC_NAME);
-    ASSERT_GE(listenFd, 0);
+    platform::Handle listenFd = serverSocket(SVC_NAME);
+    ASSERT_TRUE(platform::isValidHandle(listenFd));
     std::atomic<bool> serverOk{true};
     std::atomic<bool> serverDone{false};
 
@@ -525,6 +525,8 @@ TEST(ClientBaseTest, NotifySkipsDeadClient)
 // RunLoop-mode tests
 // ═══════════════════════════════════════════════════════════════════════
 
+#if !defined(_WIN32)
+
 // Helper: run loop in background, auto-stop on scope exit.
 struct RunLoopGuard
 {
@@ -787,6 +789,25 @@ TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
     client.disconnect();
     svc.stop();
 }
+
+#else
+
+TEST(ClientBaseTest, RunLoopModeNotSupportedOnWindows)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRLUnsupported");
+
+    ClientBase client(SVC_NAME, &loop);
+    EXPECT_FALSE(client.connect());
+    EXPECT_FALSE(client.isConnected());
+
+    svc.stop();
+}
+
+#endif
 
 // ═════════════════════════════════════════════════════════════════════
 // Double disconnect — no crash or deadlock

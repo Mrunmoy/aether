@@ -2,8 +2,6 @@
 #include "Platform.h"
 
 #include <algorithm>
-#include <sys/socket.h>
-
 namespace aether::ipc
 {
 
@@ -24,9 +22,18 @@ namespace aether::ipc
         {
             return false; // already started
         }
+#if defined(_WIN32)
+        if (m_loop != nullptr)
+        {
+            // Windows transport currently supports the threaded accept/receiver
+            // model only. Reject RunLoop mode until the platform layer exposes
+            // a waitable readiness handle for named pipes.
+            return false;
+        }
+#endif
 
         m_listenFd = platform::serverSocket(m_serviceName.c_str());
-        if (m_listenFd < 0)
+        if (!platform::isValidHandle(m_listenFd))
         {
             return false;
         }
@@ -51,14 +58,15 @@ namespace aether::ipc
             return;
         }
 
+#if !defined(_WIN32)
         if (m_loop)
         {
             // Remove listen source.
-            if (m_listenFd >= 0)
+            if (platform::isValidHandle(m_listenFd))
             {
                 m_loop->removeSource(m_listenFd);
                 platform::closeFd(m_listenFd);
-                m_listenFd = -1;
+                m_listenFd = platform::kInvalidHandle;
             }
 
             // Snapshot client list and remove sources (under lock).
@@ -84,15 +92,16 @@ namespace aether::ipc
             m_clients.clear();
         }
         else
+#endif
         {
             // Phase 1: Unblock accept thread. shutdown() alone may not
             // reliably unblock accept4() on all socket types, so close the
             // fd as well — this guarantees accept4() returns immediately.
-            if (m_listenFd >= 0)
+            if (platform::isValidHandle(m_listenFd))
             {
-                shutdown(m_listenFd, SHUT_RDWR);
+                platform::shutdownConnection(m_listenFd);
                 platform::closeFd(m_listenFd);
-                m_listenFd = -1;
+                m_listenFd = platform::kInvalidHandle;
             }
 
             if (m_acceptThread.joinable())
@@ -104,9 +113,9 @@ namespace aether::ipc
             std::lock_guard<std::mutex> lock(m_clientsMutex);
             for (auto &c : m_clients)
             {
-                if (c->conn.socketFd >= 0)
+                if (platform::isValidHandle(c->conn.socketFd))
                 {
-                    shutdown(c->conn.socketFd, SHUT_RDWR);
+                    platform::shutdownConnection(c->conn.socketFd);
                 }
             }
             for (auto &c : m_clients)
@@ -307,9 +316,9 @@ namespace aether::ipc
                     if (rc != IPC_SUCCESS || platform::sendSignal(client->conn.socketFd) != 0)
                     {
                         client->dead.store(true, std::memory_order_release);
-                        if (client->conn.socketFd >= 0)
+                        if (platform::isValidHandle(client->conn.socketFd))
                         {
-                            shutdown(client->conn.socketFd, SHUT_RDWR);
+                            platform::shutdownConnection(client->conn.socketFd);
                         }
                         disconnectClient = true;
                     }
@@ -380,8 +389,8 @@ namespace aether::ipc
                         // Mark it dead and shut down its socket so receiverLoop
                         // unblocks from recvSignal and the thread can be joined.
                         c->dead.store(true, std::memory_order_release);
-                        if (c->conn.socketFd >= 0)
-                            shutdown(c->conn.socketFd, SHUT_RDWR);
+                        if (platform::isValidHandle(c->conn.socketFd))
+                            platform::shutdownConnection(c->conn.socketFd);
                         if (result == IPC_SUCCESS)
                             result = IPC_ERR_DISCONNECTED;
                         continue;

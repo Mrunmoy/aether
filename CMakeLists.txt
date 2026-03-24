@@ -18,8 +18,26 @@ endif()
 # Enable PIC globally so deps can also be linked into the shared library.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(Threads REQUIRED)
+
+# On Windows, place all .exe and .dll outputs in the same directory so
+# test executables can find dependency DLLs (e.g. vortex.dll) at both
+# build time (gtest_discover_tests) and ctest time.
+if(WIN32)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+endif()
+
 add_subdirectory(deps/ouroboros)
 add_subdirectory(deps/vortex)
+
+if(WIN32)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
+if(WIN32)
+    set(AETHER_PKGCONFIG_THREADS_LIB "")
+else()
+    set(AETHER_PKGCONFIG_THREADS_LIB "-lpthread")
+endif()
 
 if(APPLE)
     set(AETHER_PLATFORM_SRC src/PlatformMac.cpp)
@@ -62,11 +80,15 @@ target_include_directories(aether_shared PUBLIC
 )
 target_compile_features(aether_shared PUBLIC cxx_std_17)
 target_link_libraries(aether_shared PRIVATE ouroboros vortex Threads::Threads)
-set_target_properties(aether_shared PROPERTIES
-    OUTPUT_NAME aether
-    VERSION     ${PROJECT_VERSION}
-    SOVERSION   ${PROJECT_VERSION_MAJOR}
-)
+if(WIN32)
+    set_target_properties(aether_shared PROPERTIES OUTPUT_NAME aether_shared)
+else()
+    set_target_properties(aether_shared PROPERTIES
+        OUTPUT_NAME aether
+        VERSION     ${PROJECT_VERSION}
+        SOVERSION   ${PROJECT_VERSION_MAJOR}
+    )
+endif()
 
 # ── Install ──────────────────────────────────────────────────────────
 include(GNUInstallDirs)
@@ -74,6 +96,7 @@ include(GNUInstallDirs)
 install(TARGETS aether aether_shared
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 # Only install the C API header for SDK consumers

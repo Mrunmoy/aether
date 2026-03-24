@@ -13,7 +13,6 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 add_subdirectory(vendor/googletest)
 
 add_executable(ipc_tests
-    PlatformTest.cpp
     ConnectionTest.cpp
     FrameIOTest.cpp
     ServiceBaseTest.cpp
@@ -22,6 +21,11 @@ add_executable(ipc_tests
     EndianTest.cpp
     TransportClientBaseTest.cpp
 )
+if(WIN32)
+    target_sources(ipc_tests PRIVATE PlatformWindowsTest.cpp)
+else()
+    target_sources(ipc_tests PRIVATE PlatformTest.cpp)
+endif()
 target_link_libraries(ipc_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)

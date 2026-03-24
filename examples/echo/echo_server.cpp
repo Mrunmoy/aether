@@ -6,9 +6,13 @@
 #include "ServiceBase.h"
 
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <thread>
+#if !defined(_WIN32)
 #include <unistd.h>
+#endif
 
 static std::atomic<bool> g_running{true};
 
@@ -29,7 +33,9 @@ protected:
 
 int main()
 {
+#if !defined(_WIN32)
     std::signal(SIGINT, [](int) { g_running.store(false); });
+#endif
 
     EchoService service("echo");
     if (!service.start())
@@ -40,7 +46,7 @@ int main()
 
     std::printf("Echo server running (Ctrl-C to stop)...\n");
     while (g_running.load())
-        pause(); // sleep until signal
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     service.stop();
     std::printf("Server stopped.\n");

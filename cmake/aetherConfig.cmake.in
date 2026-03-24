@@ -14,6 +14,9 @@ endif()
 get_filename_component(_AETHER_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
 get_filename_component(_AETHER_PREFIX "${_AETHER_CMAKE_DIR}/../../../" ABSOLUTE)
 
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+
 find_library(_AETHER_LIBRARY
     NAMES aether
     PATHS "${_AETHER_PREFIX}/lib" "${_AETHER_PREFIX}/@CMAKE_INSTALL_LIBDIR@"
@@ -31,7 +34,7 @@ if(_AETHER_LIBRARY AND _AETHER_INCLUDE_DIR)
     set_target_properties(aether::aether PROPERTIES
         IMPORTED_LOCATION "${_AETHER_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${_AETHER_INCLUDE_DIR}"
-        INTERFACE_LINK_LIBRARIES "pthread"
+        INTERFACE_LINK_LIBRARIES "Threads::Threads"
     )
     set(aether_FOUND TRUE)
 else()
