@@ -84,20 +84,26 @@ namespace aether::ipc::platform
             {
                 return false;
             }
+            HANDLE hFile = reinterpret_cast<HANDLE>(h);
             while (done < size)
             {
                 ResetEvent(ov.hEvent);
                 ov.Offset = 0;
                 ov.OffsetHigh = 0;
                 DWORD chunk = 0;
-                if (!ReadFile(reinterpret_cast<HANDLE>(h), out + done, size - done, &chunk, &ov))
+                if (!ReadFile(hFile, out + done, size - done, &chunk, &ov))
                 {
                     if (GetLastError() != ERROR_IO_PENDING)
                     {
                         CloseHandle(ov.hEvent);
                         return false;
                     }
-                    if (!GetOverlappedResult(reinterpret_cast<HANDLE>(h), &ov, &chunk, TRUE))
+                    // Wait with periodic checks so CancelIoEx can break us out.
+                    while (WaitForSingleObject(ov.hEvent, 100) == WAIT_TIMEOUT)
+                    {
+                        // Keep waiting — CancelIoEx will signal the event.
+                    }
+                    if (!GetOverlappedResult(hFile, &ov, &chunk, FALSE))
                     {
                         CloseHandle(ov.hEvent);
                         return false;
@@ -124,20 +130,24 @@ namespace aether::ipc::platform
             {
                 return false;
             }
+            HANDLE hFile = reinterpret_cast<HANDLE>(h);
             while (done < size)
             {
                 ResetEvent(ov.hEvent);
                 ov.Offset = 0;
                 ov.OffsetHigh = 0;
                 DWORD chunk = 0;
-                if (!WriteFile(reinterpret_cast<HANDLE>(h), in + done, size - done, &chunk, &ov))
+                if (!WriteFile(hFile, in + done, size - done, &chunk, &ov))
                 {
                     if (GetLastError() != ERROR_IO_PENDING)
                     {
                         CloseHandle(ov.hEvent);
                         return false;
                     }
-                    if (!GetOverlappedResult(reinterpret_cast<HANDLE>(h), &ov, &chunk, TRUE))
+                    while (WaitForSingleObject(ov.hEvent, 100) == WAIT_TIMEOUT)
+                    {
+                    }
+                    if (!GetOverlappedResult(hFile, &ov, &chunk, FALSE))
                     {
                         CloseHandle(ov.hEvent);
                         return false;
@@ -422,12 +432,12 @@ namespace aether::ipc::platform
             return SetEvent(entry.stopEvent) ? 0 : -1;
         }
         HANDLE h = reinterpret_cast<HANDLE>(sockFd);
-        if (CancelIoEx(h, nullptr))
-        {
-            return 0;
-        }
-        // ERROR_NOT_FOUND means no pending I/O — that's fine.
-        return (GetLastError() == ERROR_NOT_FOUND) ? 0 : -1;
+        // Cancel any pending overlapped I/O, then disconnect the pipe
+        // so any future ReadFile/WriteFile fails immediately.
+        CancelIoEx(h, nullptr);
+        FlushFileBuffers(h);
+        DisconnectNamedPipe(h);
+        return 0;
     }
 
     Handle shmCreate(uint32_t size, const char *name)
