@@ -28,6 +28,8 @@ namespace aether::ipc::platform
 
         std::mutex g_listenerMutex;
         std::unordered_map<Handle, ListenerEntry> g_listeners;
+        std::mutex g_socketTimeoutMutex;
+        std::unordered_map<Handle, DWORD> g_socketTimeouts;
         std::atomic<uintptr_t> g_nextListenerToken{1};
         std::atomic<uint32_t> g_nextSharedMemoryId{1};
 
@@ -74,10 +76,29 @@ namespace aether::ipc::platform
             return std::string(buf);
         }
 
+        DWORD lookupSocketTimeout(Handle handle)
+        {
+            std::lock_guard<std::mutex> lock(g_socketTimeoutMutex);
+            auto it = g_socketTimeouts.find(handle);
+            return (it != g_socketTimeouts.end()) ? it->second : INFINITE;
+        }
+
+        bool waitForOverlapped(HANDLE file, OVERLAPPED *ov, DWORD timeoutMs, DWORD *transferred)
+        {
+            DWORD waitRc = WaitForSingleObject(ov->hEvent, timeoutMs);
+            if (waitRc != WAIT_OBJECT_0)
+            {
+                CancelIoEx(file, ov);
+                return false;
+            }
+            return GetOverlappedResult(file, ov, transferred, FALSE) != FALSE;
+        }
+
         bool readExact(Handle h, void *data, uint32_t size)
         {
             auto *out = static_cast<uint8_t *>(data);
             uint32_t done = 0;
+            const DWORD timeoutMs = lookupSocketTimeout(h);
             OVERLAPPED ov{};
             ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
             if (ov.hEvent == nullptr)
@@ -98,12 +119,7 @@ namespace aether::ipc::platform
                         CloseHandle(ov.hEvent);
                         return false;
                     }
-                    // Wait with periodic checks so CancelIoEx can break us out.
-                    while (WaitForSingleObject(ov.hEvent, 100) == WAIT_TIMEOUT)
-                    {
-                        // Keep waiting — CancelIoEx will signal the event.
-                    }
-                    if (!GetOverlappedResult(hFile, &ov, &chunk, FALSE))
+                    if (!waitForOverlapped(hFile, &ov, timeoutMs, &chunk))
                     {
                         CloseHandle(ov.hEvent);
                         return false;
@@ -124,6 +140,7 @@ namespace aether::ipc::platform
         {
             const auto *in = static_cast<const uint8_t *>(data);
             uint32_t done = 0;
+            const DWORD timeoutMs = lookupSocketTimeout(h);
             OVERLAPPED ov{};
             ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
             if (ov.hEvent == nullptr)
@@ -144,10 +161,7 @@ namespace aether::ipc::platform
                         CloseHandle(ov.hEvent);
                         return false;
                     }
-                    while (WaitForSingleObject(ov.hEvent, 100) == WAIT_TIMEOUT)
-                    {
-                    }
-                    if (!GetOverlappedResult(hFile, &ov, &chunk, FALSE))
+                    if (!waitForOverlapped(hFile, &ov, timeoutMs, &chunk))
                     {
                         CloseHandle(ov.hEvent);
                         return false;
@@ -313,16 +327,18 @@ namespace aether::ipc::platform
 
     int sendFd(Handle sockFd, Handle /*fdToSend*/, const void *data, uint32_t dataLen)
     {
-        if (dataLen == 0)
-        {
-            return 0;
-        }
-        return writeExact(sockFd, data, dataLen) ? 0 : -1;
+        uint8_t dummy = 0;
+        const void *payload = (dataLen > 0) ? data : &dummy;
+        const uint32_t payloadLen = (dataLen > 0) ? dataLen : 1;
+        return writeExact(sockFd, payload, payloadLen) ? 0 : -1;
     }
 
     int recvFd(Handle sockFd, Handle *receivedFd, void *data, uint32_t dataLen)
     {
-        if (dataLen > 0 && !readExact(sockFd, data, dataLen))
+        uint8_t dummy = 0;
+        void *payload = (dataLen > 0) ? data : &dummy;
+        const uint32_t payloadLen = (dataLen > 0) ? dataLen : 1;
+        if (!readExact(sockFd, payload, payloadLen))
         {
             return -1;
         }
@@ -340,16 +356,11 @@ namespace aether::ipc::platform
                 }
             }
         }
-        return static_cast<int>(dataLen);
+        return static_cast<int>(payloadLen);
     }
 
     int sendSignal(Handle sockFd)
     {
-        DWORD bytesAvail = 0;
-        DWORD totalBytesAvail = 0;
-        // Check if the pipe already has pending data (signal coalescing).
-        // PeekNamedPipe on write end fails, so we attempt a non-blocking
-        // overlapped write instead.
         OVERLAPPED ov{};
         ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
         if (ov.hEvent == nullptr)
@@ -419,10 +430,15 @@ namespace aether::ipc::platform
         return 0;
     }
 
-    // TODO: Named pipes don't support SO_SNDTIMEO/SO_RCVTIMEO-style
-    // timeouts. The handshake relies on overlapped I/O timeouts instead.
-    // This is a known limitation on the Windows platform.
-    int setSocketTimeouts(Handle /*sockFd*/, uint32_t /*timeoutMs*/) { return 0; }
+    // Named pipes do not expose SO_SNDTIMEO/SO_RCVTIMEO directly, so we emulate
+    // the timeout contract in readExact/writeExact by bounding each overlapped
+    // wait on the connection handle.
+    int setSocketTimeouts(Handle sockFd, uint32_t timeoutMs)
+    {
+        std::lock_guard<std::mutex> lock(g_socketTimeoutMutex);
+        g_socketTimeouts[sockFd] = timeoutMs;
+        return 0;
+    }
 
     int shutdownConnection(Handle sockFd)
     {
@@ -484,10 +500,18 @@ namespace aether::ipc::platform
         }
         if (eventToClose)
         {
+            {
+                std::lock_guard<std::mutex> timeoutLock(g_socketTimeoutMutex);
+                g_socketTimeouts.erase(fd);
+            }
             CloseHandle(eventToClose);
             return;
         }
 
+        {
+            std::lock_guard<std::mutex> timeoutLock(g_socketTimeoutMutex);
+            g_socketTimeouts.erase(fd);
+        }
         CloseHandle(reinterpret_cast<HANDLE>(fd));
     }
 

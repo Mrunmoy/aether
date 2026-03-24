@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <thread>
 #include <vector>
@@ -63,6 +64,65 @@ TEST(PlatformWindowsTest, SharedMemoryMappingRoundTrip)
     CloseHandle(reopened);
     unmapSharedMemory(writer, 4096);
     closeFd(shm);
+}
+
+TEST(PlatformWindowsTest, RecvSignalRespectsConfiguredTimeout)
+{
+    Handle listen = serverSocket(SVC_NAME);
+    ASSERT_NE(listen, kInvalidHandle);
+
+    Handle accepted = kInvalidHandle;
+    std::thread acceptThread([&] { accepted = acceptClient(listen); });
+
+    Handle client = clientSocket(SVC_NAME);
+    ASSERT_NE(client, kInvalidHandle);
+    acceptThread.join();
+    ASSERT_NE(accepted, kInvalidHandle);
+
+    ASSERT_EQ(setSocketTimeouts(accepted, 100), 0);
+
+    auto start = std::chrono::steady_clock::now();
+    EXPECT_EQ(recvSignal(accepted), -1);
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start);
+
+    EXPECT_GE(elapsed.count(), 50);
+    EXPECT_LT(elapsed.count(), 1000);
+
+    closeFd(client);
+    closeFd(accepted);
+    closeFd(listen);
+}
+
+TEST(PlatformWindowsTest, SendRecvFdWithoutHandshakePayloadUsesDummyByte)
+{
+    Handle listen = serverSocket(SVC_NAME);
+    ASSERT_NE(listen, kInvalidHandle);
+
+    Handle accepted = kInvalidHandle;
+    std::thread acceptThread([&] { accepted = acceptClient(listen); });
+
+    Handle client = clientSocket(SVC_NAME);
+    ASSERT_NE(client, kInvalidHandle);
+    acceptThread.join();
+    ASSERT_NE(accepted, kInvalidHandle);
+
+    char mappingName[128];
+    std::snprintf(mappingName, sizeof(mappingName), "Local\\aether_test_mapping_%s", SVC_NAME);
+    Handle shm = shmCreate(4096, mappingName);
+    ASSERT_NE(shm, kInvalidHandle);
+
+    ASSERT_EQ(sendFd(client, shm, nullptr, 0), 0);
+
+    Handle received = kInvalidHandle;
+    ASSERT_EQ(recvFd(accepted, &received, nullptr, 0), 1);
+    EXPECT_EQ(received, kInvalidHandle);
+
+    closeFd(received);
+    closeFd(shm);
+    closeFd(client);
+    closeFd(accepted);
+    closeFd(listen);
 }
 
 TEST(PlatformWindowsTest, ShutdownUnblocksAcceptAndRecv)

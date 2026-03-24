@@ -8,12 +8,12 @@ Use a named pipe per connection for handshake traffic and wakeup bytes. That pre
 
 This keeps the transport same-machine only and replaces Linux `memfd` plus `SCM_RIGHTS` with a Windows-native named-object model.
 
-Stop and disconnect behavior is explicit. `shutdownConnection()` cancels blocked accept or recv paths so service and client threads unwind promptly. `call()` timeout semantics stay unchanged.
+Stop and disconnect behavior is explicit. `shutdownConnection()` cancels blocked accept or recv paths so service and client threads unwind promptly. `call()` timeout semantics stay unchanged, and the platform seam now enforces the configured timeout by bounding each overlapped pipe read or write wait.
 
 The current Windows scope is intentionally threaded-mode only. `RunLoop` integration is rejected when a `RunLoop*` is supplied, because named-pipe readability is not wired into the existing `vortex` waitable-handle model.
 
 ## TDD Order
-1. `PlatformWindowsTest.cpp` covers pipe connect, wakeup round-trip, shared-memory mapping, and shutdown unblock behavior.
+1. `PlatformWindowsTest.cpp` covers pipe connect, wakeup round-trip, shared-memory mapping, timeout enforcement, dummy-byte handshake behavior for zero-length payloads, and shutdown unblock behavior.
 2. `ConnectionTest.cpp` stays platform-neutral and validates the common handshake and ring behavior.
 3. `ServiceBaseTest.cpp`, `ClientBaseTest.cpp`, and generated-code tests explicitly assert that Windows rejects `RunLoop` mode.
 4. Native validation runs in GitHub Actions on `windows-latest`.
