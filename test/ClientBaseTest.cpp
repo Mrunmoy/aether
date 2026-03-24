@@ -203,8 +203,8 @@ TEST(ClientBaseTest, InvalidMethodReturnsError)
 
 TEST(ClientBaseTest, UnknownSequenceResponseIsIgnored)
 {
-    int listenFd = serverSocket(SVC_NAME);
-    ASSERT_GE(listenFd, 0);
+    platform::Handle listenFd = serverSocket(SVC_NAME);
+    ASSERT_TRUE(platform::isValidHandle(listenFd));
     std::atomic<bool> serverOk{true};
     std::atomic<bool> serverDone{false};
 
