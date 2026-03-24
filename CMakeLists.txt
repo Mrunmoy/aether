@@ -80,11 +80,15 @@ target_include_directories(aether_shared PUBLIC
 )
 target_compile_features(aether_shared PUBLIC cxx_std_17)
 target_link_libraries(aether_shared PRIVATE ouroboros vortex Threads::Threads)
-set_target_properties(aether_shared PROPERTIES
-    OUTPUT_NAME aether
-    VERSION     ${PROJECT_VERSION}
-    SOVERSION   ${PROJECT_VERSION_MAJOR}
-)
+if(WIN32)
+    set_target_properties(aether_shared PROPERTIES OUTPUT_NAME aether_shared)
+else()
+    set_target_properties(aether_shared PROPERTIES
+        OUTPUT_NAME aether
+        VERSION     ${PROJECT_VERSION}
+        SOVERSION   ${PROJECT_VERSION_MAJOR}
+    )
+endif()
 
 # ── Install ──────────────────────────────────────────────────────────
 include(GNUInstallDirs)

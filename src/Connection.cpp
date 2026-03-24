@@ -4,8 +4,16 @@
 #include <new>
 #include <atomic>
 #include <cstdio>
-#include <functional>
 #include <string>
+
+// std::hash and GetCurrentProcessId are only needed for the Windows shared memory name.
+#if defined(_WIN32)
+#include <functional>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #if !defined(_WIN32)
 #include <sys/mman.h>
@@ -33,7 +41,8 @@ namespace aether::ipc
 #if defined(_WIN32)
         const char *safeServiceName = (serviceName != nullptr) ? serviceName : "";
         char buf[128];
-        std::snprintf(buf, sizeof(buf), "Local\\aether_shm_%u_%08X",
+        std::snprintf(buf, sizeof(buf), "Local\\aether_shm_%u_%u_%08X",
+                      static_cast<unsigned>(GetCurrentProcessId()),
                       static_cast<unsigned>(g_nextConnectionId.fetch_add(1, std::memory_order_relaxed)),
                       static_cast<unsigned>(std::hash<std::string>{}(safeServiceName)));
         return std::string(buf);
@@ -160,14 +169,14 @@ namespace aether::ipc
             return conn;
         }
 
-        // 3. Validate protocol version.
+        // 4. Validate protocol version.
         if (hs.version != kProtocolVersion)
         {
             conn.close();
             return conn;
         }
 
-        // 4. Map the shared memory.
+        // 5. Map the shared memory.
         conn.shmBase = platform::mapSharedMemory(conn.shmFd, kShmSize);
         if (conn.shmBase == nullptr
 #if !defined(_WIN32)
@@ -181,12 +190,12 @@ namespace aether::ipc
         }
         conn.shmSize = kShmSize;
 
-        // 5. Set ring buffer pointers (opposite direction from client).
+        // 6. Set ring buffer pointers (opposite direction from client).
         auto *base = static_cast<uint8_t *>(conn.shmBase);
         conn.rxRing = reinterpret_cast<IpcRing *>(base);
         conn.txRing = reinterpret_cast<IpcRing *>(base + sizeof(IpcRing));
 
-        // 6. Send ACK to client.
+        // 7. Send ACK to client.
         if (platform::sendSignal(conn.socketFd) != 0)
         {
             conn.close();

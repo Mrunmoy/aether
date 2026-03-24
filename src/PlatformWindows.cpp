@@ -33,7 +33,7 @@ namespace aether::ipc::platform
 
         uint64_t fnv1a64(const char *name)
         {
-            constexpr uint64_t kOffset = 1469598103934665603ULL;
+            constexpr uint64_t kOffset = 14695981039346656037ULL;
             constexpr uint64_t kPrime = 1099511628211ULL;
             uint64_t hash = kOffset;
             for (const unsigned char *p = reinterpret_cast<const unsigned char *>(name); *p != 0;
@@ -131,6 +131,7 @@ namespace aether::ipc::platform
     {
         const char *safeName = (name != nullptr) ? name : "";
         const uint64_t hash = fnv1a64(safeName);
+        SetLastError(0);
         HANDLE stopEvent = CreateEventA(nullptr, TRUE, FALSE, listenerStopName(hash).c_str());
         if (stopEvent == nullptr)
         {
@@ -154,7 +155,8 @@ namespace aether::ipc::platform
     {
         const char *safeName = (name != nullptr) ? name : "";
         std::string path = pipeName(fnv1a64(safeName));
-        for (int attempt = 0; attempt < 250; ++attempt)
+        DWORD backoffMs = 10;
+        for (int attempt = 0; attempt < 50; ++attempt)
         {
             HANDLE h = CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -164,14 +166,27 @@ namespace aether::ipc::platform
             }
 
             DWORD err = GetLastError();
-            if (err != ERROR_PIPE_BUSY && err != ERROR_FILE_NOT_FOUND)
+            if (err == ERROR_PIPE_BUSY)
+            {
+                if (!WaitNamedPipeA(path.c_str(), backoffMs))
+                {
+                    Sleep(backoffMs);
+                }
+            }
+            else if (err == ERROR_FILE_NOT_FOUND)
+            {
+                Sleep(backoffMs);
+            }
+            else
             {
                 break;
             }
 
-            if (!WaitNamedPipeA(path.c_str(), 20))
+            if (backoffMs < 200)
             {
-                Sleep(20);
+                backoffMs *= 2;
+                if (backoffMs > 200)
+                    backoffMs = 200;
             }
         }
 
@@ -280,16 +295,85 @@ namespace aether::ipc::platform
 
     int sendSignal(Handle sockFd)
     {
+        DWORD bytesAvail = 0;
+        DWORD totalBytesAvail = 0;
+        // Check if the pipe already has pending data (signal coalescing).
+        // PeekNamedPipe on write end fails, so we attempt a non-blocking
+        // overlapped write instead.
+        OVERLAPPED ov{};
+        ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+        if (ov.hEvent == nullptr)
+        {
+            return -1;
+        }
+
         uint8_t byte = 1;
-        return writeExact(sockFd, &byte, 1) ? 0 : -1;
+        DWORD written = 0;
+        BOOL ok = WriteFile(reinterpret_cast<HANDLE>(sockFd), &byte, 1, &written, &ov);
+        if (ok)
+        {
+            CloseHandle(ov.hEvent);
+            return 0;
+        }
+
+        DWORD err = GetLastError();
+        if (err != ERROR_IO_PENDING)
+        {
+            CloseHandle(ov.hEvent);
+            return -1;
+        }
+
+        // Wait with a short timeout; if the write would block, treat as coalesced.
+        DWORD waitRc = WaitForSingleObject(ov.hEvent, 50);
+        if (waitRc == WAIT_OBJECT_0)
+        {
+            if (GetOverlappedResult(reinterpret_cast<HANDLE>(sockFd), &ov, &written, FALSE))
+            {
+                CloseHandle(ov.hEvent);
+                return 0;
+            }
+        }
+
+        CancelIoEx(reinterpret_cast<HANDLE>(sockFd), &ov);
+        CloseHandle(ov.hEvent);
+        // Signal already pending — coalesced, treat as success.
+        return 0;
     }
 
     int recvSignal(Handle sockFd)
     {
         uint8_t byte = 0;
-        return readExact(sockFd, &byte, 1) ? 0 : -1;
+        if (!readExact(sockFd, &byte, 1))
+        {
+            return -1;
+        }
+
+        // Drain any residual bytes so we don't wake up N-1 extra times.
+        for (;;)
+        {
+            DWORD avail = 0;
+            if (!PeekNamedPipe(reinterpret_cast<HANDLE>(sockFd),
+                               nullptr, 0, nullptr, &avail, nullptr)
+                || avail == 0)
+            {
+                break;
+            }
+            uint8_t drain[64];
+            DWORD toRead = (avail < sizeof(drain)) ? avail : sizeof(drain);
+            DWORD got = 0;
+            if (!ReadFile(reinterpret_cast<HANDLE>(sockFd), drain, toRead, &got, nullptr)
+                || got == 0)
+            {
+                break;
+            }
+        }
+
+        return 0;
     }
 
+    // TODO: Named pipes don't support SO_SNDTIMEO/SO_RCVTIMEO-style
+    // timeouts. The handshake relies on overlapped I/O timeouts instead.
+    // This is a known limitation on the Windows platform.
     int setSocketTimeouts(Handle /*sockFd*/, uint32_t /*timeoutMs*/) { return 0; }
 
     int shutdownConnection(Handle sockFd)
@@ -334,16 +418,19 @@ namespace aether::ipc::platform
             return;
         }
 
-        ListenerEntry entry{};
-        if (lookupListener(fd, &entry))
+        HANDLE eventToClose = nullptr;
         {
             std::lock_guard<std::mutex> lock(g_listenerMutex);
             auto it = g_listeners.find(fd);
             if (it != g_listeners.end())
             {
-                CloseHandle(entry.stopEvent);
+                eventToClose = it->second.stopEvent;
                 g_listeners.erase(it);
             }
+        }
+        if (eventToClose)
+        {
+            CloseHandle(eventToClose);
             return;
         }
 
