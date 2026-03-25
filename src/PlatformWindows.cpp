@@ -33,6 +33,9 @@ namespace aether::ipc::platform
         std::atomic<uintptr_t> g_nextListenerToken{1};
         std::atomic<uint32_t> g_nextSharedMemoryId{1};
 
+        // High bit set to ensure listener tokens never collide with real HANDLE values.
+        constexpr uintptr_t kTokenTag = uintptr_t(1) << (sizeof(uintptr_t) * 8 - 1);
+
         uint64_t fnv1a64(const char *name)
         {
             constexpr uint64_t kOffset = 14695981039346656037ULL;
@@ -207,7 +210,8 @@ namespace aether::ipc::platform
             return kInvalidHandle;
         }
 
-        Handle token = reinterpret_cast<Handle>(g_nextListenerToken.fetch_add(1, std::memory_order_relaxed));
+        Handle token = reinterpret_cast<Handle>(
+            kTokenTag | g_nextListenerToken.fetch_add(1, std::memory_order_relaxed));
         {
             std::lock_guard<std::mutex> lock(g_listenerMutex);
             g_listeners.emplace(token, ListenerEntry{hash, stopEvent});
@@ -393,6 +397,10 @@ namespace aether::ipc::platform
                 CloseHandle(ov.hEvent);
                 return 0;
             }
+            // Write completed with error (broken pipe, etc.)
+            CancelIoEx(reinterpret_cast<HANDLE>(sockFd), &ov);
+            CloseHandle(ov.hEvent);
+            return -1;
         }
 
         CancelIoEx(reinterpret_cast<HANDLE>(sockFd), &ov);
@@ -451,7 +459,6 @@ namespace aether::ipc::platform
         // Cancel any pending overlapped I/O, then disconnect the pipe
         // so any future ReadFile/WriteFile fails immediately.
         CancelIoEx(h, nullptr);
-        FlushFileBuffers(h);
         DisconnectNamedPipe(h);
         return 0;
     }

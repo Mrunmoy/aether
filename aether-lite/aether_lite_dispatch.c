@@ -89,6 +89,20 @@ static void dispatch_frame(void)
         return;
     }
 
+    /* Reject payloads exceeding buffer capacity. */
+    if (s_parser.payload_size > AL_MAX_PAYLOAD)
+    {
+        memset(&resp_hdr, 0, sizeof(resp_hdr));
+        resp_hdr.version       = AL_PROTOCOL_VERSION;
+        resp_hdr.flags         = AL_FRAME_RESPONSE;
+        resp_hdr.service_id    = hdr.service_id;
+        resp_hdr.message_id    = hdr.message_id;
+        resp_hdr.seq           = hdr.seq;
+        resp_hdr.aux           = (uint32_t)AL_ERR_OVERFLOW;
+        (void)al_frame_send(&resp_hdr, NULL, 0);
+        return;
+    }
+
     /* Look up service */
     for (si = 0; si < s_service_count; si++)
     {
@@ -99,7 +113,15 @@ static void dispatch_frame(void)
     }
     if (si == s_service_count)
     {
-        return; /* unknown service, silently drop */
+        memset(&resp_hdr, 0, sizeof(resp_hdr));
+        resp_hdr.version       = AL_PROTOCOL_VERSION;
+        resp_hdr.flags         = AL_FRAME_RESPONSE;
+        resp_hdr.service_id    = hdr.service_id;
+        resp_hdr.message_id    = hdr.message_id;
+        resp_hdr.seq           = hdr.seq;
+        resp_hdr.aux           = (uint32_t)AL_ERR_INVALID_SERVICE;
+        (void)al_frame_send(&resp_hdr, NULL, 0);
+        return;
     }
 
     /* Look up method */
@@ -112,7 +134,15 @@ static void dispatch_frame(void)
     }
     if (mi == s_services[si].method_count)
     {
-        return; /* unknown method, silently drop */
+        memset(&resp_hdr, 0, sizeof(resp_hdr));
+        resp_hdr.version       = AL_PROTOCOL_VERSION;
+        resp_hdr.flags         = AL_FRAME_RESPONSE;
+        resp_hdr.service_id    = hdr.service_id;
+        resp_hdr.message_id    = hdr.message_id;
+        resp_hdr.seq           = hdr.seq;
+        resp_hdr.aux           = (uint32_t)AL_ERR_INVALID_METHOD;
+        (void)al_frame_send(&resp_hdr, NULL, 0);
+        return;
     }
 
     /* Call handler */
@@ -183,7 +213,9 @@ int al_poll(void)
 
 bool al_is_idle(void)
 {
-    return s_parser.state == AL_PS_SYNC_0;
+    /* Use volatile read so compiler doesn't hoist this out of a polling loop.
+       s_parser.state may be modified from ISR context via al_parser_feed(). */
+    return (*(volatile uint8_t *)&s_parser.state) == AL_PS_SYNC_0;
 }
 
 int al_register_service(uint32_t service_id,

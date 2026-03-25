@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -11,6 +12,7 @@
 #include <poll.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -21,8 +23,32 @@ namespace aether::ipc::platform
 
     namespace
     {
-        constexpr char kSocketPrefix[] = "/tmp/aether_";
         constexpr char kShmPrefix[] = "/aether_shm_";
+
+        // Return a per-user runtime directory for socket files.
+        // macOS sets $TMPDIR to /var/folders/<x>/<hash>/T/ which is per-user,
+        // mode 0700, immune to symlink attacks in /tmp.
+        const std::string &socketDir()
+        {
+            static const std::string dir = []
+            {
+                const char *tmpdir = std::getenv("TMPDIR");
+                if (tmpdir && tmpdir[0] != '\0')
+                {
+                    std::string d(tmpdir);
+                    if (d.back() != '/')
+                        d += '/';
+                    return d;
+                }
+                // Fallback: per-user path under /tmp
+                char fallback[128]{};
+                std::snprintf(fallback, sizeof(fallback), "/tmp/aether_%u/",
+                              static_cast<unsigned>(getuid()));
+                ::mkdir(fallback, 0700);
+                return std::string(fallback);
+            }();
+            return dir;
+        }
 
         uint64_t fnv1a64(const char *name)
         {
@@ -58,8 +84,8 @@ namespace aether::ipc::platform
         {
             const char *safeName = (name != nullptr) ? name : "";
             char buf[sizeof(sockaddr_un::sun_path)]{};
-            std::snprintf(buf, sizeof(buf), "%s%u_%016llX.sock", kSocketPrefix,
-                          static_cast<unsigned>(getuid()),
+            std::snprintf(buf, sizeof(buf), "%saether_%016llX.sock",
+                          socketDir().c_str(),
                           static_cast<unsigned long long>(fnv1a64(safeName)));
             return std::string(buf);
         }
@@ -76,7 +102,8 @@ namespace aether::ipc::platform
 
         bool isManagedSocketPath(const sockaddr_un &addr)
         {
-            return std::strncmp(addr.sun_path, kSocketPrefix, sizeof(kSocketPrefix) - 1) == 0;
+            const std::string &dir = socketDir();
+            return std::strncmp(addr.sun_path, dir.c_str(), dir.size()) == 0;
         }
     } // namespace
 

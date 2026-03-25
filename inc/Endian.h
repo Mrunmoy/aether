@@ -13,11 +13,19 @@ namespace aether::ipc
     inline uint32_t leToHost32(uint32_t v) { return __builtin_bswap32(v); }
     inline uint16_t hostToLe16(uint16_t v) { return __builtin_bswap16(v); }
     inline uint32_t hostToLe32(uint32_t v) { return __builtin_bswap32(v); }
-    #else
+    #elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     inline uint16_t leToHost16(uint16_t v) { return v; }
     inline uint32_t leToHost32(uint32_t v) { return v; }
     inline uint16_t hostToLe16(uint16_t v) { return v; }
     inline uint32_t hostToLe32(uint32_t v) { return v; }
+    #elif defined(_MSC_VER)
+    // MSVC targets x86/x64/ARM-LE only.
+    inline uint16_t leToHost16(uint16_t v) { return v; }
+    inline uint32_t leToHost32(uint32_t v) { return v; }
+    inline uint16_t hostToLe16(uint16_t v) { return v; }
+    inline uint32_t hostToLe32(uint32_t v) { return v; }
+    #else
+    #error "Cannot detect endianness — define __BYTE_ORDER__ or use MSVC"
     #endif
 
     // Convert FrameHeader between host byte order and wire (LE) byte order.

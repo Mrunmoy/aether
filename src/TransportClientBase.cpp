@@ -19,10 +19,14 @@ namespace aether::ipc
 
     bool TransportClientBase::connect(std::unique_ptr<ITransport> transport)
     {
-        if (m_running.load(std::memory_order_acquire))
+        // Atomically claim the "not running" → "connecting" transition.
+        // If two threads race on connect(), only one wins the CAS.
+        bool expected = false;
+        if (!m_running.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
         {
-            return false;
+            return false; // already connected or connecting
         }
+
         if (m_receiverThread.joinable())
         {
             m_receiverThread.join();
@@ -30,11 +34,20 @@ namespace aether::ipc
 
         if (!transport || !transport->connected())
         {
+            m_running.store(false, std::memory_order_release);
             return false;
         }
 
-        m_transport = std::move(transport);
-        m_running.store(true, std::memory_order_release);
+        // Publish m_transport under m_sendMutex so call() — which reads
+        // m_transport under the same lock — never sees a stale pointer.
+        // During the brief window between the CAS above and this assignment,
+        // call() may observe m_running==true but m_transport==null; its
+        // existing null-check under m_sendMutex safely returns DISCONNECTED.
+        {
+            std::lock_guard<std::mutex> slock(m_sendMutex);
+            m_transport = std::move(transport);
+        }
+
         m_receiverThread = std::thread([this] { receiverLoop(); });
         return true;
     }
@@ -43,9 +56,14 @@ namespace aether::ipc
     {
         bool wasRunning = m_running.exchange(false);
 
-        if (wasRunning && m_transport)
+        // Read m_transport under m_sendMutex to synchronize with
+        // connect() which assigns m_transport under the same lock.
         {
-            m_transport->shutdown();
+            std::lock_guard<std::mutex> slock(m_sendMutex);
+            if (wasRunning && m_transport)
+            {
+                m_transport->shutdown();
+            }
         }
 
         if (m_receiverThread.joinable())
