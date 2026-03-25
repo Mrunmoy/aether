@@ -313,11 +313,12 @@ public:
         {
             // Signal the shutdown pipe to unblock poll() in readByte().
             uint8_t sig = 1;
-            ssize_t rc = ::write(m_shutdownPipe[1], &sig, 1);
-            if (rc < 0 && errno != EINTR)
+            ssize_t rc;
+            do
             {
-                // Best-effort wakeup only; shutdown state is already visible.
-            }
+                rc = ::write(m_shutdownPipe[1], &sig, 1);
+            } while (rc < 0 && errno == EINTR);
+            // Best-effort wakeup only; shutdown state is already visible.
         }
     }
 
