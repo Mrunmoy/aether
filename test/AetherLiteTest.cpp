@@ -257,7 +257,7 @@ TEST(AetherLiteTest, ParserTimeout)
     hdr.service_id = 1;
 
     uint8_t frame[128];
-    size_t frame_len = build_frame(frame, hdr, nullptr, 0);
+    (void)build_frame(frame, hdr, nullptr, 0);
 
     /* Feed sync + length + partial body */
     size_t consumed = 0;

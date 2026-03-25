@@ -12,7 +12,8 @@
     typedef char al_sa_##name[(cond) ? 1 : -1]
 
 /* ── Error Codes ─────────────────────────────────────────────────── */
-/* Negative = framework, 0 = success, positive = user-defined. */
+/* Negative = framework, 0 = success, positive = user-defined.      */
+/* Values MUST match the C++ IpcError enum in inc/Types.h.          */
 
 #define AL_SUCCESS              0
 #define AL_ERR_DISCONNECTED     (-1)
@@ -20,9 +21,14 @@
 #define AL_ERR_INVALID_SERVICE  (-3)
 #define AL_ERR_INVALID_METHOD   (-4)
 #define AL_ERR_VERSION_MISMATCH (-5)
-#define AL_ERR_OVERFLOW         (-6)
+#define AL_ERR_RING_FULL        (-6)
 #define AL_ERR_STOPPED          (-7)
 #define AL_ERR_INVALID_ARGUMENT (-8)
+#define AL_ERR_TRANSPORT        (-9)
+#define AL_ERR_CRC              (-10)
+#define AL_ERR_NOT_SUPPORTED    (-11)
+#define AL_ERR_NO_SPACE         (-12)
+#define AL_ERR_OVERFLOW         (-13)
 
 /* ── Frame Flags ─────────────────────────────────────────────────── */
 
