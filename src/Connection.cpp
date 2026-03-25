@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <type_traits>
 
 // std::hash and GetCurrentProcessId are only needed for the Windows shared memory name.
 #if defined(_WIN32)
@@ -24,6 +25,11 @@
 
 namespace aether::ipc
 {
+
+    // IpcRing is placement-new'd into shared memory and never explicitly
+    // destructed.  Guard against future changes that add non-trivial members.
+    static_assert(std::is_trivially_destructible_v<IpcRing>,
+                  "IpcRing must be trivially destructible for placement-new in shared memory");
 
     // ── Shared Memory Layout ────────────────────────────────────────
     //
