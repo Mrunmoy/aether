@@ -46,9 +46,9 @@ namespace aether::ipc
     }
 
     // ITransport implementation over a file descriptor using the aether wire format:
-    //   [0xAA][0x55][4-byte LE length][24-byte header][payload][CRC32]
+    //   [0xAA][0x55][4-byte LE length][FrameHeader][payload][CRC32]
     //
-    // The length field = sizeof(header) + sizeof(payload) + sizeof(CRC) = 24 + N + 4.
+    // The length field = sizeof(FrameHeader) + sizeof(payload) + sizeof(CRC).
     // CRC covers the length field + header + payload bytes.
     //
     // Uses poll() with a shutdown pipe to make recvFrame() interruptible.
@@ -81,12 +81,16 @@ namespace aether::ipc
             if (m_fd < 0 || m_shutdown.load(std::memory_order_acquire))
                 return IPC_ERR_TRANSPORT;
 
+            // Guard against integer overflow in length calculation.
+            if (payloadBytes > 256 * 1024)
+                return IPC_ERR_OVERFLOW;
+
             // Build wire header (little-endian).
             FrameHeader wireHdr = header;
             frameHeaderToWire(&wireHdr);
 
             // Frame length = header + payload + CRC.
-            uint32_t frameLen = 24 + payloadBytes + 4;
+            uint32_t frameLen = static_cast<uint32_t>(sizeof(FrameHeader)) + payloadBytes + 4;
             uint32_t frameLenLE = hostToLe32(frameLen);
 
             // Sync bytes.
@@ -95,7 +99,7 @@ namespace aether::ipc
             // CRC over length + header + payload.
             uint32_t crc = 0xFFFFFFFFu;
             crc = serialCrc32Update(crc, reinterpret_cast<const uint8_t *>(&frameLenLE), 4);
-            crc = serialCrc32Update(crc, reinterpret_cast<const uint8_t *>(&wireHdr), 24);
+            crc = serialCrc32Update(crc, reinterpret_cast<const uint8_t *>(&wireHdr), sizeof(FrameHeader));
             if (payloadBytes > 0 && payload)
             {
                 crc = serialCrc32Update(crc, payload, payloadBytes);
@@ -108,7 +112,7 @@ namespace aether::ipc
                 return IPC_ERR_TRANSPORT;
             if (!writeAll(reinterpret_cast<const uint8_t *>(&frameLenLE), 4))
                 return IPC_ERR_TRANSPORT;
-            if (!writeAll(reinterpret_cast<const uint8_t *>(&wireHdr), 24))
+            if (!writeAll(reinterpret_cast<const uint8_t *>(&wireHdr), sizeof(FrameHeader)))
                 return IPC_ERR_TRANSPORT;
             if (payloadBytes > 0 && payload)
             {
@@ -178,8 +182,9 @@ namespace aether::ipc
                         std::memcpy(&frameLen, lenBuf, 4);
                         frameLen = leToHost32(frameLen);
 
-                        // Sanity: min = 24 (hdr) + 4 (crc) = 28
-                        if (frameLen < 28 || frameLen > 24 + 65536 + 4)
+                        // Sanity: min = sizeof(FrameHeader) + 4 (crc)
+                        constexpr uint32_t kMinFrame = static_cast<uint32_t>(sizeof(FrameHeader)) + 4;
+                        if (frameLen < kMinFrame || frameLen > static_cast<uint32_t>(sizeof(FrameHeader)) + 65536 + 4)
                         {
                             state = SYNC_0;
                             break;
@@ -196,7 +201,7 @@ namespace aether::ipc
                     if (bodyPos == frameLen)
                     {
                         // Validate CRC: covers length + header + payload.
-                        uint32_t payloadSize = frameLen - 24 - 4;
+                        uint32_t payloadSize = frameLen - static_cast<uint32_t>(sizeof(FrameHeader)) - 4;
                         uint32_t crc = 0xFFFFFFFFu;
                         crc = serialCrc32Update(crc, lenBuf, 4);
                         crc = serialCrc32Update(crc, body.data(), frameLen - 4);
@@ -213,14 +218,21 @@ namespace aether::ipc
                         }
 
                         // Deserialize header.
-                        std::memcpy(header, body.data(), 24);
+                        std::memcpy(header, body.data(), sizeof(FrameHeader));
                         frameHeaderFromWire(header);
+
+                        // Validate header's payloadBytes against frame length.
+                        if (header->payloadBytes != payloadSize)
+                        {
+                            state = SYNC_0;
+                            continue; // re-sync on mismatch
+                        }
 
                         // Copy payload.
                         payload->resize(payloadSize);
                         if (payloadSize > 0)
                         {
-                            std::memcpy(payload->data(), body.data() + 24, payloadSize);
+                            std::memcpy(payload->data(), body.data() + sizeof(FrameHeader), payloadSize);
                         }
 
                         return IPC_SUCCESS;
@@ -258,7 +270,13 @@ namespace aether::ipc
             while (written < len)
             {
                 ssize_t n = ::write(m_fd, buf + written, len - written);
-                if (n <= 0)
+                if (n < 0)
+                {
+                    if (errno == EINTR)
+                        continue;
+                    return false;
+                }
+                if (n == 0)
                     return false;
                 written += static_cast<size_t>(n);
             }
@@ -274,7 +292,12 @@ namespace aether::ipc
             fds[1].fd = m_shutdownPipe[0];
             fds[1].events = POLLIN;
 
-            int ret = ::poll(fds, 2, 2000); // 2s timeout
+            int ret;
+            do
+            {
+                ret = ::poll(fds, 2, 2000); // 2s timeout
+            } while (ret < 0 && errno == EINTR);
+
             if (ret <= 0)
                 return -1;
             if (fds[1].revents & POLLIN)
@@ -282,7 +305,12 @@ namespace aether::ipc
             if (!(fds[0].revents & POLLIN))
                 return -1;
 
-            ssize_t n = ::read(m_fd, out, 1);
+            ssize_t n;
+            do
+            {
+                n = ::read(m_fd, out, 1);
+            } while (n < 0 && errno == EINTR);
+
             return (n == 1) ? 1 : -1;
         }
 

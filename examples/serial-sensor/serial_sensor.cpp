@@ -1,19 +1,20 @@
 #include "SerialTransport.h"
 #include "TransportClientBase.h"
+#include "sensor_device.h"
 
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <thread>
 
+#if defined(__APPLE__)
+#include <util.h>
+#else
 #include <pty.h>
+#endif
 #include <termios.h>
 #include <unistd.h>
-
-extern "C"
-{
-    void sensor_device_run(int fd, const volatile int *stop_flag);
-}
 
 static constexpr uint32_t kSensorServiceId = 0xA3B7C901u;
 static constexpr uint32_t kMethodGetTemperature = 1;
@@ -46,9 +47,13 @@ int main()
     std::printf("PTY master=%d, slave=%d\n\n", master_fd, slave_fd);
 
     // Spawn device thread.
-    volatile int stop_flag = 0;
+    // std::atomic<int> avoids the data-race UB that volatile int would have.
+    // The C HAL interface expects `const volatile int *`, which is layout-
+    // compatible with std::atomic<int> on every platform we target.
+    std::atomic<int> stop_flag{0};
     std::thread device_thread([slave_fd, &stop_flag]() {
-        sensor_device_run(slave_fd, &stop_flag);
+        sensor_device_run(slave_fd,
+                          reinterpret_cast<const volatile int *>(&stop_flag));
     });
 
     // Small delay so the device can init.
@@ -61,7 +66,7 @@ int main()
     if (!client.connect(std::move(transport)))
     {
         std::fprintf(stderr, "Failed to connect transport\n");
-        stop_flag = 1;
+        stop_flag.store(1, std::memory_order_release);
         device_thread.join();
         close(master_fd);
         close(slave_fd);
@@ -116,7 +121,8 @@ int main()
                              {}, &response);
         if (rc == aether::ipc::IPC_SUCCESS && !response.empty())
         {
-            std::printf("GetDeviceId: %s\n", reinterpret_cast<const char *>(response.data()));
+            std::printf("GetDeviceId: %.*s\n", static_cast<int>(response.size()),
+                        reinterpret_cast<const char *>(response.data()));
         }
         else
         {
@@ -128,7 +134,7 @@ int main()
 
     // Disconnect and stop device.
     client.disconnect();
-    stop_flag = 1;
+    stop_flag.store(1, std::memory_order_release);
     device_thread.join();
 
     close(master_fd);
