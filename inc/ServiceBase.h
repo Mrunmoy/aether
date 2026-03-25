@@ -101,6 +101,8 @@ namespace aether::ipc
         std::atomic<bool> m_peerUidFilterEnabled{false};
         std::atomic<uint32_t> m_allowedPeerUid{0};
 
+        std::atomic<uint32_t> m_notifySeq{0};
+
         std::mutex m_clientsMutex;
         std::vector<std::shared_ptr<ClientConn>> m_clients;
     };

@@ -1039,6 +1039,51 @@ TEST(ServiceBaseTest, RunLoop_MaxClientsRejectsExcess)
 // ═════════════════════════════════════════════════════════════════════
 
 // ═════════════════════════════════════════════════════════════════════
+// Notification sequence numbers are monotonically increasing
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, NotifySequenceIsMonotonic)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    constexpr int kNotifications = 5;
+    const uint8_t payload[] = "seq-test";
+
+    for (int i = 0; i < kNotifications; ++i)
+    {
+        ASSERT_EQ(svc.testNotify(static_cast<uint32_t>(i + 1), payload, sizeof(payload)),
+                  IPC_SUCCESS);
+    }
+
+    // Read all notification frames and verify aux contains 1, 2, 3, 4, 5.
+    std::vector<uint32_t> seqs;
+    for (int i = 0; i < kNotifications; ++i)
+    {
+        ASSERT_EQ(recvSignal(client.socketFd), 0) << "signal " << i;
+        FrameHeader hdr{};
+        std::vector<uint8_t> p;
+        ASSERT_EQ(readFrameAlloc(client.rxRing, &hdr, &p), IPC_SUCCESS) << "frame " << i;
+        EXPECT_EQ(hdr.flags, FRAME_NOTIFY);
+        seqs.push_back(hdr.aux);
+    }
+
+    ASSERT_EQ(seqs.size(), static_cast<size_t>(kNotifications));
+    for (int i = 0; i < kNotifications; ++i)
+    {
+        EXPECT_EQ(seqs[static_cast<size_t>(i)], static_cast<uint32_t>(i + 1))
+            << "notification " << i << " has wrong sequence number";
+    }
+
+    client.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
 // Notify does not block accept — sendNotify releases m_clientsMutex
 // before iterating clients, so acceptLoop can add new connections.
 // ═════════════════════════════════════════════════════════════════════

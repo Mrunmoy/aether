@@ -810,6 +810,54 @@ TEST(ClientBaseTest, RunLoopModeNotSupportedOnWindows)
 #endif
 
 // ═════════════════════════════════════════════════════════════════════
+// Notification sequence numbers increase monotonically (aux field)
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, NotificationSequenceIncreases)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    // Use a raw Connection so we can inspect the frame header's aux field.
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    constexpr int kNotifications = 3;
+    const uint8_t payload[] = "seq-check";
+
+    for (int i = 0; i < kNotifications; ++i)
+    {
+        ASSERT_EQ(svc.testNotify(static_cast<uint32_t>(i + 1), payload, sizeof(payload)),
+                  IPC_SUCCESS);
+    }
+
+    // Read all notification frames and verify aux is monotonically increasing.
+    std::vector<uint32_t> seqs;
+    for (int i = 0; i < kNotifications; ++i)
+    {
+        ASSERT_EQ(recvSignal(client.socketFd), 0) << "signal " << i;
+        FrameHeader hdr{};
+        std::vector<uint8_t> p;
+        ASSERT_EQ(readFrameAlloc(client.rxRing, &hdr, &p), IPC_SUCCESS) << "frame " << i;
+        EXPECT_EQ(hdr.flags, FRAME_NOTIFY);
+        seqs.push_back(hdr.aux);
+    }
+
+    ASSERT_EQ(seqs.size(), static_cast<size_t>(kNotifications));
+    for (size_t i = 1; i < seqs.size(); ++i)
+    {
+        EXPECT_GT(seqs[i], seqs[i - 1])
+            << "sequence not monotonically increasing at index " << i;
+    }
+    // Verify they start at 1.
+    EXPECT_EQ(seqs[0], 1u);
+
+    client.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
 // Double disconnect — no crash or deadlock
 // ═════════════════════════════════════════════════════════════════════
 
