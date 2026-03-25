@@ -940,6 +940,97 @@ TEST(ServiceBaseTest, RunLoop_MaxClientsRejectsExcess)
 // Peer UID filter tests
 // ═════════════════════════════════════════════════════════════════════
 
+// ═════════════════════════════════════════════════════════════════════
+// Notify does not block accept — sendNotify releases m_clientsMutex
+// before iterating clients, so acceptLoop can add new connections.
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, NotifyDoesNotBlockAccept)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    Connection client1 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client1.valid());
+    settle();
+
+    // Start a thread that sends notifications in a loop.
+    std::atomic<bool> notifyDone{false};
+    std::thread notifier([&] {
+        const uint8_t payload[] = "notify";
+        for (int i = 0; i < 10; ++i)
+        {
+            svc.testNotify(static_cast<uint32_t>(i), payload, sizeof(payload));
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        notifyDone.store(true, std::memory_order_release);
+    });
+
+    // While notifications are running, connect a second client.
+    // This should succeed quickly (< 500ms) if sendNotify doesn't
+    // hold m_clientsMutex for the entire broadcast loop.
+    auto t0 = std::chrono::steady_clock::now();
+    Connection client2 = connectToServer(SVC_NAME);
+    auto t1 = std::chrono::steady_clock::now();
+
+    ASSERT_TRUE(client2.valid());
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+    EXPECT_LT(elapsed.count(), 500) << "connecting client2 took too long (" << elapsed.count()
+                                    << " ms); sendNotify may be blocking accept";
+
+    notifier.join();
+
+    // Drain any pending notifications on client1.
+    // (We don't care about content, just ensure no crash.)
+    client1.close();
+    client2.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Notify with concurrent disconnect — no crash, no hang
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, NotifyWithConcurrentDisconnect)
+{
+    NotifyTestService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    // Connect 3 clients.
+    Connection clients[3];
+    for (auto &c : clients)
+    {
+        c = connectToServer(SVC_NAME);
+        ASSERT_TRUE(c.valid());
+    }
+    settle();
+
+    // Start notifications in a background thread.
+    std::atomic<bool> notifyDone{false};
+    std::thread notifier([&] {
+        const uint8_t payload[] = "concurrent";
+        for (int i = 0; i < 20; ++i)
+        {
+            svc.testNotify(static_cast<uint32_t>(i), payload, sizeof(payload));
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        notifyDone.store(true, std::memory_order_release);
+    });
+
+    // Disconnect clients one by one while notifications are in flight.
+    for (auto &c : clients)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        c.close();
+    }
+
+    notifier.join();
+
+    // Service should still be healthy — no crash, no hang.
+    EXPECT_TRUE(svc.isRunning());
+    svc.stop();
+}
+
 #if !defined(_WIN32) && !defined(__APPLE__)
 
 TEST(ServiceBaseTest, PeerUidFilterRejectsDifferentUid)
