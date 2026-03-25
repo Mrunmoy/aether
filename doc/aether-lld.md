@@ -221,7 +221,22 @@ for the control channel and named file mappings for shared memory.
 **Thread safety:** Not thread-safe on the same `sockFd`.
 **Notes:** Only sets `SO_SNDTIMEO`, not `SO_RCVTIMEO`. Receiver threads intentionally block on `recv()` and rely on `shutdown()` to unblock — a receive timeout would cause spurious disconnect detection.
 
-### 3.10 closeFd()
+### 3.10 getPeerUid() (Linux only)
+
+**Signature:** `int getPeerUid(Handle sockFd, uint32_t *uid)`
+**Description:** Get the peer process's UID from a connected Unix domain socket using `SO_PEERCRED`.
+**Availability:** Linux only (`#if !defined(_WIN32) && !defined(__APPLE__)`).
+
+| Parameter | Type | Direction | Description |
+|-----------|------|-----------|-------------|
+| `sockFd` | `Handle` | in | Connected UDS socket (either side of an accepted connection). |
+| `uid` | `uint32_t *` | out | Receives the peer's UID on success. |
+
+**Returns:** 0 on success and sets `*uid`, -1 on failure.
+**Thread safety:** Safe to call from any thread on a valid socket.
+**Notes:** Uses `getsockopt(SOL_SOCKET, SO_PEERCRED)`. Works on both the accepted fd and the client fd of a UDS connection.
+
+### 3.11 closeFd()
 
 **Signature:** `void closeFd(int fd)`
 **Description:** Close a file descriptor. Safe to call with -1 (no-op).
@@ -456,7 +471,24 @@ defaults. Move-assignment calls `close()` on the destination first.
 **Returns:** `IPC_SUCCESS` or a user-defined error code. The return value is placed in the response frame's `aux` field and delivered to the caller.
 **Thread safety:** Called on the receiver thread (threaded mode) or the RunLoop thread (RunLoop mode). One call at a time per client connection.
 
-### 6.7 sendNotify()
+### 6.7 setAllowedPeerUid() / clearPeerUidFilter()
+
+**Signature:** `void setAllowedPeerUid(uint32_t uid)` -- enable filter
+**Signature:** `void clearPeerUidFilter()` -- disable filter (allow all)
+**Description:** Restrict accepted connections to peers with the given UID, or clear the restriction.
+
+| Parameter | Type | Direction | Description |
+|-----------|------|-----------|-------------|
+| `uid` | `uint32_t` | in | Allowed peer UID. |
+
+**Behavior:**
+- `setAllowedPeerUid(uid)` enables the filter. Each newly accepted connection is checked via `platform::getPeerUid()`. If the peer's UID does not match, the connection is immediately closed.
+- `clearPeerUidFilter()` disables the filter. All connections are accepted (this is the default state).
+- Linux only (`SO_PEERCRED`). On macOS and Windows the filter is a no-op (all connections are accepted regardless of the setting).
+
+**Thread safety:** Both methods are thread-safe (atomic stores). Can be called before or after `start()`.
+
+### 6.8 sendNotify()
 
 **Signature:** `int sendNotify(uint32_t serviceId, uint32_t messageId, const uint8_t *payload, uint32_t payloadBytes)`
 **Description:** Broadcast a `FRAME_NOTIFY` to all connected clients.
