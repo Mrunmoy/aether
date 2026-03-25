@@ -114,21 +114,24 @@ namespace aether::ipc
     uint32_t ClientBase::nextUniqueSeq()
     {
         // Caller must hold m_pendingMutex.
-        static constexpr int kMaxRetries = 64;
+        //
+        // This loop terminates because m_pending.size() is bounded by available
+        // memory (at most a few thousand concurrent calls), so at most that many
+        // iterations before finding a free seq.
+        uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+        if (seq == 0)
+            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
 
-        for (int attempt = 0; attempt < kMaxRetries; ++attempt)
+        uint32_t start = seq;
+        while (m_pending.count(seq))
         {
-            uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
-
-            // Skip seq==0 (reserved / could be confused with "no sequence").
+            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
             if (seq == 0)
                 seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
-
-            if (!m_pending.count(seq))
-                return seq;
+            if (seq == start)
+                return 0; // wrapped completely — all seqs exhausted
         }
-
-        return 0; // failure — all attempted values collided
+        return seq;
     }
 
     // ── Synchronous RPC ─────────────────────────────────────────────
