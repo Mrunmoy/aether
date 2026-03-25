@@ -89,6 +89,15 @@ namespace aether::ipc::platform
     void *mapSharedMemory(Handle shmFd, uint32_t size);
     void unmapSharedMemory(void *base, uint32_t size);
 
+    // ── Peer Credentials ──────────────────────────────────────────────
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+    // Get the peer's UID from a connected Unix domain socket.
+    // Uses SO_PEERCRED on Linux.
+    // Returns 0 on success and sets *uid, -1 on failure.
+    int getPeerUid(Handle sockFd, uint32_t *uid);
+#endif
+
     // ── File Descriptor ─────────────────────────────────────────────
 
     // Close a file descriptor or handle. Safe to call with kInvalidHandle.

@@ -351,6 +351,47 @@ TEST(PlatformTest, ClosingAcceptedClientDoesNotUnlinkListener)
 }
 #endif
 
+// ═════════════════════════════════════════════════════════════════════
+// SO_PEERCRED peer credential tests (Linux only)
+// ═════════════════════════════════════════════════════════════════════
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+
+TEST(PlatformTest, GetPeerCredentials)
+{
+    Handle srv = serverSocket(SOCK_NAME);
+    ASSERT_GE(srv, 0);
+
+    Handle cli = clientSocket(SOCK_NAME);
+    ASSERT_GE(cli, 0);
+
+    Handle accepted = acceptClient(srv);
+    ASSERT_GE(accepted, 0);
+
+    // The peer UID on the accepted socket should be our own UID.
+    uint32_t peerUid = 0;
+    ASSERT_EQ(getPeerUid(accepted, &peerUid), 0);
+    EXPECT_EQ(peerUid, static_cast<uint32_t>(getuid()));
+
+    // Also verify from the client side.
+    uint32_t peerUidClient = 0;
+    ASSERT_EQ(getPeerUid(cli, &peerUidClient), 0);
+    EXPECT_EQ(peerUidClient, static_cast<uint32_t>(getuid()));
+
+    closeFd(accepted);
+    closeFd(cli);
+    closeFd(srv);
+}
+
+TEST(PlatformTest, GetPeerCredentialsInvalidFd)
+{
+    // Invalid fd should return -1.
+    uint32_t peerUid = 0;
+    EXPECT_EQ(getPeerUid(-1, &peerUid), -1);
+}
+
+#endif // !_WIN32 && !__APPLE__
+
 TEST(PlatformTest, PendingWakeupDrainsQueuedFrameBurst)
 {
 #if defined(__APPLE__)

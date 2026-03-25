@@ -47,6 +47,12 @@ namespace aether::ipc
         // 0 = unlimited (default). Thread-safe; may be called while running.
         void setMaxClients(uint32_t max);
 
+        // ── Peer Credential Filter ───────────────────────────────────
+        // Restrict accepted connections to peers with the given UID.
+        // Thread-safe (atomic). Linux only (SO_PEERCRED). No-op on other platforms.
+        void setAllowedPeerUid(uint32_t uid);  // enable filter
+        void clearPeerUidFilter();              // disable filter (allow all)
+
     protected:
         // ── Virtual dispatch point ───────────────────────────────────
         // Called on the receiver thread for each incoming FRAME_REQUEST.
@@ -79,6 +85,10 @@ namespace aether::ipc
         void onClientReady(ClientConn *client);
         void removeClient(ClientConn *client);
 
+        // Returns true if the peer on socketFd passes the UID filter.
+        // Always returns true when no filter is set or on non-Linux platforms.
+        bool checkPeerUid(platform::Handle socketFd);
+
         std::string m_serviceName;
         ms::RunLoop *m_loop = nullptr;
         platform::Handle m_listenFd = platform::kInvalidHandle;
@@ -87,6 +97,9 @@ namespace aether::ipc
         std::thread m_acceptThread;
 
         std::atomic<uint32_t> m_maxClients{0}; // 0 = unlimited
+
+        std::atomic<bool> m_peerUidFilterEnabled{false};
+        std::atomic<uint32_t> m_allowedPeerUid{0};
 
         std::mutex m_clientsMutex;
         std::vector<std::unique_ptr<ClientConn>> m_clients;

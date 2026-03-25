@@ -243,6 +243,18 @@ namespace aether::ipc::platform
         return (shutdown(static_cast<int>(sockFd), SHUT_RDWR) == 0) ? 0 : -1;
     }
 
+    // ── Peer Credentials ──────────────────────────────────────────────
+
+    int getPeerUid(Handle sockFd, uint32_t *uid)
+    {
+        struct ucred cred{};
+        socklen_t len = sizeof(cred);
+        if (getsockopt(static_cast<int>(sockFd), SOL_SOCKET, SO_PEERCRED, &cred, &len) != 0)
+            return -1;
+        *uid = static_cast<uint32_t>(cred.uid);
+        return 0;
+    }
+
     // ── Shared Memory ───────────────────────────────────────────────
 
     Handle shmCreate(uint32_t size, const char * /*name*/)

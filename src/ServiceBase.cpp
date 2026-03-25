@@ -134,6 +134,37 @@ namespace aether::ipc
 
     void ServiceBase::setMaxClients(uint32_t max) { m_maxClients.store(max, std::memory_order_relaxed); }
 
+    void ServiceBase::setAllowedPeerUid(uint32_t uid)
+    {
+        m_allowedPeerUid.store(uid, std::memory_order_release);
+        m_peerUidFilterEnabled.store(true, std::memory_order_release);
+    }
+
+    void ServiceBase::clearPeerUidFilter()
+    {
+        m_peerUidFilterEnabled.store(false, std::memory_order_release);
+    }
+
+    // ── Peer Credential Check ────────────────────────────────────────
+
+    bool ServiceBase::checkPeerUid(platform::Handle socketFd)
+    {
+#if !defined(_WIN32) && !defined(__APPLE__)
+        if (m_peerUidFilterEnabled.load(std::memory_order_acquire))
+        {
+            uint32_t peerUid = 0;
+            if (platform::getPeerUid(socketFd, &peerUid) != 0)
+                return false;
+            uint32_t allowed = m_allowedPeerUid.load(std::memory_order_acquire);
+            if (peerUid != allowed)
+                return false;
+        }
+#else
+        (void)socketFd;
+#endif
+        return true;
+    }
+
     // ── Accept Loop ──────────────────────────────────────────────────
 
     void ServiceBase::acceptLoop()
@@ -143,6 +174,12 @@ namespace aether::ipc
             Connection conn = acceptConnection(m_listenFd);
             if (!conn.valid())
             {
+                continue;
+            }
+
+            if (!checkPeerUid(conn.socketFd))
+            {
+                conn.close();
                 continue;
             }
 
@@ -194,6 +231,12 @@ namespace aether::ipc
         Connection conn = acceptConnection(m_listenFd);
         if (!conn.valid())
         {
+            return;
+        }
+
+        if (!checkPeerUid(conn.socketFd))
+        {
+            conn.close();
             return;
         }
 

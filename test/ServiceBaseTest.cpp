@@ -10,6 +10,10 @@
 #include <thread>
 #include <vector>
 
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
+
 using namespace aether::ipc;
 using namespace aether::ipc::platform;
 
@@ -931,3 +935,75 @@ TEST(ServiceBaseTest, RunLoop_MaxClientsRejectsExcess)
 }
 
 #endif
+
+// ═════════════════════════════════════════════════════════════════════
+// Peer UID filter tests
+// ═════════════════════════════════════════════════════════════════════
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+
+TEST(ServiceBaseTest, PeerUidFilterRejectsDifferentUid)
+{
+    EchoService svc(SVC_NAME);
+
+    svc.setAllowedPeerUid(99999);
+    ASSERT_TRUE(svc.start());
+    settle();
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    const uint8_t payload[] = "rejected";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    int rc = sendAndRecv(client, 1, 1, payload, sizeof(payload), &respHdr, &respPayload);
+    EXPECT_NE(rc, IPC_SUCCESS);
+
+    client.close();
+
+    svc.stop();
+    EchoService svc2("PeerUidAllow");
+    svc2.setAllowedPeerUid(static_cast<uint32_t>(getuid()));
+    ASSERT_TRUE(svc2.start());
+    settle();
+
+    Connection client2 = connectToServer("PeerUidAllow");
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    const uint8_t payload2[] = "allowed";
+    FrameHeader respHdr2{};
+    std::vector<uint8_t> respPayload2;
+    rc = sendAndRecv(client2, 1, 2, payload2, sizeof(payload2), &respHdr2, &respPayload2);
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(respHdr2.aux, static_cast<uint32_t>(IPC_SUCCESS));
+
+    client2.close();
+    svc2.stop();
+}
+
+TEST(ServiceBaseTest, PeerUidFilterDefaultAllowsAll)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+    settle();
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    const uint8_t payload[] = "default-allows";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    int rc = sendAndRecv(client, 1, 1, payload, sizeof(payload), &respHdr, &respPayload);
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    ASSERT_EQ(respPayload.size(), sizeof(payload));
+    EXPECT_EQ(std::memcmp(respPayload.data(), payload, sizeof(payload)), 0);
+
+    client.close();
+    svc.stop();
+}
+
+#endif // !_WIN32 && !__APPLE__
