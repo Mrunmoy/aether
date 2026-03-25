@@ -464,8 +464,19 @@ namespace aether::ipc
 
         // Phase 2: Iterate outside m_clientsMutex. For each client, acquire its
         // sendMutex, check dead, write frame, send signal.
+        //
+        // Safety invariant (RunLoop mode): stop() sets m_running=false *before*
+        // clearing m_clients. We re-check m_running on every iteration so we
+        // bail out before dereferencing a raw pointer whose owning unique_ptr
+        // may have been destroyed by stop(). In threaded mode the snapshot is
+        // inherently safe because stop() joins receiver threads (which keep
+        // the ClientConn alive) before clearing m_clients.
         for (auto *c : snapshot)
         {
+            if (!m_running.load(std::memory_order_acquire))
+            {
+                break;
+            }
             // Fast path: skip obviously dead clients without acquiring sendMutex.
             if (c->dead.load(std::memory_order_acquire))
             {
