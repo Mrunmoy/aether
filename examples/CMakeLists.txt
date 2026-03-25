@@ -12,3 +12,7 @@ if(Qt5_FOUND)
 else()
     message(STATUS "aether: Qt5 not found — skipping exhaust-analyzer example")
 endif()
+
+if(NOT WIN32)
+    add_subdirectory(serial-sensor)
+endif()
