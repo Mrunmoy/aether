@@ -184,7 +184,7 @@ namespace aether::ipc
             }
 
             // Reap dead clients and check max clients limit before committing.
-            std::vector<std::unique_ptr<ClientConn>> deadClients;
+            std::vector<std::shared_ptr<ClientConn>> deadClients;
             bool overLimit = false;
             {
                 std::lock_guard<std::mutex> lock(m_clientsMutex);
@@ -203,7 +203,7 @@ namespace aether::ipc
                 }
                 else
                 {
-                    auto client = std::make_unique<ClientConn>();
+                    auto client = std::make_shared<ClientConn>();
                     client->conn = std::move(conn);
                     client->thread =
                         std::thread([this, ptr = client.get()] { receiverLoop(ptr); });
@@ -257,7 +257,7 @@ namespace aether::ipc
                 return;
             }
 
-            auto client = std::make_unique<ClientConn>();
+            auto client = std::make_shared<ClientConn>();
             client->conn = std::move(conn);
 
             ClientConn *ptr = client.get();
@@ -435,13 +435,19 @@ namespace aether::ipc
     int ServiceBase::sendNotify(uint32_t serviceId, uint32_t messageId, const uint8_t *payload,
                                 uint32_t payloadBytes)
     {
-        // Fast path: nothing to do if no clients are connected.
+        // Phase 1: Snapshot shared_ptrs under m_clientsMutex, then release.
+        // Copying shared_ptrs extends ClientConn lifetime — even if stop()
+        // clears m_clients concurrently, the objects survive until we drop
+        // the snapshot. This lets acceptLoop add new clients without waiting
+        // for the entire broadcast to finish.
+        std::vector<std::shared_ptr<ClientConn>> snapshot;
         {
             std::lock_guard<std::mutex> lock(m_clientsMutex);
             if (m_clients.empty())
             {
                 return IPC_SUCCESS;
             }
+            snapshot = m_clients;
         }
 
         FrameHeader header{};
@@ -452,65 +458,80 @@ namespace aether::ipc
         header.payloadBytes = payloadBytes;
 
         int result = IPC_SUCCESS;
-        std::vector<std::unique_ptr<ClientConn>> deadClients;
 
+        // Phase 2: Iterate outside m_clientsMutex. For each client, acquire its
+        // sendMutex, check dead, write frame, send signal.
+        // The shared_ptr snapshot guarantees the ClientConn stays alive even
+        // if stop() clears m_clients concurrently.
+        for (auto &c : snapshot)
         {
-            std::lock_guard<std::mutex> lock(m_clientsMutex);
-            for (auto &c : m_clients)
+            if (!m_running.load(std::memory_order_acquire))
             {
-                // Fast path: skip obviously dead clients without acquiring sendMutex.
+                break;
+            }
+            // Fast path: skip obviously dead clients without acquiring sendMutex.
+            if (c->dead.load(std::memory_order_acquire))
+            {
+                continue;
+            }
+
+            // Hold sendMutex while writing so we serialize with receiverLoop
+            // response writes (SPSC: only one producer to txRing at a time).
+            // Re-check dead after acquiring the lock to close the TOCTOU window
+            // between the fast-path check above and the actual write below.
+            {
+                std::lock_guard<std::mutex> slock(c->sendMutex);
                 if (c->dead.load(std::memory_order_acquire))
                 {
                     continue;
                 }
 
-                // Hold sendMutex while writing so we serialize with receiverLoop
-                // response writes (SPSC: only one producer to txRing at a time).
-                // Re-check dead after acquiring the lock to close the TOCTOU window
-                // between the fast-path check above and the actual write below.
+                int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
+                if (rc != IPC_SUCCESS)
                 {
-                    std::lock_guard<std::mutex> slock(c->sendMutex);
-                    if (c->dead.load(std::memory_order_acquire))
-                    {
-                        continue;
-                    }
+                    // Ring full means this client is not consuming data.
+                    // Mark it dead and shut down its socket so receiverLoop
+                    // unblocks from recvSignal and the thread can be joined.
+                    c->dead.store(true, std::memory_order_release);
+                    if (platform::isValidHandle(c->conn.socketFd))
+                        platform::shutdownConnection(c->conn.socketFd);
+                    if (result == IPC_SUCCESS)
+                        result = IPC_ERR_DISCONNECTED;
+                    continue;
+                }
 
-                    int rc = writeFrame(c->conn.txRing, header, payload, payloadBytes);
-                    if (rc != IPC_SUCCESS)
-                    {
-                        // Ring full means this client is not consuming data.
-                        // Mark it dead and shut down its socket so receiverLoop
-                        // unblocks from recvSignal and the thread can be joined.
-                        c->dead.store(true, std::memory_order_release);
-                        if (platform::isValidHandle(c->conn.socketFd))
-                            platform::shutdownConnection(c->conn.socketFd);
-                        if (result == IPC_SUCCESS)
-                            result = IPC_ERR_DISCONNECTED;
-                        continue;
-                    }
-
-                    if (platform::sendSignal(c->conn.socketFd) != 0)
-                    {
-                        c->dead.store(true, std::memory_order_release);
-                        if (result == IPC_SUCCESS)
-                            result = IPC_ERR_DISCONNECTED;
-                        continue;
-                    }
+                if (platform::sendSignal(c->conn.socketFd) != 0)
+                {
+                    c->dead.store(true, std::memory_order_release);
+                    if (result == IPC_SUCCESS)
+                        result = IPC_ERR_DISCONNECTED;
+                    continue;
                 }
             }
-
-            // Extract dead clients under lock, then release lock before joining.
-            auto it = std::stable_partition(
-                m_clients.begin(), m_clients.end(),
-                [](const auto &c) { return !c->dead.load(std::memory_order_acquire); });
-            for (auto move_it = it; move_it != m_clients.end(); ++move_it)
-            {
-                deadClients.push_back(std::move(*move_it));
-            }
-            m_clients.erase(it, m_clients.end());
         }
 
-        // Join threads and close connections outside the lock.
+        // Phase 3: Try to reap dead clients. Use try_lock to avoid a
+        // deadlock if stop() is holding m_clientsMutex while waiting for
+        // this thread to join (e.g., when sendNotify is called from a
+        // receiver thread's onRequest handler). If we can't get the lock,
+        // skip reaping — acceptLoop or the next sendNotify will clean up.
+        std::vector<std::shared_ptr<ClientConn>> deadClients;
+        {
+            std::unique_lock<std::mutex> lock(m_clientsMutex, std::try_to_lock);
+            if (lock.owns_lock())
+            {
+                auto it = std::stable_partition(
+                    m_clients.begin(), m_clients.end(),
+                    [](const auto &c) { return !c->dead.load(std::memory_order_acquire); });
+                for (auto move_it = it; move_it != m_clients.end(); ++move_it)
+                {
+                    deadClients.push_back(std::move(*move_it));
+                }
+                m_clients.erase(it, m_clients.end());
+            }
+        }
+
+        // Phase 4: Join dead client threads and close connections outside all locks.
         for (auto &c : deadClients)
         {
             if (c->thread.joinable())
