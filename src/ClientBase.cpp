@@ -109,6 +109,31 @@ namespace aether::ipc
 
     bool ClientBase::isConnected() const { return m_running.load(std::memory_order_acquire); }
 
+    // ── Sequence allocation ─────────────────────────────────────────
+
+    uint32_t ClientBase::nextUniqueSeq()
+    {
+        // Caller must hold m_pendingMutex.
+        //
+        // This loop terminates because m_pending.size() is bounded by available
+        // memory (at most a few thousand concurrent calls), so at most that many
+        // iterations before finding a free seq.
+        uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+        if (seq == 0)
+            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+
+        uint32_t start = seq;
+        while (m_pending.count(seq))
+        {
+            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+            if (seq == 0)
+                seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+            if (seq == start)
+                return 0; // wrapped completely — all seqs exhausted
+        }
+        return seq;
+    }
+
     // ── Synchronous RPC ─────────────────────────────────────────────
 
     int ClientBase::call(uint32_t serviceId, uint32_t messageId,
@@ -120,15 +145,12 @@ namespace aether::ipc
             return IPC_ERR_DISCONNECTED;
         }
 
-        uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
-
         // Build request frame.
         FrameHeader header{};
         header.version = kProtocolVersion;
         header.flags = FRAME_REQUEST;
         header.serviceId = serviceId;
         header.messageId = messageId;
-        header.seq = seq;
         header.payloadBytes = static_cast<uint32_t>(request.size());
 
         // Register pending call before writing, so the receiver thread can
@@ -136,10 +158,16 @@ namespace aether::ipc
         // drain a newly committed frame before sendSignal if another
         // wakeup is already in flight).
         auto pending = std::make_shared<PendingCall>();
+        uint32_t seq;
         {
             std::lock_guard<std::mutex> plock(m_pendingMutex);
+            seq = nextUniqueSeq();
+            if (seq == 0)
+                return IPC_ERR_OVERFLOW;
             m_pending[seq] = pending;
         }
+
+        header.seq = seq;
 
         {
             // Hold sendMutex to serialize txRing writes (SPSC invariant).

@@ -925,3 +925,138 @@ TEST(ClientBaseTest, ConcurrentDisconnectDuringCalls)
 
     svc.stop();
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// Sequence wraparound skips collision with in-flight call
+// ═════════════════════════════════════════════════════════════════════
+
+// Test helper client that exposes m_nextSeq for wraparound testing.
+class SeqTestClient : public ClientBase
+{
+public:
+    using ClientBase::ClientBase;
+
+    void setNextSeq(uint32_t val) { m_nextSeq.store(val, std::memory_order_relaxed); }
+
+    size_t pendingCount()
+    {
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        return m_pending.size();
+    }
+};
+
+TEST(ClientBaseTest, SeqWraparoundSkipsCollision)
+{
+    SilentService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    SeqTestClient client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    // Launch a call that will block (SilentService never responds quickly).
+    std::atomic<int> firstResult{0};
+    std::thread firstCall([&] {
+        const std::vector<uint8_t> request = {1};
+        std::vector<uint8_t> response;
+        firstResult.store(client.call(1, 1, request, &response, 3000));
+    });
+
+    // Wait for the pending call to register.
+    for (int i = 0; i < 200 && client.pendingCount() == 0; ++i)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_EQ(client.pendingCount(), 1u);
+
+    // Force m_nextSeq back to 1 (simulates wraparound to the same value).
+    // The first call used seq=1, so the next call should skip seq=1.
+    client.setNextSeq(1);
+
+    // Make a second call — it must NOT collide with the pending seq=1.
+    std::atomic<int> secondResult{0};
+    std::thread secondCall([&] {
+        const std::vector<uint8_t> request = {2};
+        std::vector<uint8_t> response;
+        secondResult.store(client.call(1, 1, request, &response, 3000));
+    });
+
+    // Wait for second pending call.
+    for (int i = 0; i < 200 && client.pendingCount() < 2; ++i)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    // Two distinct pending calls should exist (no collision).
+    EXPECT_EQ(client.pendingCount(), 2u);
+
+    // Clean up: disconnect unblocks pending calls.
+    client.disconnect();
+    svc.unblock();
+    firstCall.join();
+    secondCall.join();
+
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Seq==0 is skipped when m_nextSeq wraps from UINT32_MAX to 0
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, SeqZeroIsSkipped)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    SeqTestClient client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    // Force m_nextSeq to UINT32_MAX so the next fetch_add wraps to 0.
+    client.setNextSeq(UINT32_MAX);
+
+    const std::vector<uint8_t> request = {'z', 'e', 'r', 'o'};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response, 2000);
+
+    // The call must succeed — seq=0 was internally skipped.
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(response, request);
+
+    client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// 100 rapid sequential calls — all responses match their request
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, SeqNumbersAreUnique)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    constexpr int kCalls = 100;
+    for (int i = 0; i < kCalls; ++i)
+    {
+        uint32_t tag = static_cast<uint32_t>(i);
+        std::vector<uint8_t> request(4);
+        std::memcpy(request.data(), &tag, sizeof(tag));
+
+        std::vector<uint8_t> response;
+        int rc = client.call(1, 1, request, &response, 2000);
+
+        ASSERT_EQ(rc, IPC_SUCCESS) << "call " << i << " failed";
+        ASSERT_EQ(response.size(), sizeof(tag)) << "call " << i << " wrong size";
+
+        uint32_t val = 0;
+        std::memcpy(&val, response.data(), sizeof(val));
+        EXPECT_EQ(val, tag) << "call " << i << " response mismatch";
+    }
+
+    client.disconnect();
+    svc.stop();
+}

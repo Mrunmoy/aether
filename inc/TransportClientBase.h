@@ -80,6 +80,7 @@ namespace aether::ipc
         };
 
         void receiverLoop();
+        uint32_t nextUniqueSeq(); // caller must hold m_pendingMutex
 
         std::string m_serviceName;
         std::unique_ptr<ITransport> m_transport;
