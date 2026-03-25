@@ -109,6 +109,28 @@ namespace aether::ipc
 
     bool ClientBase::isConnected() const { return m_running.load(std::memory_order_acquire); }
 
+    // ── Sequence allocation ─────────────────────────────────────────
+
+    uint32_t ClientBase::nextUniqueSeq()
+    {
+        // Caller must hold m_pendingMutex.
+        static constexpr int kMaxRetries = 64;
+
+        for (int attempt = 0; attempt < kMaxRetries; ++attempt)
+        {
+            uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+
+            // Skip seq==0 (reserved / could be confused with "no sequence").
+            if (seq == 0)
+                seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+
+            if (!m_pending.count(seq))
+                return seq;
+        }
+
+        return 0; // failure — all attempted values collided
+    }
+
     // ── Synchronous RPC ─────────────────────────────────────────────
 
     int ClientBase::call(uint32_t serviceId, uint32_t messageId,
@@ -119,12 +141,6 @@ namespace aether::ipc
         {
             return IPC_ERR_DISCONNECTED;
         }
-
-        uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
-
-        // Skip seq==0 (reserved / could be confused with "no sequence").
-        if (seq == 0)
-            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
 
         // Build request frame.
         FrameHeader header{};
@@ -138,18 +154,13 @@ namespace aether::ipc
         // always find a consumer for any committed frame (the server may
         // drain a newly committed frame before sendSignal if another
         // wakeup is already in flight).
-        //
-        // Skip sequence numbers that collide with in-flight calls
-        // (protects against wraparound after ~4 billion calls).
         auto pending = std::make_shared<PendingCall>();
+        uint32_t seq;
         {
             std::lock_guard<std::mutex> plock(m_pendingMutex);
-            while (m_pending.count(seq))
-            {
-                seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
-                if (seq == 0)
-                    seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
-            }
+            seq = nextUniqueSeq();
+            if (seq == 0)
+                return IPC_ERR_OVERFLOW;
             m_pending[seq] = pending;
         }
 

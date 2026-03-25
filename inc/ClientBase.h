@@ -77,6 +77,12 @@ namespace aether::ipc
         void receiverLoop();
         void onDataReady();
 
+        // Atomically allocate the next unique sequence number, skipping zero
+        // and any value that collides with an in-flight pending call.
+        // Returns the chosen seq, or 0 on failure (too many collisions).
+        // Caller must hold m_pendingMutex.
+        uint32_t nextUniqueSeq();
+
         std::string m_serviceName;
         ms::RunLoop *m_loop = nullptr;
         Connection m_conn;

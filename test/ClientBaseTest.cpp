@@ -999,6 +999,34 @@ TEST(ClientBaseTest, SeqWraparoundSkipsCollision)
 }
 
 // ═════════════════════════════════════════════════════════════════════
+// Seq==0 is skipped when m_nextSeq wraps from UINT32_MAX to 0
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, SeqZeroIsSkipped)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    SeqTestClient client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    // Force m_nextSeq to UINT32_MAX so the next fetch_add wraps to 0.
+    client.setNextSeq(UINT32_MAX);
+
+    const std::vector<uint8_t> request = {'z', 'e', 'r', 'o'};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response, 2000);
+
+    // The call must succeed — seq=0 was internally skipped.
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(response, request);
+
+    client.disconnect();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
 // 100 rapid sequential calls — all responses match their request
 // ═════════════════════════════════════════════════════════════════════
 
