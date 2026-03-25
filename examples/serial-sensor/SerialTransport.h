@@ -258,7 +258,12 @@ namespace aether::ipc
                 if (m_shutdownPipe[1] >= 0)
                 {
                     uint8_t dummy = 1;
-                    (void)::write(m_shutdownPipe[1], &dummy, 1);
+                    ssize_t rc;
+                    do
+                    {
+                        rc = ::write(m_shutdownPipe[1], &dummy, 1);
+                    } while (rc < 0 && errno == EINTR);
+                    // Best-effort wakeup only; shutdown state is already visible.
                 }
             }
         }
