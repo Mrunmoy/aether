@@ -77,7 +77,7 @@ static_assert(sizeof(FrameHeader) == 24);
 | `messageId` | Method or notification ID (from the IDL `[method=N]` / `[notify=N]`). |
 | `seq` | Unique per-call sequence number. Server echoes it in the response. |
 | `payloadBytes` | Number of payload bytes following the 24-byte header. May be 0. |
-| `aux` | In responses: the return value of `onRequest()`. Unused in requests/notifications. |
+| `aux` | In responses: the return value of `onRequest()`. In `FRAME_NOTIFY` frames: a monotonically increasing notification sequence number for gap detection. Unused in requests. |
 
 ### 2.5 FrameFlags
 
@@ -85,7 +85,7 @@ static_assert(sizeof(FrameHeader) == 24);
 |------|-------|-----------|---------|
 | `FRAME_REQUEST` | 0x0001 | client → server | RPC request |
 | `FRAME_RESPONSE` | 0x0002 | server → client | RPC response |
-| `FRAME_NOTIFY` | 0x0004 | server → client | Notification broadcast |
+| `FRAME_NOTIFY` | 0x0004 | server → client | Notification broadcast (`aux` carries a monotonic sequence number) |
 
 ---
 
@@ -502,7 +502,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 
 **Returns:** `IPC_SUCCESS` if all clients were notified, or the first error code if any `writeFrame()` or `sendSignal()` fails.
 **Thread safety:** Safe to call from any thread (acquires `m_clientsMutex` internally).
-**Notes:** Returns immediately if no clients are connected. Marks clients as dead when `sendSignal()` fails and reaps them in the same call via a two-phase partition-and-join.
+**Notes:** Each call assigns a monotonically increasing sequence number to the `aux` field of the outgoing `FRAME_NOTIFY` frame. Clients can use this to detect notification gaps. Returns immediately if no clients are connected. Marks clients as dead when `sendSignal()` fails and reaps them in the same call via a two-phase partition-and-join.
 
 ---
 
@@ -878,15 +878,16 @@ while (m_running):
 
 `sendNotify()`:
 1. Early-out if `m_clients` is empty
-2. Lock `m_clientsMutex`
-3. For each connected client:
+2. Atomically increment `m_notifySeq` to obtain the next sequence number
+3. Lock `m_clientsMutex`
+4. For each connected client:
    - Skip if `dead` flag set (fast path, no lock)
    - Lock `sendMutex`, re-check `dead` flag (TOCTOU guard)
-   - `writeFrame()` to client's txRing
+   - `writeFrame()` to client's txRing with `aux` set to the sequence number
    - `sendSignal()` on client's socket (marks dead on failure)
-4. Partition dead clients out of `m_clients`
-5. Unlock `m_clientsMutex`
-6. Join threads and close connections for reaped clients
+5. Partition dead clients out of `m_clients`
+6. Unlock `m_clientsMutex`
+7. Join threads and close connections for reaped clients
 
 ### 12.5 Two-phase shutdown (threaded mode)
 

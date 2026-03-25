@@ -441,6 +441,7 @@ namespace aether::ipc
         // the snapshot. This lets acceptLoop add new clients without waiting
         // for the entire broadcast to finish.
         std::vector<std::shared_ptr<ClientConn>> snapshot;
+        uint32_t notifySeq = 0;
         {
             std::lock_guard<std::mutex> lock(m_clientsMutex);
             if (m_clients.empty())
@@ -448,6 +449,9 @@ namespace aether::ipc
                 return IPC_SUCCESS;
             }
             snapshot = m_clients;
+            // Assign sequence inside lock so delivery order matches sequence
+            // order when multiple threads call sendNotify concurrently.
+            notifySeq = m_notifySeq.fetch_add(1, std::memory_order_relaxed) + 1;
         }
 
         FrameHeader header{};
@@ -456,6 +460,7 @@ namespace aether::ipc
         header.serviceId = serviceId;
         header.messageId = messageId;
         header.payloadBytes = payloadBytes;
+        header.aux = notifySeq;
 
         int result = IPC_SUCCESS;
 
