@@ -742,3 +742,192 @@ TEST(ServiceBaseTest, StartTwice)
     settle();
     svc.stop();
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// MaxClients: default unlimited — can connect many clients
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, MaxClientsDefaultUnlimited)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    std::vector<Connection> clients;
+    for (int i = 0; i < 5; ++i)
+    {
+        Connection c = connectToServer(SVC_NAME);
+        ASSERT_TRUE(c.valid()) << "client " << i << " failed to connect";
+        clients.push_back(std::move(c));
+        settle();
+    }
+
+    // Verify each client can communicate.
+    for (int i = 0; i < 5; ++i)
+    {
+        const uint8_t payload[] = "ping";
+        FrameHeader respHdr{};
+        std::vector<uint8_t> respPayload;
+        int rc = sendAndRecv(clients[static_cast<size_t>(i)], 1,
+                             static_cast<uint32_t>(i), payload, sizeof(payload),
+                             &respHdr, &respPayload);
+        ASSERT_EQ(rc, IPC_SUCCESS) << "client " << i;
+        EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    }
+
+    for (auto &c : clients)
+        c.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// MaxClients: rejects excess connections
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, MaxClientsRejectsExcess)
+{
+    EchoService svc(SVC_NAME);
+    svc.setMaxClients(2);
+    ASSERT_TRUE(svc.start());
+
+    Connection client1 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client1.valid());
+    settle();
+    Connection client2 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    // Third connection should be rejected (server closes it during handshake
+    // or immediately after accept).
+    Connection client3 = connectToServer(SVC_NAME);
+    settle();
+
+    if (client3.valid())
+    {
+        // The server accepted the socket but should close it shortly.
+        // Try to use it — expect failure.
+        const uint8_t payload[] = "x";
+        FrameHeader respHdr{};
+        std::vector<uint8_t> respPayload;
+        int rc = sendAndRecv(client3, 1, 99, payload, sizeof(payload),
+                             &respHdr, &respPayload);
+        EXPECT_NE(rc, IPC_SUCCESS) << "3rd client should not get a response";
+        client3.close();
+    }
+
+    // First two clients should still work.
+    const uint8_t p1[] = "one";
+    const uint8_t p2[] = "two";
+    FrameHeader h1{}, h2{};
+    std::vector<uint8_t> r1, r2;
+
+    ASSERT_EQ(sendAndRecv(client1, 1, 1, p1, sizeof(p1), &h1, &r1), IPC_SUCCESS);
+    ASSERT_EQ(sendAndRecv(client2, 1, 2, p2, sizeof(p2), &h2, &r2), IPC_SUCCESS);
+    EXPECT_EQ(h1.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    EXPECT_EQ(h2.aux, static_cast<uint32_t>(IPC_SUCCESS));
+
+    client1.close();
+    client2.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// MaxClients: allows reconnect after disconnect
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, MaxClientsAllowsReconnectAfterDisconnect)
+{
+    EchoService svc(SVC_NAME);
+    svc.setMaxClients(1);
+    ASSERT_TRUE(svc.start());
+
+    Connection client1 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client1.valid());
+    settle();
+
+    // Verify it works.
+    const uint8_t payload[] = "hello";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    ASSERT_EQ(sendAndRecv(client1, 1, 1, payload, sizeof(payload),
+                          &respHdr, &respPayload),
+              IPC_SUCCESS);
+
+    // Disconnect.
+    client1.close();
+    // Wait for the server to reap the dead client.
+    settle();
+    settle();
+
+    // New client should succeed.
+    Connection client2 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    FrameHeader respHdr2{};
+    std::vector<uint8_t> respPayload2;
+    ASSERT_EQ(sendAndRecv(client2, 1, 2, payload, sizeof(payload),
+                          &respHdr2, &respPayload2),
+              IPC_SUCCESS);
+    EXPECT_EQ(respHdr2.aux, static_cast<uint32_t>(IPC_SUCCESS));
+
+    client2.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// RunLoop: MaxClients rejects excess connections
+// ═════════════════════════════════════════════════════════════════════
+
+#if !defined(_WIN32)
+
+TEST(ServiceBaseTest, RunLoop_MaxClientsRejectsExcess)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLMax");
+
+    EchoService svc(SVC_NAME, &loop);
+    svc.setMaxClients(2);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    Connection client1 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client1.valid());
+    settle();
+    Connection client2 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    // Third connection should be rejected.
+    Connection client3 = connectToServer(SVC_NAME);
+    settle();
+
+    if (client3.valid())
+    {
+        const uint8_t payload[] = "x";
+        FrameHeader respHdr{};
+        std::vector<uint8_t> respPayload;
+        int rc = sendAndRecv(client3, 1, 99, payload, sizeof(payload),
+                             &respHdr, &respPayload);
+        EXPECT_NE(rc, IPC_SUCCESS) << "3rd client should not get a response";
+        client3.close();
+    }
+
+    // First two clients should still work.
+    const uint8_t p1[] = "one";
+    const uint8_t p2[] = "two";
+    FrameHeader h1{}, h2{};
+    std::vector<uint8_t> r1, r2;
+
+    ASSERT_EQ(sendAndRecv(client1, 1, 1, p1, sizeof(p1), &h1, &r1), IPC_SUCCESS);
+    ASSERT_EQ(sendAndRecv(client2, 1, 2, p2, sizeof(p2), &h2, &r2), IPC_SUCCESS);
+    EXPECT_EQ(h1.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    EXPECT_EQ(h2.aux, static_cast<uint32_t>(IPC_SUCCESS));
+
+    client1.close();
+    client2.close();
+    svc.stop();
+}
+
+#endif
