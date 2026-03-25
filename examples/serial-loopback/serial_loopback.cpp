@@ -32,6 +32,13 @@ static void echoServer(int fd)
 {
     SerialTransport transport(fd);
 
+    // Perform handshake before entering echo loop.
+    if (transport.waitForHandshake() != IPC_SUCCESS)
+    {
+        std::fprintf(stderr, "Server handshake failed\n");
+        return;
+    }
+
     while (transport.connected())
     {
         FrameHeader hdr{};
@@ -91,7 +98,20 @@ int main()
     // 3. Create transport on the master side
     auto transport = std::make_unique<SerialTransport>(master);
 
-    // 4. Create TransportClientBase and connect
+    // 4. Perform handshake to negotiate max payload
+    int hsRc = transport->handshake();
+    if (hsRc != IPC_SUCCESS)
+    {
+        std::fprintf(stderr, "Client handshake failed: %d\n", hsRc);
+        ::close(slave);
+        serverThread.join();
+        return 1;
+    }
+
+    std::printf("Handshake complete (maxPayload=%u).\n",
+                transport->negotiatedMaxPayload());
+
+    // 5. Create TransportClientBase and connect
     TransportClientBase client("serial-echo");
     if (!client.connect(std::move(transport)))
     {
@@ -104,7 +124,7 @@ int main()
 
     std::printf("Client connected.\n\n");
 
-    // 5. Send a few RPC calls
+    // 6. Send a few RPC calls
     const char *messages[] = {
         "Hello, serial world!",
         "aether IPC over UART",
@@ -138,7 +158,7 @@ int main()
         }
     }
 
-    // 6. Clean disconnect
+    // 7. Clean disconnect
     std::printf("Disconnecting...\n");
     client.disconnect();
     serverThread.join();

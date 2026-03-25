@@ -77,4 +77,16 @@ namespace aether::ipc
     // Serial transport version
     constexpr uint16_t kSerialTransportVersion = 1;
 
+    // Handshake payload exchanged during transport-level negotiation.
+    // Both sides send their capabilities; the negotiated max payload
+    // is the minimum of the two.
+    struct HandshakePayload
+    {
+        uint16_t version;     // kSerialTransportVersion
+        uint16_t reserved;    // must be 0
+        uint32_t maxPayload;  // maximum frame payload in bytes
+        uint32_t features;    // reserved for future capability flags
+    };
+    static_assert(sizeof(HandshakePayload) == 12, "HandshakePayload must be 12 bytes");
+
 } // namespace aether::ipc
