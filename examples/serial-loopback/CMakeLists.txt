@@ -1,5 +1,6 @@
 if(NOT WIN32)
     add_executable(serial_loopback serial_loopback.cpp)
+    target_include_directories(serial_loopback PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
     if(APPLE)
         target_link_libraries(serial_loopback PRIVATE aether)
     else()

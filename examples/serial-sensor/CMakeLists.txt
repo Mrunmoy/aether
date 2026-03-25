@@ -5,5 +5,6 @@ if(NOT WIN32 AND TARGET aether_lite)
         serial_sensor.cpp
         sensor_device.c
     )
+    target_include_directories(serial_sensor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
     target_link_libraries(serial_sensor PRIVATE aether aether_lite util)
 endif()
