@@ -2,10 +2,11 @@
 
 ## 1. Purpose
 
-aether is an inter-process communication framework for Linux that provides
-type-safe RPC and notification services between processes on the same machine.
-It is designed for embedded and systems-level applications where low latency,
-predictable performance, and a small footprint are required.
+aether is an inter-process communication framework for Linux, macOS, and
+Windows that provides type-safe RPC and notification services between
+processes on the same machine. It is designed for embedded and systems-level
+applications where low latency, predictable performance, and a small footprint
+are required.
 
 ## 2. Scope
 
@@ -29,11 +30,11 @@ graph TD
     subgraph "aether Runtime"
         SB["ServiceBase / ClientBase"]
         FIO["FrameIO / Connection"]
-        PLAT["Platform (Linux)"]
+        PLAT["Platform backend"]
     end
 
-    subgraph "Linux Kernel"
-        K["UDS sockets · memfd · mmap · SCM_RIGHTS"]
+    subgraph "Host OS"
+        K["Linux · macOS · Windows"]
     end
 
     MS --> GS
@@ -45,9 +46,9 @@ graph TD
     PLAT --> K
 ```
 
-aether sits between user application code and the Linux kernel. Users interact
-through the Service layer (directly or via generated code) and never touch
-sockets, shared memory, or serialization.
+aether sits between user application code and the host operating system.
+Users interact through the service layer (directly or via generated code) and
+never touch sockets, shared memory, or serialization.
 
 ## 4. Architecture
 
@@ -61,7 +62,7 @@ layer below:
 | **Service** | `ServiceBase`, `ClientBase` | Lifecycle, threading, RPC dispatch, notifications |
 | **Frame I/O** | `FrameIO` | Read/write framed messages through ring buffers |
 | **Connection** | `Connection` | Handshake, shared memory setup, bidirectional rings |
-| **Platform** | `Platform` | OS primitives: UDS sockets, shared memory, FD passing, signaling |
+| **Platform** | `Platform` | OS primitives: local sockets / named pipes, shared memory, signaling |
 
 ### 4.2 Split transport
 
@@ -72,8 +73,9 @@ The key architectural decision is separating the **data plane** from the
   request/response/notification payloads flow through shared memory. No data
   touches the socket after connection setup.
 
-- **Control plane** — UDS socket carries only single-byte wakeup signals and
-  the initial handshake (FD passing). The socket is never used for payload data.
+- **Control plane** — a local OS transport carries only wakeup signals and the
+  initial handshake. On Linux and macOS this is a local socket; on Windows it
+  is a named pipe. The control channel is never used for payload data.
 
 This separation achieves high throughput with minimal syscall overhead: the
 common-case data path is a `memcpy` into the ring buffer plus a 1-byte
@@ -83,14 +85,15 @@ common-case data path is a `memcpy` into the ring buffer plus a 1-byte
 
 Each client-server connection consists of:
 
-- 1 UDS socket pair (for signaling)
+- 1 control channel (Unix socket on Linux/macOS, named pipe on Windows)
 - 1 shared memory region containing 2 SPSC ring buffers
   - Ring 0: client → server (requests)
   - Ring 1: server → client (responses and notifications)
 
-The client creates the shared memory (via `memfd_create`) and passes the
-file descriptor to the server during the handshake. Both processes `mmap`
-the same region and use placement-new to construct the ring buffers.
+The client creates the shared memory region and transfers or names it during
+the handshake. On Linux this uses `memfd_create()` plus FD passing; macOS uses
+`shm_open()` plus `SCM_RIGHTS`; Windows uses a named file mapping. Both peers
+map the same region and use placement-new to construct the ring buffers.
 
 ### 4.4 Framed protocol
 
@@ -113,7 +116,7 @@ fits or the write fails with `IPC_ERR_RING_FULL`.
 
 Manages the server side of one named service:
 
-- Listens on a UDS socket in the Linux abstract namespace
+- Listens on a platform-local endpoint for new client connections
 - Accepts client connections and performs the shared memory handshake
 - Dispatches incoming requests to a pure virtual `onRequest()` method
 - Broadcasts notifications to all connected clients via `sendNotify()`
@@ -227,12 +230,12 @@ codes through the `call()` return value.
 
 | Decision | Rationale |
 |----------|-----------|
-| Shared memory for data, UDS for signaling only | Minimizes syscalls on the hot path; data flows via `memcpy` |
+| Shared memory for data, control channel for signaling only | Minimizes syscalls on the hot path; data flows via `memcpy` |
 | SPSC ring buffers | Lock-free, cache-friendly, predictable latency |
-| Abstract namespace sockets | No filesystem cleanup needed; service name is the address |
+| Thin OS abstraction layer | Keeps `ServiceBase` / `ClientBase` portable across Linux, macOS, and Windows |
 | Fixed-size frames (24-byte header + payload) | Simple, no variable-length header parsing |
 | Native endian | Same-machine only; no byte-swapping overhead |
-| `memfd_create` for shared memory | Anonymous, no filesystem; FD passing gives access to peer only |
+| Platform-native shared memory | `memfd_create`, `shm_open`, or named file mappings depending on OS |
 | Virtual dispatch for handlers | Clean extension model; generated code sits between framework and user |
 | Optional RunLoop | Supports both multi-threaded and single-threaded architectures |
 
@@ -242,13 +245,13 @@ codes through the `call()` return value.
 |-----------|---------|
 | ouroboros | SPSC ring buffer for the data plane |
 | vortex | Event loop abstraction (optional) |
-| Linux kernel | UDS, memfd_create, mmap, SCM_RIGHTS |
+| Host OS | Local sockets / named pipes, shared memory, wakeup signaling |
 | C++17 | Language standard |
 
 ## 11. Limitations
 
-- Linux only (uses `memfd_create`, abstract namespace sockets)
 - Same-machine IPC (shared memory, native endian)
 - Fixed-size ring buffers (256KB per direction, compile-time configured)
 - No encryption or authentication (trusted local environment)
-- Single service per name (one listener per abstract socket address)
+- Windows currently supports threaded mode only; `RunLoop` integration is not implemented there yet
+- Single service per name (one listener per service endpoint)

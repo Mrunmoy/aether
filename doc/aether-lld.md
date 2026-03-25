@@ -37,11 +37,17 @@ connection (~512 KB total shared memory).
 | `IPC_SUCCESS` | 0 | Operation completed successfully |
 | `IPC_ERR_DISCONNECTED` | -1 | Not connected or connection lost during operation |
 | `IPC_ERR_TIMEOUT` | -2 | `call()` timed out waiting for response |
-| `IPC_ERR_INVALID_SERVICE` | -3 | Reserved for future use |
+| `IPC_ERR_INVALID_SERVICE` | -3 | Unknown `serviceId` in request dispatch |
 | `IPC_ERR_INVALID_METHOD` | -4 | Unknown `messageId` in `onRequest()` dispatch |
 | `IPC_ERR_VERSION_MISMATCH` | -5 | Protocol version mismatch during handshake |
 | `IPC_ERR_RING_FULL` | -6 | Ring buffer has insufficient space for the frame |
 | `IPC_ERR_STOPPED` | -7 | Service stopped while a call was pending |
+| `IPC_ERR_INVALID_ARGUMENT` | -8 | Invalid caller input or malformed argument buffer |
+| `IPC_ERR_TRANSPORT` | -9 | Transport-level failure outside the shared-memory data path |
+| `IPC_ERR_CRC` | -10 | CRC mismatch on a framed transport |
+| `IPC_ERR_NOT_SUPPORTED` | -11 | Feature unavailable on the active platform/backend |
+| `IPC_ERR_NO_SPACE` | -12 | Static registration table is full |
+| `IPC_ERR_OVERFLOW` | -13 | Payload exceeds the configured buffer capacity |
 
 Error code ranges: negative = framework errors, zero = success,
 positive = user-defined application errors (returned by `onRequest()`
@@ -86,60 +92,61 @@ static_assert(sizeof(FrameHeader) == 24);
 ## 3. Platform (`inc/Platform.h`)
 
 **Namespace:** `aether::ipc::platform`
-**Files:** `inc/Platform.h`, `src/PlatformLinux.cpp`, `src/PlatformMac.cpp`
+**Files:** `inc/Platform.h`, `src/PlatformLinux.cpp`, `src/PlatformMac.cpp`, `src/PlatformWindows.cpp`
 
 **Portability note:** The higher IPC layers keep one platform contract, but the
 backend differs by OS. Linux uses abstract-namespace Unix domain sockets with
 `SOCK_SEQPACKET` and `memfd_create()`. macOS uses pathname Unix domain sockets
 with `SOCK_STREAM`, `SCM_RIGHTS`, `SO_NOSIGPIPE`, and `shm_open()` +
-`ftruncate()` + `mmap()` + immediate `shm_unlink()`.
+`ftruncate()` + `mmap()` + immediate `shm_unlink()`. Windows uses named pipes
+for the control channel and named file mappings for shared memory.
 
 ### 3.1 serverSocket()
 
-**Signature:** `int serverSocket(const char *name)`
-**Description:** Create a listening UDS socket bound to the abstract namespace.
+**Signature:** `platform::Handle serverSocket(const char *name)`
+**Description:** Create a listening local endpoint for a service name.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
-| `name` | `const char *` | in | Service name. Socket binds to `\0ipc_<name>`. |
+| `name` | `const char *` | in | Service name. Backend derives a local endpoint name from it. |
 
-**Returns:** File descriptor >= 0 on success, -1 on failure.
+**Returns:** Valid platform handle on success, `kInvalidHandle` on failure.
 **Thread safety:** Safe to call from any thread.
-**Notes:** Linux uses `SOCK_SEQPACKET` with `SOCK_CLOEXEC`. The socket is set to listen with a backlog of 16.
+**Notes:** Linux uses `SOCK_SEQPACKET` with `SOCK_CLOEXEC`. macOS uses pathname sockets under `$TMPDIR` when available. Windows returns a listener token for a named-pipe endpoint.
 
 ### 3.2 clientSocket()
 
-**Signature:** `int clientSocket(const char *name)`
-**Description:** Connect to a UDS server in the abstract namespace.
+**Signature:** `platform::Handle clientSocket(const char *name)`
+**Description:** Connect to a service's local endpoint.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
-| `name` | `const char *` | in | Service name. Connects to `\0ipc_<name>`. |
+| `name` | `const char *` | in | Service name. Backend derives the peer endpoint from it. |
 
-**Returns:** File descriptor >= 0 on success, -1 on failure.
+**Returns:** Valid platform handle on success, `kInvalidHandle` on failure.
 **Thread safety:** Safe to call from any thread.
 
 ### 3.3 acceptClient()
 
-**Signature:** `int acceptClient(int listenFd)`
-**Description:** Accept a connection on a listening socket. Blocks until a client connects.
+**Signature:** `platform::Handle acceptClient(platform::Handle listenFd)`
+**Description:** Accept a client connection on a listening endpoint.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
-| `listenFd` | `int` | in | Listening socket from `serverSocket()`. |
+| `listenFd` | `platform::Handle` | in | Listening endpoint from `serverSocket()`. |
 
-**Returns:** File descriptor >= 0 on success, -1 on failure.
+**Returns:** Valid platform handle on success, `kInvalidHandle` on failure.
 **Thread safety:** Only one thread should call accept on a given `listenFd`.
 
 ### 3.4 sendFd()
 
-**Signature:** `int sendFd(int sockFd, int fdToSend, const void *data, uint32_t dataLen)`
-**Description:** Send a file descriptor and ancillary data over a UDS socket using `SCM_RIGHTS`.
+**Signature:** `int sendFd(platform::Handle sockFd, platform::Handle fdToSend, const void *data, uint32_t dataLen)`
+**Description:** Send the shared-memory handle plus handshake data over the control channel.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
-| `sockFd` | `int` | in | UDS socket to send on. |
-| `fdToSend` | `int` | in | File descriptor to transfer to the peer process. |
+| `sockFd` | `platform::Handle` | in | Control channel handle to send on. |
+| `fdToSend` | `platform::Handle` | in | Shared-memory handle or mapping identifier for the peer. |
 | `data` | `const void *` | in | Ancillary data bytes to send alongside the FD. |
 | `dataLen` | `uint32_t` | in | Size of ancillary data in bytes. |
 
@@ -148,19 +155,19 @@ with `SOCK_STREAM`, `SCM_RIGHTS`, `SO_NOSIGPIPE`, and `shm_open()` +
 
 ### 3.5 recvFd()
 
-**Signature:** `int recvFd(int sockFd, int *receivedFd, void *data, uint32_t dataLen)`
-**Description:** Receive a file descriptor and ancillary data from a UDS socket. Blocks until data arrives.
+**Signature:** `int recvFd(platform::Handle sockFd, platform::Handle *receivedFd, void *data, uint32_t dataLen)`
+**Description:** Receive the shared-memory handle plus handshake data from the control channel.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
-| `sockFd` | `int` | in | UDS socket to receive on. |
-| `receivedFd` | `int *` | out | Set to the received file descriptor on success. |
+| `sockFd` | `platform::Handle` | in | Control channel handle to receive on. |
+| `receivedFd` | `platform::Handle *` | out | Set to the received shared-memory handle on success. |
 | `data` | `void *` | out | Buffer for ancillary data. |
 | `dataLen` | `uint32_t` | in | Size of the data buffer. |
 
-**Returns:** Bytes received (> 0) on success, -1 on failure. Returns -1 if no fd was received.
+**Returns:** Bytes received (> 0) on success, -1 on failure. Returns -1 if no shared-memory handle was received.
 **Thread safety:** Not thread-safe on the same `sockFd`.
-**Notes:** Closes any unexpected extra file descriptors sent by the peer (prevents fd leak via malicious SCM_RIGHTS).
+**Notes:** Linux and macOS transfer the shared-memory handle via `SCM_RIGHTS`. Windows opens the named file mapping described by the handshake payload.
 
 ### 3.6 sendSignal()
 
@@ -394,7 +401,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
-| `serviceName` | `const char *` | in | Name used for the UDS abstract namespace address (`\0ipc_<name>`). |
+| `serviceName` | `const char *` | in | Logical service name used to derive the platform-local endpoint address. |
 | `loop` | `ms::RunLoop *` | in | Optional RunLoop. `nullptr` = threaded mode (internal threads). Non-null = RunLoop mode (zero internal threads). |
 
 ### 6.2 start()

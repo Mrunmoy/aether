@@ -6,6 +6,7 @@ shared memory for high performance, with zero manual serialization.
 
 Supported hosts today:
 - Linux with full threaded and `RunLoop` support
+- macOS with threaded shared-memory transport
 - Windows with shared-memory plus named-pipe transport in threaded mode
 
 `RunLoop` integration is not implemented on Windows yet.
@@ -125,7 +126,8 @@ cd aether
 python3 build.py -t    # build + run all tests
 ```
 
-On macOS, local services use deterministic pathname Unix sockets under `/tmp`
+On macOS, local services use deterministic pathname Unix sockets under
+`$TMPDIR` when available (falling back to a per-user path under `/tmp`)
 instead of Linux abstract sockets. The server unlinks any stale socket path
 before bind and removes it again on normal shutdown, so restarting a crashed
 service on the same name reclaims the path automatically.
@@ -309,12 +311,15 @@ integration for single-threaded event-driven operation.
 | [`examples/echo/`](examples/echo/) | Source builders | IDL → `ipcgen` (default backend) → `ServiceBase`/`ClientBase` |
 | [`examples/c-echo/`](examples/c-echo/) | C developers | Raw C API echo server + client (no codegen) |
 | [`examples/exhaust-analyzer/`](examples/exhaust-analyzer/) | Source builders | Qt5 GUI with structs, enums, and notifications |
+| [`examples/serial-loopback/`](examples/serial-loopback/) | Transport authors | `TransportClientBase` over a PTY-backed `ITransport` loopback |
+| [`examples/serial-sensor/`](examples/serial-sensor/) | Embedded / hybrid systems | Host `TransportClientBase` talking to an `aether-lite` device over PTY |
+| [`examples/mcu-firmware/`](examples/mcu-firmware/) | MCU firmware authors | Bare-metal `aether-lite` UART template for Cortex-M-style targets |
 
 ## Documentation
 
 | Document | Contents |
 |----------|----------|
-| [example/README.md](example/README.md) | Usage examples and tutorial |
+| [examples/README.md](examples/README.md) | Usage examples and tutorial |
 | [doc/aether-hld.md](doc/aether-hld.md) | High-level design — architecture and components |
 | [doc/aether-lld.md](doc/aether-lld.md) | Low-level design — APIs, wire protocol, threading |
 | [doc/ipcgen-hld.md](doc/ipcgen-hld.md) | High-level design — code generator |
@@ -340,7 +345,7 @@ ctest --test-dir build --output-on-failure
 
 ## Tests
 
-268 tests total: 120 C++ (Google Test) + 167 Python (pytest).
+287 tests total: 120 C++ (Google Test) + 167 Python (pytest).
 
 ```bash
 python3 build.py -t    # runs everything
@@ -361,7 +366,7 @@ python3 build.py -t    # runs everything
 │  Generated code (ipcgen)                                 │
 │  ├── C++ server/client (ServiceBase / ClientBase)        │
 │  ├── C API (aether_ipc.h)                                │
-│  └── C bare-metal (planned: c_bare_metal backend)        │
+│  └── aether-lite examples / firmware templates           │
 ├──────────────────────────────────────────────────────────┤
 │  Runtime                                                 │
 │  ├── ServiceBase / ClientBase (SHM transport)            │
@@ -370,10 +375,10 @@ python3 build.py -t    # runs everything
 ├──────────────────────────────────────────────────────────┤
 │  Transport layer                                         │
 │  ├── ITransport interface                                │
-│  ├── SHM: Connection + ring buffers + UDS signals        │
-│  └── Serial: (planned) termios + CRC32 framing           │
+│  ├── SHM: Connection + ring buffers + local wakeups      │
+│  └── Custom examples: serial / PTY via ITransport        │
 ├──────────────────────────────────────────────────────────┤
-│  Platform: Linux abstractions (UDS, memfd, SCM_RIGHTS)   │
+│  Platform: Linux / macOS / Windows backends              │
 └──────────────────────────────────────────────────────────┘
 ```
 
