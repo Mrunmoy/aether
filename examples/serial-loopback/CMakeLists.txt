@@ -1,0 +1,8 @@
+if(NOT WIN32)
+    add_executable(serial_loopback serial_loopback.cpp)
+    if(APPLE)
+        target_link_libraries(serial_loopback PRIVATE aether)
+    else()
+        target_link_libraries(serial_loopback PRIVATE aether util)
+    endif()
+endif()
