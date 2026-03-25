@@ -261,7 +261,9 @@ namespace aether::ipc
             client->conn = std::move(conn);
 
             ClientConn *ptr = client.get();
-            m_loop->addSource(ptr->conn.socketFd, [this, ptr] { onClientReady(ptr); });
+            m_loop->addSource(ptr->conn.socketFd,
+                              [this, ptr] { onClientReady(ptr); },
+                              [this, ptr] { removeClient(ptr); });
 
             m_clients.push_back(std::move(client));
         }
@@ -333,6 +335,10 @@ namespace aether::ipc
 
     void ServiceBase::removeClient(ClientConn *client)
     {
+        // Guard: might be called from both the read and error callbacks.
+        if (client->dead.load(std::memory_order_acquire))
+            return;
+
         // Remove the RunLoop source first (while socketFd is still valid).
         m_loop->removeSource(client->conn.socketFd);
 
