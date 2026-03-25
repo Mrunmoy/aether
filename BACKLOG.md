@@ -32,13 +32,13 @@ Local tracking doc. Do NOT commit.
 | 14 | Listen backlog hardcoded to 16 | **DONE** — PR #28 `SOMAXCONN` |
 | 15 | Long service name silently truncated | **DONE** — PR #28 `buildAddr()` returns error on overflow |
 
-## P3 — Low / Nice-to-Have
+## P3 — Low / Nice-to-Have (all done)
 
 | # | Issue | Location | Status |
 |---|-------|----------|--------|
-| 16 | No destructor for placement-new'd IpcRing | `Connection.cpp` | TODO — add static_assert trivially destructible |
-| 17 | Unify SerialTransport across examples | `examples/` | TODO — extract to shared location |
-| 18 | No handshake in serial examples | `examples/` | TODO — max-payload negotiation |
+| 16 | No destructor for placement-new'd IpcRing | `Connection.cpp` | **DONE** — PR #31 `static_assert(is_trivially_destructible)` |
+| 17 | Unify SerialTransport across examples | `examples/` | **DONE** — PR #32 shared `examples/SerialTransport.h` |
+| 18 | No handshake in serial examples | `examples/` | **DONE** — PR #33 handshake protocol + negotiated maxPayload |
 
 ## Done (reference)
 
@@ -65,3 +65,7 @@ Local tracking doc. Do NOT commit.
 - PR #28: Platform limits (reject long names, SOMAXCONN)
 - PR #29: Notification sequence numbers (m_notifySeq in aux field)
 - PR #30: RunLoop dead client reaping test coverage
+- PR #31: IpcRing trivially-destructible static_assert
+- PR #32: Unify SerialTransport across examples
+- PR #33: Serial transport handshake protocol
+- PR #34: Vortex upgrade + error/hangup callbacks
