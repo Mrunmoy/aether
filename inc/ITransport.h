@@ -30,6 +30,9 @@ namespace aether::ipc
         ITransport &operator=(const ITransport &) = delete;
 
         // Send a complete frame (header + payload).
+        // The `payloadBytes` parameter is authoritative for the byte count
+        // to transmit; implementations copy it into header.payloadBytes on
+        // the wire. Callers SHOULD set header.payloadBytes == payloadBytes.
         // Blocks until fully transmitted or error.
         // Returns: IPC_SUCCESS, IPC_ERR_DISCONNECTED, IPC_ERR_TRANSPORT
         virtual int sendFrame(const FrameHeader &header,
@@ -44,7 +47,10 @@ namespace aether::ipc
         // Is the transport still connected?
         virtual bool connected() const = 0;
 
-        // Initiate shutdown. Unblocks any thread blocked in recvFrame().
+        // Initiate shutdown. Unblocks any thread blocked in recvFrame()
+        // or sendFrame(). Thread-safe — may be called from any thread.
+        // Implementations should ensure that after shutdown() returns,
+        // blocked recv/send calls wake up promptly (returning an error).
         virtual void shutdown() = 0;
     };
 

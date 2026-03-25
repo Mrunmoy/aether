@@ -22,6 +22,15 @@ namespace aether::ipc
     // ClientBase, but works with any ITransport implementation rather
     // than being tied to shared-memory ring buffers.
     //
+    // IMPORTANT — Destructor contract:
+    //   The base destructor calls disconnect() to join the receiver thread.
+    //   However, the receiver thread may invoke onNotification() which is
+    //   virtual.  By the time ~TransportClientBase() runs, the derived
+    //   destructor has already executed and derived members are destroyed.
+    //   Therefore, **derived classes MUST call disconnect() in their own
+    //   destructor** to ensure the receiver thread is stopped before any
+    //   derived members are destroyed.
+    //
     // Usage:
     //   1. Construct with a service name.
     //   2. Create and connect an ITransport (handshake must be complete).

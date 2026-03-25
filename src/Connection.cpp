@@ -4,6 +4,7 @@
 #include <new>
 #include <atomic>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 // std::hash and GetCurrentProcessId are only needed for the Windows shared memory name.
@@ -176,7 +177,31 @@ namespace aether::ipc
             return conn;
         }
 
-        // 5. Map the shared memory.
+        // 4b. Validate shared memory size before mapping.
+#if !defined(_WIN32)
+        {
+            struct stat st{};
+            if (fstat(static_cast<int>(conn.shmFd), &st) != 0
+                || st.st_size < static_cast<off_t>(kShmSize))
+            {
+                conn.close();
+                return conn;
+            }
+        }
+#endif
+
+        // 5. On Windows, force NUL-termination of the received name.
+#if defined(_WIN32)
+        hs.shmName[sizeof(hs.shmName) - 1] = '\0';
+        if (hs.shmName[0] != '\0'
+            && std::strncmp(hs.shmName, "Local\\aether_shm_", 17) != 0)
+        {
+            conn.close();
+            return conn;
+        }
+#endif
+
+        // 6. Map the shared memory.
         conn.shmBase = platform::mapSharedMemory(conn.shmFd, kShmSize);
         if (conn.shmBase == nullptr
 #if !defined(_WIN32)
@@ -190,7 +215,7 @@ namespace aether::ipc
         }
         conn.shmSize = kShmSize;
 
-        // 6. Set ring buffer pointers (opposite direction from client).
+        // 7. Set ring buffer pointers (opposite direction from client).
         auto *base = static_cast<uint8_t *>(conn.shmBase);
         conn.rxRing = reinterpret_cast<IpcRing *>(base);
         conn.txRing = reinterpret_cast<IpcRing *>(base + sizeof(IpcRing));
