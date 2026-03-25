@@ -81,11 +81,13 @@ namespace aether::ipc
         ms::RunLoop *m_loop = nullptr;
         Connection m_conn;
         std::atomic<bool> m_running{false};
-        std::atomic<uint32_t> m_nextSeq{1};
         std::thread m_receiverThread;
 
         std::mutex m_handlerMutex; // guards RunLoop handler execution
         std::mutex m_sendMutex;   // serializes txRing writes (SPSC invariant)
+
+    protected:
+        std::atomic<uint32_t> m_nextSeq{1};
         std::mutex m_pendingMutex;
         std::unordered_map<uint32_t, std::shared_ptr<PendingCall>> m_pending;
     };

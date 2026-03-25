@@ -122,24 +122,38 @@ namespace aether::ipc
 
         uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
 
+        // Skip seq==0 (reserved / could be confused with "no sequence").
+        if (seq == 0)
+            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+
         // Build request frame.
         FrameHeader header{};
         header.version = kProtocolVersion;
         header.flags = FRAME_REQUEST;
         header.serviceId = serviceId;
         header.messageId = messageId;
-        header.seq = seq;
         header.payloadBytes = static_cast<uint32_t>(request.size());
 
         // Register pending call before writing, so the receiver thread can
         // always find a consumer for any committed frame (the server may
         // drain a newly committed frame before sendSignal if another
         // wakeup is already in flight).
+        //
+        // Skip sequence numbers that collide with in-flight calls
+        // (protects against wraparound after ~4 billion calls).
         auto pending = std::make_shared<PendingCall>();
         {
             std::lock_guard<std::mutex> plock(m_pendingMutex);
+            while (m_pending.count(seq))
+            {
+                seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+                if (seq == 0)
+                    seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+            }
             m_pending[seq] = pending;
         }
+
+        header.seq = seq;
 
         {
             // Hold sendMutex to serialize txRing writes (SPSC invariant).
