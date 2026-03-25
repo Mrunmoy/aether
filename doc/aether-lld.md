@@ -432,7 +432,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 |-----------|------|-----------|-------------|
 | `max` | `uint32_t` | in | Maximum number of concurrent clients. 0 = unlimited (default). |
 
-**Thread safety:** Must be called before `start()`. Not safe to call while the service is running.
+**Thread safety:** Thread-safe; may be called while the service is running. The new limit takes effect on the next connection attempt.
 **Notes:** Each client connection consumes ~512 KB of shared memory and one thread (threaded mode) or one RunLoop source (RunLoop mode). Setting a limit prevents resource exhaustion from excessive connections.
 
 ### 6.5 isRunning()
