@@ -423,14 +423,26 @@ defaults. Move-assignment calls `close()` on the destination first.
 - Threaded mode: shuts down the listen socket → joins the accept thread → shuts down each client socket → joins receiver threads → closes connections.
 - RunLoop mode: removes listen fd and all client fds from the RunLoop → waits for in-flight handlers → closes connections.
 
-### 6.4 isRunning()
+### 6.4 setMaxClients()
+
+**Signature:** `void setMaxClients(uint32_t max)`
+**Description:** Set the maximum number of concurrent client connections the service will accept. When the limit is reached, new connections are accepted at the socket level but immediately closed, causing `connectToServer()` on the client side to fail. Dead (disconnected) clients are reaped before checking the limit, so slots are reclaimed promptly.
+
+| Parameter | Type | Direction | Description |
+|-----------|------|-----------|-------------|
+| `max` | `uint32_t` | in | Maximum number of concurrent clients. 0 = unlimited (default). |
+
+**Thread safety:** Thread-safe; may be called while the service is running. The new limit takes effect on the next connection attempt.
+**Notes:** Each client connection consumes ~512 KB of shared memory and one thread (threaded mode) or one RunLoop source (RunLoop mode). Setting a limit prevents resource exhaustion from excessive connections.
+
+### 6.5 isRunning()
 
 **Signature:** `bool isRunning() const`
 **Description:** Check if the service is started and accepting connections.
 **Returns:** `true` if `start()` succeeded and `stop()` has not been called.
 **Thread safety:** Lock-free (reads an `atomic<bool>`).
 
-### 6.5 onRequest() (pure virtual)
+### 6.6 onRequest() (pure virtual)
 
 **Signature:** `virtual int onRequest(uint32_t messageId, const std::vector<uint8_t> &request, std::vector<uint8_t> *response) = 0`
 **Description:** Called for each incoming `FRAME_REQUEST`. Subclass implements this as a switch on `messageId`.
@@ -444,7 +456,7 @@ defaults. Move-assignment calls `close()` on the destination first.
 **Returns:** `IPC_SUCCESS` or a user-defined error code. The return value is placed in the response frame's `aux` field and delivered to the caller.
 **Thread safety:** Called on the receiver thread (threaded mode) or the RunLoop thread (RunLoop mode). One call at a time per client connection.
 
-### 6.6 sendNotify()
+### 6.7 sendNotify()
 
 **Signature:** `int sendNotify(uint32_t serviceId, uint32_t messageId, const uint8_t *payload, uint32_t payloadBytes)`
 **Description:** Broadcast a `FRAME_NOTIFY` to all connected clients.

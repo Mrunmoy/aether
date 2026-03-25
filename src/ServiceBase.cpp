@@ -132,6 +132,8 @@ namespace aether::ipc
 
     bool ServiceBase::isRunning() const { return m_running.load(std::memory_order_acquire); }
 
+    void ServiceBase::setMaxClients(uint32_t max) { m_maxClients.store(max, std::memory_order_relaxed); }
+
     // ── Accept Loop ──────────────────────────────────────────────────
 
     void ServiceBase::acceptLoop()
@@ -144,13 +146,44 @@ namespace aether::ipc
                 continue;
             }
 
-            auto client = std::make_unique<ClientConn>();
-            client->conn = std::move(conn);
+            // Reap dead clients and check max clients limit before committing.
+            std::vector<std::unique_ptr<ClientConn>> deadClients;
+            bool overLimit = false;
+            {
+                std::lock_guard<std::mutex> lock(m_clientsMutex);
 
-            client->thread = std::thread([this, ptr = client.get()] { receiverLoop(ptr); });
+                // Partition: live clients first, dead clients last.
+                auto it = std::stable_partition(
+                    m_clients.begin(), m_clients.end(),
+                    [](const auto &c) { return !c->dead.load(std::memory_order_acquire); });
+                for (auto move_it = it; move_it != m_clients.end(); ++move_it)
+                    deadClients.push_back(std::move(*move_it));
+                m_clients.erase(it, m_clients.end());
 
-            std::lock_guard<std::mutex> lock(m_clientsMutex);
-            m_clients.push_back(std::move(client));
+                if (const auto maxC = m_maxClients.load(std::memory_order_relaxed); maxC > 0 && m_clients.size() >= maxC)
+                {
+                    overLimit = true;
+                }
+                else
+                {
+                    auto client = std::make_unique<ClientConn>();
+                    client->conn = std::move(conn);
+                    client->thread =
+                        std::thread([this, ptr = client.get()] { receiverLoop(ptr); });
+                    m_clients.push_back(std::move(client));
+                }
+            }
+
+            // Join dead client threads outside the lock.
+            for (auto &c : deadClients)
+            {
+                if (c->thread.joinable())
+                    c->thread.join();
+                c->conn.close();
+            }
+
+            if (overLimit)
+                conn.close();
         }
     }
 
@@ -164,14 +197,31 @@ namespace aether::ipc
             return;
         }
 
-        auto client = std::make_unique<ClientConn>();
-        client->conn = std::move(conn);
+        // Reap dead clients and check max clients limit.
+        {
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
 
-        ClientConn *ptr = client.get();
-        m_loop->addSource(ptr->conn.socketFd, [this, ptr] { onClientReady(ptr); });
+            // Remove dead entries (already closed by removeClient).
+            m_clients.erase(
+                std::remove_if(m_clients.begin(), m_clients.end(),
+                               [](const auto &c)
+                               { return c->dead.load(std::memory_order_acquire); }),
+                m_clients.end());
 
-        std::lock_guard<std::mutex> lock(m_clientsMutex);
-        m_clients.push_back(std::move(client));
+            if (const auto maxC = m_maxClients.load(std::memory_order_relaxed); maxC > 0 && m_clients.size() >= maxC)
+            {
+                conn.close();
+                return;
+            }
+
+            auto client = std::make_unique<ClientConn>();
+            client->conn = std::move(conn);
+
+            ClientConn *ptr = client.get();
+            m_loop->addSource(ptr->conn.socketFd, [this, ptr] { onClientReady(ptr); });
+
+            m_clients.push_back(std::move(client));
+        }
     }
 
     void ServiceBase::onClientReady(ClientConn *client)
