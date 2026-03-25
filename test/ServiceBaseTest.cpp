@@ -884,6 +884,104 @@ TEST(ServiceBaseTest, MaxClientsAllowsReconnectAfterDisconnect)
 
 #if !defined(_WIN32)
 
+// ═════════════════════════════════════════════════════════════════════
+// RunLoop: dead clients are reaped when a new client connects
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, RunLoop_DeadClientsReapedOnAccept)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLReap");
+
+    EchoService svc(SVC_NAME, &loop);
+    // Set maxClients=1 so we can observe the reap: if the dead entry
+    // for client1 is NOT reaped, client2 would be rejected.
+    svc.setMaxClients(1);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    // Connect client1 and verify it works.
+    Connection client1 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client1.valid());
+    settle();
+
+    const uint8_t payload[] = "ping";
+    FrameHeader respHdr{};
+    std::vector<uint8_t> respPayload;
+    ASSERT_EQ(sendAndRecv(client1, 1, 1, payload, sizeof(payload),
+                          &respHdr, &respPayload),
+              IPC_SUCCESS);
+    EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+
+    // Disconnect client1 — triggers removeClient (marks dead).
+    client1.close();
+    settle();
+
+    // Connect client2 — onAcceptReady should reap client1's dead entry
+    // before checking maxClients, so this connection succeeds.
+    Connection client2 = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client2.valid());
+    settle();
+
+    // Verify client2 can communicate.
+    FrameHeader respHdr2{};
+    std::vector<uint8_t> respPayload2;
+    ASSERT_EQ(sendAndRecv(client2, 1, 2, payload, sizeof(payload),
+                          &respHdr2, &respPayload2),
+              IPC_SUCCESS);
+    EXPECT_EQ(respHdr2.aux, static_cast<uint32_t>(IPC_SUCCESS));
+    EXPECT_EQ(respPayload2, std::vector<uint8_t>(payload, payload + sizeof(payload)));
+
+    client2.close();
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// RunLoop: many connect/disconnect cycles — no dead entry buildup
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ServiceBaseTest, RunLoop_ManyConnectDisconnectCycles)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLCyc");
+
+    EchoService svc(SVC_NAME, &loop);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    for (int i = 0; i < 10; ++i)
+    {
+        Connection client = connectToServer(SVC_NAME);
+        ASSERT_TRUE(client.valid()) << "iteration " << i;
+        settle();
+
+        const uint8_t payload[] = "cycle";
+        FrameHeader respHdr{};
+        std::vector<uint8_t> respPayload;
+        int rc = sendAndRecv(client, 1, static_cast<uint32_t>(i), payload,
+                             sizeof(payload), &respHdr, &respPayload);
+
+        ASSERT_EQ(rc, IPC_SUCCESS) << "iteration " << i;
+        EXPECT_EQ(respHdr.aux, static_cast<uint32_t>(IPC_SUCCESS));
+        ASSERT_EQ(respPayload.size(), sizeof(payload));
+        EXPECT_EQ(std::memcmp(respPayload.data(), payload, sizeof(payload)), 0);
+
+        client.close();
+        settle();
+    }
+
+    EXPECT_TRUE(svc.isRunning());
+    svc.stop();
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// RunLoop: MaxClients rejects excess connections
+// ═════════════════════════════════════════════════════════════════════
+
 TEST(ServiceBaseTest, RunLoop_MaxClientsRejectsExcess)
 {
     ms::RunLoop loop;
