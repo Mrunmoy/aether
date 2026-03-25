@@ -132,7 +132,7 @@ namespace aether::ipc
 
     bool ServiceBase::isRunning() const { return m_running.load(std::memory_order_acquire); }
 
-    void ServiceBase::setMaxClients(uint32_t max) { m_maxClients = max; }
+    void ServiceBase::setMaxClients(uint32_t max) { m_maxClients.store(max, std::memory_order_relaxed); }
 
     // ── Accept Loop ──────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ namespace aether::ipc
                     deadClients.push_back(std::move(*move_it));
                 m_clients.erase(it, m_clients.end());
 
-                if (m_maxClients > 0 && m_clients.size() >= m_maxClients)
+                if (const auto maxC = m_maxClients.load(std::memory_order_relaxed); maxC > 0 && m_clients.size() >= maxC)
                 {
                     overLimit = true;
                 }
@@ -208,7 +208,7 @@ namespace aether::ipc
                                { return c->dead.load(std::memory_order_acquire); }),
                 m_clients.end());
 
-            if (m_maxClients > 0 && m_clients.size() >= m_maxClients)
+            if (const auto maxC = m_maxClients.load(std::memory_order_relaxed); maxC > 0 && m_clients.size() >= maxC)
             {
                 conn.close();
                 return;

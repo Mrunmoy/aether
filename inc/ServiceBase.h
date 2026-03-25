@@ -44,7 +44,7 @@ namespace aether::ipc
         bool isRunning() const;
 
         // Set maximum number of concurrent client connections.
-        // 0 = unlimited (default). Must be called before start().
+        // 0 = unlimited (default). Thread-safe; may be called while running.
         void setMaxClients(uint32_t max);
 
     protected:
@@ -86,7 +86,7 @@ namespace aether::ipc
         std::atomic<bool> m_running{false};
         std::thread m_acceptThread;
 
-        uint32_t m_maxClients{0}; // 0 = unlimited
+        std::atomic<uint32_t> m_maxClients{0}; // 0 = unlimited
 
         std::mutex m_clientsMutex;
         std::vector<std::unique_ptr<ClientConn>> m_clients;
