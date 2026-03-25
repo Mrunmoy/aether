@@ -127,7 +127,7 @@ public:
             return IPC_ERR_DISCONNECTED;
 
         // Guard against integer overflow in the size arithmetic.
-        if (payloadBytes > kSerialMaxPayload)
+        if (payloadBytes > m_negotiatedMaxPayload)
             return IPC_ERR_OVERFLOW;
 
         // Build the wire buffer: sync(2) + length(4) + header + payload + crc(4)
@@ -322,6 +322,94 @@ public:
         }
     }
 
+    // ── Handshake ───────────────────────────────────────────────────
+
+    // Returns the negotiated max payload after a successful handshake,
+    // or kSerialMaxPayload if no handshake has been performed.
+    uint32_t negotiatedMaxPayload() const { return m_negotiatedMaxPayload; }
+
+    // Client side: send HELLO, wait for ACK, negotiate max payload.
+    int handshake(uint32_t timeoutMs = 2000)
+    {
+        if (!connected())
+            return IPC_ERR_DISCONNECTED;
+
+        HandshakePayload hello{};
+        hello.version = kSerialTransportVersion;
+        hello.maxPayload = kSerialMaxPayload;
+        hello.features = 0;
+
+        FrameHeader hdr{};
+        hdr.version = kProtocolVersion;
+        hdr.flags = FRAME_REQUEST;
+        hdr.serviceId = kHandshakeServiceId;
+        hdr.messageId = kHandshakeHello;
+        hdr.payloadBytes = sizeof(hello);
+
+        int rc = sendFrame(hdr, reinterpret_cast<const uint8_t *>(&hello), sizeof(hello));
+        if (rc != IPC_SUCCESS)
+            return rc;
+
+        // Wait for ACK
+        FrameHeader ack{};
+        std::vector<uint8_t> payload;
+        rc = recvFrame(&ack, &payload);
+        if (rc != IPC_SUCCESS)
+            return rc;
+
+        (void)timeoutMs; // recvFrame blocks until data arrives
+
+        if (ack.serviceId != kHandshakeServiceId || ack.messageId != kHandshakeAck)
+            return IPC_ERR_VERSION_MISMATCH;
+
+        if (payload.size() >= sizeof(HandshakePayload))
+        {
+            HandshakePayload serverCaps{};
+            std::memcpy(&serverCaps, payload.data(), sizeof(serverCaps));
+            m_negotiatedMaxPayload = std::min(kSerialMaxPayload, serverCaps.maxPayload);
+        }
+
+        return IPC_SUCCESS;
+    }
+
+    // Server side: wait for HELLO, send ACK, negotiate max payload.
+    int waitForHandshake()
+    {
+        if (!connected())
+            return IPC_ERR_DISCONNECTED;
+
+        FrameHeader hdr{};
+        std::vector<uint8_t> payload;
+        int rc = recvFrame(&hdr, &payload);
+        if (rc != IPC_SUCCESS)
+            return rc;
+
+        if (hdr.serviceId != kHandshakeServiceId || hdr.messageId != kHandshakeHello)
+            return IPC_ERR_VERSION_MISMATCH;
+
+        HandshakePayload clientCaps{};
+        if (payload.size() >= sizeof(HandshakePayload))
+            std::memcpy(&clientCaps, payload.data(), sizeof(clientCaps));
+
+        m_negotiatedMaxPayload = std::min(kSerialMaxPayload, clientCaps.maxPayload);
+
+        // Send ACK with our capabilities
+        HandshakePayload ack{};
+        ack.version = kSerialTransportVersion;
+        ack.maxPayload = kSerialMaxPayload;
+        ack.features = 0;
+
+        FrameHeader ackHdr{};
+        ackHdr.version = kProtocolVersion;
+        ackHdr.flags = FRAME_RESPONSE;
+        ackHdr.serviceId = kHandshakeServiceId;
+        ackHdr.messageId = kHandshakeAck;
+        ackHdr.seq = hdr.seq;
+        ackHdr.payloadBytes = sizeof(ack);
+
+        return sendFrame(ackHdr, reinterpret_cast<const uint8_t *>(&ack), sizeof(ack));
+    }
+
 private:
     // Internal read buffer to reduce syscalls (fix #6).
     static constexpr size_t kReadBufSize = 512;
@@ -393,6 +481,7 @@ private:
     int m_fd = -1;
     int m_shutdownPipe[2] = {-1, -1};
     std::atomic<bool> m_connected{true};
+    uint32_t m_negotiatedMaxPayload = kSerialMaxPayload;
 };
 
 } // namespace aether::ipc

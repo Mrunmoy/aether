@@ -59,8 +59,22 @@ int main()
     // Small delay so the device can init.
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    // Create transport and client.
+    // Create transport and perform handshake.
     auto transport = std::make_unique<aether::ipc::SerialTransport>(master_fd);
+
+    int hsRc = transport->handshake();
+    if (hsRc != aether::ipc::IPC_SUCCESS)
+    {
+        std::fprintf(stderr, "Handshake failed: %d\n", hsRc);
+        stop_flag.store(1, std::memory_order_release);
+        device_thread.join();
+        close(master_fd);
+        close(slave_fd);
+        return 1;
+    }
+    std::printf("Handshake complete (maxPayload=%u).\n",
+                transport->negotiatedMaxPayload());
+
     aether::ipc::TransportClientBase client("serial-sensor");
 
     if (!client.connect(std::move(transport)))
