@@ -94,6 +94,31 @@ namespace aether::ipc
         return m_running.load(std::memory_order_acquire);
     }
 
+    // ── Sequence allocation ─────────────────────────────────────────
+
+    uint32_t TransportClientBase::nextUniqueSeq()
+    {
+        // Caller must hold m_pendingMutex.
+        //
+        // This loop terminates because m_pending.size() is bounded by available
+        // memory (at most a few thousand concurrent calls), so at most that many
+        // iterations before finding a free seq.
+        uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+        if (seq == 0)
+            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+
+        uint32_t start = seq;
+        while (m_pending.count(seq))
+        {
+            seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+            if (seq == 0)
+                seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+            if (seq == start)
+                return 0; // wrapped completely — all seqs exhausted
+        }
+        return seq;
+    }
+
     // ── Synchronous RPC ─────────────────────────────────────────────
 
     int TransportClientBase::call(uint32_t serviceId, uint32_t messageId,
@@ -106,7 +131,19 @@ namespace aether::ipc
             return IPC_ERR_DISCONNECTED;
         }
 
-        uint32_t seq = m_nextSeq.fetch_add(1, std::memory_order_relaxed);
+        // Register pending call before sending so the receiver thread can
+        // always find a consumer for any response.
+        auto pending = std::make_shared<PendingCall>();
+        uint32_t seq;
+        {
+            std::lock_guard<std::mutex> plock(m_pendingMutex);
+            seq = nextUniqueSeq();
+            if (seq == 0)
+            {
+                return IPC_ERR_OVERFLOW;
+            }
+            m_pending[seq] = pending;
+        }
 
         FrameHeader header{};
         header.version = kProtocolVersion;
@@ -115,14 +152,6 @@ namespace aether::ipc
         header.messageId = messageId;
         header.seq = seq;
         header.payloadBytes = static_cast<uint32_t>(request.size());
-
-        // Register pending call before sending so the receiver thread can
-        // always find a consumer for any response.
-        auto pending = std::make_shared<PendingCall>();
-        {
-            std::lock_guard<std::mutex> plock(m_pendingMutex);
-            m_pending[seq] = pending;
-        }
 
         {
             std::lock_guard<std::mutex> slock(m_sendMutex);
