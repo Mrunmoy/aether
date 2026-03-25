@@ -7,6 +7,9 @@
 //
 // The "length" field covers header + payload + CRC (i.e., everything after
 // the 6-byte sync+length preamble).
+//
+// CRC32 covers length + header + payload (everything except sync and the CRC
+// itself).
 
 #include <ITransport.h>
 #include <Endian.h>
@@ -45,6 +48,34 @@ inline uint32_t crc32Serial(const uint8_t *data, size_t len)
     return crc ^ 0xFFFFFFFF;
 }
 
+// Incremental CRC32 — feed chunks without concatenating them.
+class Crc32Accumulator
+{
+public:
+    void update(const uint8_t *data, size_t len)
+    {
+        for (size_t i = 0; i < len; ++i)
+        {
+            m_crc ^= data[i];
+            for (int b = 0; b < 8; ++b)
+            {
+                if (m_crc & 1)
+                    m_crc = (m_crc >> 1) ^ 0xEDB88320;
+                else
+                    m_crc >>= 1;
+            }
+        }
+    }
+
+    uint32_t finalize() const { return m_crc ^ 0xFFFFFFFF; }
+
+private:
+    uint32_t m_crc = 0xFFFFFFFF;
+};
+
+// Maximum payload the serial transport will accept.
+static constexpr uint32_t kSerialMaxPayload = 256 * 1024;
+
 // ── SerialTransport ─────────────────────────────────────────────────
 
 class SerialTransport : public ITransport
@@ -57,11 +88,22 @@ public:
         // Create a self-pipe for shutdown signaling.
         if (::pipe(m_shutdownPipe) != 0)
         {
-            m_fd = -1;
+            // pipe() failed — mark transport as not connected but keep m_fd
+            // so the caller can still close it via the destructor.
+            m_connected = false;
             return;
         }
         // Make the read end non-blocking.
         int flags = ::fcntl(m_shutdownPipe[0], F_GETFL);
+        if (flags < 0)
+        {
+            // fcntl failed — clean up pipes, mark disconnected.
+            ::close(m_shutdownPipe[0]);
+            ::close(m_shutdownPipe[1]);
+            m_shutdownPipe[0] = m_shutdownPipe[1] = -1;
+            m_connected = false;
+            return;
+        }
         ::fcntl(m_shutdownPipe[0], F_SETFL, flags | O_NONBLOCK);
     }
 
@@ -84,8 +126,13 @@ public:
         if (!connected())
             return IPC_ERR_DISCONNECTED;
 
-        // Build the wire buffer: sync(2) + length(4) + header(24) + payload + crc(4)
-        const uint32_t innerLen = 24 + payloadBytes + 4; // header + payload + CRC
+        // Guard against integer overflow in the size arithmetic.
+        if (payloadBytes > kSerialMaxPayload)
+            return IPC_ERR_OVERFLOW;
+
+        // Build the wire buffer: sync(2) + length(4) + header + payload + crc(4)
+        constexpr uint32_t kHdrSize = static_cast<uint32_t>(sizeof(FrameHeader));
+        const uint32_t innerLen = kHdrSize + payloadBytes + 4; // header + payload + CRC
         std::vector<uint8_t> buf(2 + 4 + innerLen);
         uint8_t *p = buf.data();
 
@@ -102,8 +149,8 @@ public:
         FrameHeader wireHdr = header;
         wireHdr.payloadBytes = payloadBytes; // ensure consistency
         frameHeaderToWire(&wireHdr);
-        std::memcpy(p, &wireHdr, 24);
-        p += 24;
+        std::memcpy(p, &wireHdr, kHdrSize);
+        p += kHdrSize;
 
         // Payload
         if (payloadBytes > 0 && payload)
@@ -112,8 +159,9 @@ public:
             p += payloadBytes;
         }
 
-        // CRC32 over header(wire) + payload
-        uint32_t crc = crc32Serial(buf.data() + 6, 24 + payloadBytes);
+        // CRC32 over length + header(wire) + payload
+        // (starts at offset 2, i.e. right after the sync bytes)
+        uint32_t crc = crc32Serial(buf.data() + 2, 4 + kHdrSize + payloadBytes);
         uint32_t leCrc = hostToLe32(crc);
         std::memcpy(p, &leCrc, 4);
 
@@ -153,6 +201,8 @@ public:
             BODY
         };
         State state = SYNC1;
+
+        constexpr uint32_t kHdrSize = static_cast<uint32_t>(sizeof(FrameHeader));
 
         uint8_t lenBuf[4]{};
         size_t lenPos = 0;
@@ -198,8 +248,8 @@ public:
                     std::memcpy(&bodyLen, lenBuf, 4);
                     bodyLen = leToHost32(bodyLen);
 
-                    // Sanity check: must be at least header(24) + crc(4)
-                    if (bodyLen < 28 || bodyLen > 1024 * 1024)
+                    // Sanity check: must be at least header + crc
+                    if (bodyLen < kHdrSize + 4 || bodyLen > 1024 * 1024)
                     {
                         state = SYNC1;
                         break;
@@ -214,13 +264,17 @@ public:
                 body[bodyPos++] = byte;
                 if (bodyPos == bodyLen)
                 {
-                    // Parse: first 24 bytes = header, then payload, last 4 = CRC
-                    uint32_t payloadBytes = bodyLen - 24 - 4;
+                    // Parse: first kHdrSize bytes = header, then payload, last 4 = CRC
+                    uint32_t payloadBytes = bodyLen - kHdrSize - 4;
 
-                    // Verify CRC over header + payload
-                    uint32_t computed = crc32Serial(body.data(), 24 + payloadBytes);
+                    // Verify CRC over length + header + payload
+                    Crc32Accumulator acc;
+                    acc.update(lenBuf, 4);
+                    acc.update(body.data(), kHdrSize + payloadBytes);
+                    uint32_t computed = acc.finalize();
+
                     uint32_t received;
-                    std::memcpy(&received, body.data() + 24 + payloadBytes, 4);
+                    std::memcpy(&received, body.data() + kHdrSize + payloadBytes, 4);
                     received = leToHost32(received);
 
                     if (computed != received)
@@ -231,12 +285,12 @@ public:
                     }
 
                     // Deserialize header
-                    std::memcpy(header, body.data(), 24);
+                    std::memcpy(header, body.data(), kHdrSize);
                     frameHeaderFromWire(header);
 
                     // Extract payload
-                    payload->assign(body.data() + 24,
-                                    body.data() + 24 + payloadBytes);
+                    payload->assign(body.data() + kHdrSize,
+                                    body.data() + kHdrSize + payloadBytes);
 
                     return IPC_SUCCESS;
                 }
@@ -264,9 +318,22 @@ public:
     }
 
 private:
-    // Read a single byte, using poll() to allow shutdown interruption.
+    // Internal read buffer to reduce syscalls (fix #6).
+    static constexpr size_t kReadBufSize = 512;
+    uint8_t m_readBuf[kReadBufSize]{};
+    size_t m_readBufPos = 0;
+    size_t m_readBufLen = 0;
+
+    // Read a single byte, using an internal buffer + poll() for shutdown.
     int readByte(uint8_t *out)
     {
+        // Serve from buffer first.
+        if (m_readBufPos < m_readBufLen)
+        {
+            *out = m_readBuf[m_readBufPos++];
+            return 0;
+        }
+
         while (connected())
         {
             struct pollfd fds[2];
@@ -296,9 +363,14 @@ private:
 
             if (fds[0].revents & POLLIN)
             {
-                ssize_t n = ::read(m_fd, out, 1);
-                if (n == 1)
+                ssize_t n = ::read(m_fd, m_readBuf, kReadBufSize);
+                if (n > 0)
+                {
+                    m_readBufPos = 1;
+                    m_readBufLen = static_cast<size_t>(n);
+                    *out = m_readBuf[0];
                     return 0;
+                }
                 if (n == 0)
                 {
                     m_connected = false;

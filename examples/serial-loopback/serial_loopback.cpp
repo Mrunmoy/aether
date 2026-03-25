@@ -15,7 +15,11 @@
 #include <thread>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <util.h>
+#else
 #include <pty.h>
+#endif
 #include <termios.h>
 #include <unistd.h>
 
@@ -92,6 +96,9 @@ int main()
     if (!client.connect(std::move(transport)))
     {
         std::fprintf(stderr, "Failed to connect TransportClientBase\n");
+        // Clean up: shut down the server thread before exiting.
+        ::close(slave);
+        serverThread.join();
         return 1;
     }
 
