@@ -32,13 +32,12 @@ namespace aether::ipc::platform
         constexpr size_t prefixLen = sizeof(prefix) - 1;
         size_t nameLen = std::strlen(name);
 
-        // Clamp to available space (sun_path[0] is \0, leaves 107 bytes)
+        // sun_path[0] is \0 (abstract namespace), leaving 107 bytes for payload.
         size_t maxPayload = sizeof(addr->sun_path) - 1;
         size_t payloadLen = prefixLen + nameLen;
         if (payloadLen > maxPayload)
         {
-            payloadLen = maxPayload;
-            nameLen = maxPayload - prefixLen;
+            return 0; // name too long — caller must treat as error
         }
 
         std::memcpy(addr->sun_path + 1, prefix, prefixLen);
@@ -59,6 +58,11 @@ namespace aether::ipc::platform
 
         sockaddr_un addr{};
         socklen_t len = buildAddr(&addr, name);
+        if (len == 0)
+        {
+            close(fd);
+            return -1;
+        }
 
         if (bind(fd, reinterpret_cast<sockaddr *>(&addr), len) != 0)
         {
@@ -66,7 +70,9 @@ namespace aether::ipc::platform
             return -1;
         }
 
-        if (listen(fd, 16) != 0)
+        // Use SOMAXCONN so the kernel picks the system-configured maximum
+        // rather than an arbitrary low limit.
+        if (listen(fd, SOMAXCONN) != 0)
         {
             close(fd);
             return -1;
@@ -85,6 +91,11 @@ namespace aether::ipc::platform
 
         sockaddr_un addr{};
         socklen_t len = buildAddr(&addr, name);
+        if (len == 0)
+        {
+            close(fd);
+            return -1;
+        }
 
         if (connect(fd, reinterpret_cast<sockaddr *>(&addr), len) != 0)
         {

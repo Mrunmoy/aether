@@ -392,6 +392,35 @@ TEST(PlatformTest, GetPeerCredentialsInvalidFd)
 
 #endif // !_WIN32 && !__APPLE__
 
+// ═════════════════════════════════════════════════════════════════════
+// Service name length validation tests
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(PlatformTest, LongServiceNameFails)
+{
+    // A 200+ character name must not silently truncate — it should fail.
+    std::string longName(250, 'x');
+    Handle fd = serverSocket(longName.c_str());
+    EXPECT_EQ(fd, kInvalidHandle);
+
+    // Same for clientSocket.
+    Handle cli = clientSocket(longName.c_str());
+    EXPECT_EQ(cli, kInvalidHandle);
+}
+
+#if !defined(__APPLE__)
+TEST(PlatformTest, MaxLengthServiceNameWorks)
+{
+    // Linux abstract namespace: sun_path is 108 bytes.
+    // sun_path[0] = '\0' (abstract), then "aether_" prefix (7 bytes),
+    // leaving 108 - 1 - 7 = 100 bytes for the name.
+    std::string maxName(100, 'y');
+    Handle fd = serverSocket(maxName.c_str());
+    ASSERT_NE(fd, kInvalidHandle);
+    closeFd(fd);
+}
+#endif
+
 TEST(PlatformTest, PendingWakeupDrainsQueuedFrameBurst)
 {
 #if defined(__APPLE__)

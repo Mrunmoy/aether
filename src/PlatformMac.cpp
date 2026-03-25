@@ -129,7 +129,9 @@ namespace aether::ipc::platform
             return -1;
         }
 
-        if (listen(fd, 16) != 0)
+        // Use SOMAXCONN so the kernel picks the system-configured maximum
+        // rather than an arbitrary low limit.
+        if (listen(fd, SOMAXCONN) != 0)
         {
             unlink(addr.sun_path);
             close(fd);
