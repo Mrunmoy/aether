@@ -102,7 +102,7 @@ namespace aether::ipc
         std::atomic<uint32_t> m_allowedPeerUid{0};
 
         std::mutex m_clientsMutex;
-        std::vector<std::unique_ptr<ClientConn>> m_clients;
+        std::vector<std::shared_ptr<ClientConn>> m_clients;
     };
 
 } // namespace aether::ipc
