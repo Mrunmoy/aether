@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 /* ================================================================
@@ -25,6 +26,7 @@
  * ================================================================ */
 
 #define RING_SIZE  512u
+_Static_assert((RING_SIZE & (RING_SIZE - 1)) == 0, "RING_SIZE must be power of two");
 #define RING_MASK  (RING_SIZE - 1u)
 
 static volatile uint8_t  g_ring_buf[RING_SIZE];
@@ -85,7 +87,7 @@ static int hal_tx_write(const uint8_t *buf, size_t len, void *ctx)
 }
 
 /* --- get_tick_ms: monotonic millisecond counter ----------------- */
-static uint32_t hal_get_tick_ms(void)
+uint32_t hal_get_tick_ms(void)
 {
     /*
      * >>> REPLACE WITH YOUR HAL <<<
@@ -119,7 +121,7 @@ static const al_method_entry_t device_methods[] =
 static void send_sensor_notification(void)
 {
     sensor_update_payload_t payload;
-    payload.value        = 23.5f;  /* >>> replace with real read <<< */
+    payload.value        = read_adc_temperature();
     payload.timestamp_ms = hal_get_tick_ms();
 
     al_send_notify(DEVICE_SERVICE_ID, NOTIFY_SENSOR_UPDATE,
@@ -145,7 +147,7 @@ int main(void)
 
     /* ---- Aether-lite init ---- */
 
-    al_hal_t hal;
+    static al_hal_t hal;
     memset(&hal, 0, sizeof(hal));
     hal.rx_read     = hal_rx_read;
     hal.tx_write    = hal_tx_write;
@@ -153,8 +155,14 @@ int main(void)
     hal.user_ctx    = (void *)0;   /* unused in this template */
 
     al_init(&hal);
-    al_register_service(DEVICE_SERVICE_ID,
-                        device_methods, DEVICE_METHOD_COUNT);
+
+    int rc = al_register_service(DEVICE_SERVICE_ID,
+                                 device_methods, DEVICE_METHOD_COUNT);
+    if (rc != AL_SUCCESS)
+    {
+        fprintf(stderr, "al_register_service failed: %d\n", rc);
+        return 1;
+    }
 
     /* ---- Main loop ---- */
 

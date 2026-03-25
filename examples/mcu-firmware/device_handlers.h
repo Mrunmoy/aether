@@ -63,6 +63,10 @@ typedef struct
 
 #pragma pack(pop)
 
+/* ── ADC helper (defined in device_handlers.c) ─────────────────── */
+
+float read_adc_temperature(void);
+
 /* ── Handler prototypes ─────────────────────────────────────────── */
 
 int handle_get_device_info(const uint8_t *req, uint32_t req_len,

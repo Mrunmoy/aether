@@ -45,7 +45,7 @@ int handle_get_device_info(const uint8_t *req, uint32_t req_len,
  * ---------------------------------------------------------------- */
 
 /* >>> REPLACE with your actual ADC read function <<< */
-static float read_adc_temperature(void)
+float read_adc_temperature(void)
 {
     /* Stub: returns a fixed value.  Replace with e.g.:
      *   uint32_t raw = HAL_ADC_GetValue(&hadc1);
@@ -54,12 +54,8 @@ static float read_adc_temperature(void)
     return 23.5f;
 }
 
-/* >>> REPLACE with your tick source <<< */
-static uint32_t get_tick_stub(void)
-{
-    /* Stub: should call HAL_GetTick() or similar. */
-    return 0;
-}
+/* hal_get_tick_ms is defined in main.c */
+extern uint32_t hal_get_tick_ms(void);
 
 int handle_read_sensor(const uint8_t *req, uint32_t req_len,
                        uint8_t *resp, uint32_t resp_cap,
@@ -73,7 +69,7 @@ int handle_read_sensor(const uint8_t *req, uint32_t req_len,
 
     sensor_reading_resp_t *reading = (sensor_reading_resp_t *)resp;
     reading->value        = read_adc_temperature();
-    reading->timestamp_ms = get_tick_stub();
+    reading->timestamp_ms = hal_get_tick_ms();
 
     *resp_len = sizeof(sensor_reading_resp_t);
     return AL_SUCCESS;
