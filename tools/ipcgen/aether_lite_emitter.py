@@ -316,6 +316,7 @@ def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
         if f.type_name == "string":
             wire = f.array_size + 1
             w(f"    memcpy({dst_var}.{f.name}, {buf_var} + {cur_offset}, {wire});")
+            w(f"    {dst_var}.{f.name}[{f.array_size}] = '\\0';")
             if field_offset_int is not None:
                 field_offset_int += wire
             else:
@@ -571,6 +572,13 @@ def _emit_notify_sender(w, service_name, prefix, n, idl):
         w(f"    return al_send_notify({prefix}_SERVICE_ID, {macro}, (void *)0, 0);")
         w("}")
         return
+
+    # NULL-pointer guard for array/pointer params (strings have their own guard)
+    for p in n.params:
+        if p.type_name == "string":
+            continue  # string NULL is handled below with the if-guard
+        if p.array_size is not None or _is_struct_type(idl, p.type_name):
+            w(f"    if (!{p.name}) return AL_ERR_INVALID_ARGUMENT;")
 
     # Calculate total buffer size
     _, size_expr = _total_wire_size(n.params, idl)

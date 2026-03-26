@@ -297,7 +297,16 @@ class TestDispatchWrappers:
         # Should not contain any C-style casts to float* etc. (with or without spaces)
         assert "(float *)" not in c
         assert "(uint32_t *)" not in c
-        assert not re.search(r"\([a-z_]+\d*_t\s*\*\)", c), \
+        # Catch _t types AND common non-_t types (float, double, int, char)
+        pattern = (
+            r"\(\s*"
+            r"(float|double|int|char"
+            r"|uint8_t|uint16_t|uint32_t|uint64_t"
+            r"|int8_t|int16_t|int32_t|int64_t"
+            r"|[a-z_]+\d*_t)"
+            r"\s*\*\s*\)"
+        )
+        assert not re.search(pattern, c), \
             "Generated code contains pointer casts"
 
     def test_includes_header(self):
@@ -480,6 +489,31 @@ class TestStructMarshaling:
             assert not line.lstrip().startswith("//"), f"C++ comment: {line}"
         for line in c.splitlines():
             assert not line.lstrip().startswith("//"), f"C++ comment: {line}"
+
+    def test_struct_string_field_unmarshal_nul_terminated(self):
+        """Struct string field unmarshal must force NUL termination."""
+        # Need a method with [in] struct that has a string field
+        idl = """\
+struct DeviceInfo
+{
+    uint32 id;
+    string[64] name;
+};
+
+service DeviceQuery
+{
+    [method=1]
+    int UpdateInfo([in] DeviceInfo info);
+};
+"""
+        c = _gen_c(idl)
+        # After memcpy of the string[64] field, a NUL byte must be written
+        assert "info.name[64] = '\\0';" in c
+
+    def test_notification_null_pointer_guard(self):
+        """Notification sender must guard struct pointer params against NULL."""
+        h = _gen_h(STRUCT_IDL)
+        assert "if (!info) return AL_ERR_INVALID_ARGUMENT;" in h
 
     def test_struct_out_marshal_with_preceding_scalar(self):
         """GetReading has [in] uint8 channel before [out] SensorReading."""
