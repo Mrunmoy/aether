@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-from ipcgen.python_emitter import emit_python_client
+from ipcgen.python_emitter import emit_python_client, _safe_name
 from ipcgen.types import fnv1a_32
 
 from .conftest import parse, DEVICE_MONITOR_IDL
@@ -120,14 +120,14 @@ class TestPythonStructGeneration:
         idl = parse(TYPED_IDL)
         code = emit_python_client(idl)
         assert "def pack(self) -> bytes:" in code
-        # Wire format is always LE — these format strings are protocol-correct.
+        # Wire format is always LE -- these format strings are protocol-correct.
         assert 'struct.pack("<I", self.id)' in code
 
     def test_struct_unpack_method(self):
         idl = parse(TYPED_IDL)
         code = emit_python_client(idl)
         assert "def unpack(cls, data: bytes, offset: int = 0)" in code
-        # Wire format is always LE — these format strings are protocol-correct.
+        # Wire format is always LE -- these format strings are protocol-correct.
         assert 'struct.unpack_from("<I", data, offset)' in code
 
     def test_string_field_pack(self):
@@ -170,18 +170,19 @@ class TestPythonMethodGeneration:
         idl = parse(DEVICE_MONITOR_IDL)
         code = emit_python_client(idl)
         assert "Returns (status, count)" in code
-        assert 'struct.unpack_from("<I", resp, offset)' in code
+        # Internal vars are now prefixed with underscore
+        assert 'struct.unpack_from("<I", _resp, _offset)' in code
 
     def test_method_with_struct_out(self):
         idl = parse(TYPED_IDL)
         code = emit_python_client(idl)
-        assert "DeviceInfo.unpack(resp, offset)" in code
-        assert "return (rc, info)" in code
+        assert "DeviceInfo.unpack(_resp, _offset)" in code
+        assert "return (_rc, info)" in code
 
     def test_method_returns_default_on_error(self):
         idl = parse(DEVICE_MONITOR_IDL)
         code = emit_python_client(idl)
-        assert "return (rc, 0)" in code
+        assert "return (_rc, 0)" in code
 
     def test_service_id(self):
         idl = parse(DEVICE_MONITOR_IDL)
@@ -193,6 +194,19 @@ class TestPythonMethodGeneration:
         idl = parse(DEVICE_MONITOR_IDL)
         code = emit_python_client(idl)
         assert "class DeviceMonitorClient:" in code
+
+    def test_timeout_param_prefixed(self):
+        """Generated methods use _timeout_ms to avoid collision with IDL params."""
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        assert "_timeout_ms: int = 2000" in code
+
+    def test_internal_vars_prefixed(self):
+        """Generated method internals use _rc, _resp, _req, _offset."""
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        assert "_rc, _resp = self._client.call(" in code
+        assert "_offset = 0" in code
 
 
 class TestPythonNotificationGeneration:
@@ -222,13 +236,19 @@ class TestPythonNotificationGeneration:
     def test_dispatch_checks_service_id(self):
         idl = parse(DEVICE_MONITOR_IDL)
         code = emit_python_client(idl)
-        assert "if service_id != SERVICE_ID:" in code
+        assert "if _service_id != SERVICE_ID:" in code
 
     def test_notification_with_enum_param(self):
         idl = parse(TYPED_IDL)
         code = emit_python_client(idl)
         # DeviceConnected has [in] uint32 deviceId, [in] DeviceStatus status
         assert "self._on_device_connected(deviceId, status)" in code
+
+    def test_dispatch_internal_vars_prefixed(self):
+        """Notification dispatch uses _payload, _offset, _service_id, _message_id."""
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        assert "_dispatch_notification(self, _service_id: int, _message_id: int, _payload: bytes)" in code
 
 
 class TestPythonStringHandling:
@@ -294,6 +314,82 @@ class TestPythonAllTypes:
         # bool uses "B" (uint8) for wire compat with C++, wrapped with bool() on unpack
         assert 'struct.pack("<B", flag)' in code
         assert 'bool(struct.unpack_from("<B"' in code
+
+
+class TestSafeName:
+    """Tests for _safe_name() keyword collision handling."""
+
+    def test_keyword_method_name_appended(self):
+        """A method named 'class' in snake_case becomes 'class_'."""
+        assert _safe_name("class") == "class_"
+
+    def test_keyword_param_name_appended(self):
+        """A param named 'import' becomes 'import_'."""
+        assert _safe_name("import") == "import_"
+
+    def test_non_keyword_unchanged(self):
+        """Non-keyword names pass through unchanged."""
+        assert _safe_name("count") == "count"
+        assert _safe_name("device_id") == "device_id"
+
+    def test_various_keywords(self):
+        """Several Python keywords get the underscore suffix."""
+        for kw in ("class", "import", "from", "return", "pass", "for", "while",
+                    "if", "else", "try", "except", "finally", "with", "as",
+                    "def", "lambda", "yield", "global", "nonlocal"):
+            assert _safe_name(kw) == kw + "_", f"_safe_name({kw!r}) should be {kw + '_'!r}"
+
+    def test_not_a_keyword(self):
+        """Words that look like keywords but aren't should pass through."""
+        assert _safe_name("classes") == "classes"
+        assert _safe_name("imports") == "imports"
+
+
+class TestKeywordCollisionEndToEnd:
+    """End-to-end tests that keyword-named IDL identifiers produce valid Python."""
+
+    def test_keyword_param_generates_valid_python(self):
+        """An [in] param named a Python keyword compiles without error."""
+        # 'from' is a Python keyword; the emitter must mangle it
+        idl_src = """\
+service Kw {
+    [method=1]
+    int Lookup([in] uint32 id, [out] uint32 result);
+};
+"""
+        idl = parse(idl_src)
+        code = emit_python_client(idl)
+        compile(code, "<generated>", "exec")
+
+    def test_reserved_internal_param_no_clash(self):
+        """An [out] param named 'offset' or 'rc' doesn't clash with internals."""
+        idl_src = """\
+service Clash {
+    [method=1]
+    int Read([in] uint32 addr, [out] uint32 offset, [out] uint32 rc);
+};
+"""
+        idl = parse(idl_src)
+        code = emit_python_client(idl)
+        # The generated code must compile (no duplicate/shadowed locals)
+        compile(code, "<generated>", "exec")
+        # The internal _rc/_offset must not be overwritten by param names
+        assert "_rc, _resp = self._client.call(" in code
+        assert "_offset = 0" in code
+
+    def test_timeout_ms_param_no_clash(self):
+        """An [in] param named 'timeout_ms' doesn't collide with the kwarg."""
+        idl_src = """\
+service Timer {
+    [method=1]
+    int SetTimeout([in] uint32 timeout_ms);
+};
+"""
+        idl = parse(idl_src)
+        code = emit_python_client(idl)
+        compile(code, "<generated>", "exec")
+        # Should have _timeout_ms for the internal kwarg
+        assert "_timeout_ms: int = 2000" in code
 
 
 class TestPythonEndToEnd:
