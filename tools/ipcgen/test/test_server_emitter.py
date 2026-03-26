@@ -68,6 +68,8 @@ class TestServerEmitter:
         cpp = emit_server_cpp(idl)
 
         # Switch on messageId with enum case labels.
+        assert "(void)request;" in cpp
+        assert "(void)response;" in cpp
         assert "switch (messageId)" in cpp
         assert "case DeviceMonitor::kGetDeviceCount:" in cpp
         assert "case DeviceMonitor::kGetDeviceStatus:" in cpp
