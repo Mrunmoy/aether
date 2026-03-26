@@ -15,6 +15,7 @@ from .emitter import emit_server_h, emit_server_cpp, emit_client_h, emit_client_
 from .c_api_emitter import (emit_c_api_server_h, emit_c_api_server_cpp,
                             emit_c_api_client_h, emit_c_api_client_cpp)
 from .python_emitter import emit_python_client
+from .aether_lite_emitter import emit_aether_lite_h, emit_aether_lite_c
 from .types import fnv1a_32
 
 
@@ -22,12 +23,14 @@ def main():
     parser = argparse.ArgumentParser(description="aether IDL code generator")
     parser.add_argument("idl", help="Input .idl file")
     parser.add_argument("--outdir", required=True, help="Output directory")
-    parser.add_argument("--backend", choices=["cpp", "c_api", "python"],
+    parser.add_argument("--backend", choices=["cpp", "c_api", "python", "aether_lite"],
                         default="cpp",
                         help="Code generation backend: 'cpp' (default) uses "
                              "ServiceBase/ClientBase (source build); 'c_api' "
                              "generates wrappers using aether_ipc.h (SDK); "
-                             "'python' generates a typed Python client module")
+                             "'python' generates a typed Python client module; "
+                             "'aether_lite' generates C99 dispatch tables for "
+                             "bare-metal MCU firmware")
     args = parser.parse_args()
 
     with open(args.idl) as f:
@@ -37,33 +40,43 @@ def main():
     idl = Parser(tokens).parse()
 
     name = idl.service_name
-    server_dir = os.path.join(args.outdir, "server")
-    client_dir = os.path.join(args.outdir, "client")
-    os.makedirs(server_dir, exist_ok=True)
-    os.makedirs(client_dir, exist_ok=True)
 
-    files = []
+    if args.backend == "aether_lite":
+        # Flat output: {ServiceName}.h and {ServiceName}.c in outdir.
+        os.makedirs(args.outdir, exist_ok=True)
 
-    if args.backend == "python":
-        files.append((client_dir, f"{name}.py", emit_python_client(idl)))
+        files = [
+            (args.outdir, f"{name}.h", emit_aether_lite_h(idl)),
+            (args.outdir, f"{name}.c", emit_aether_lite_c(idl)),
+        ]
     else:
-        if idl.enums or idl.structs:
-            files.append((args.outdir, f"{name}Types.h", emit_types_h(idl)))
+        server_dir = os.path.join(args.outdir, "server")
+        client_dir = os.path.join(args.outdir, "client")
+        os.makedirs(server_dir, exist_ok=True)
+        os.makedirs(client_dir, exist_ok=True)
 
-        if args.backend == "c_api":
-            files.extend([
-                (server_dir, f"{name}.h",   emit_c_api_server_h(idl)),
-                (server_dir, f"{name}.cpp", emit_c_api_server_cpp(idl)),
-                (client_dir, f"{name}.h",   emit_c_api_client_h(idl)),
-                (client_dir, f"{name}.cpp", emit_c_api_client_cpp(idl)),
-            ])
+        files = []
+
+        if args.backend == "python":
+            files.append((client_dir, f"{name}.py", emit_python_client(idl)))
         else:
-            files.extend([
-                (server_dir, f"{name}.h",   emit_server_h(idl)),
-                (server_dir, f"{name}.cpp", emit_server_cpp(idl)),
-                (client_dir, f"{name}.h",   emit_client_h(idl)),
-                (client_dir, f"{name}.cpp", emit_client_cpp(idl)),
-            ])
+            if idl.enums or idl.structs:
+                files.append((args.outdir, f"{name}Types.h", emit_types_h(idl)))
+
+            if args.backend == "c_api":
+                files.extend([
+                    (server_dir, f"{name}.h",   emit_c_api_server_h(idl)),
+                    (server_dir, f"{name}.cpp", emit_c_api_server_cpp(idl)),
+                    (client_dir, f"{name}.h",   emit_c_api_client_h(idl)),
+                    (client_dir, f"{name}.cpp", emit_c_api_client_cpp(idl)),
+                ])
+            else:
+                files.extend([
+                    (server_dir, f"{name}.h",   emit_server_h(idl)),
+                    (server_dir, f"{name}.cpp", emit_server_cpp(idl)),
+                    (client_dir, f"{name}.h",   emit_client_h(idl)),
+                    (client_dir, f"{name}.cpp", emit_client_cpp(idl)),
+                ])
 
     for directory, filename, content in files:
         path = os.path.join(directory, filename)
