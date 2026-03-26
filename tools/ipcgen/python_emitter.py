@@ -15,6 +15,7 @@ from .parser import IdlFile, EnumDef, StructDef, StructField, Method, Notificati
 from .types import fnv1a_32
 
 
+# Wire format is always little-endian (LE), matching the C++ aether protocol.
 # IDL type → Python struct format character (little-endian).
 PY_STRUCT_FMT = {
     "uint8":   "B",
@@ -65,6 +66,8 @@ def _py_type_hint(type_name: str, array_size: Optional[int]) -> str:
         else:
             base = "int"
     else:
+        # Enum classes are plain int-constant namespaces (not enum.IntEnum),
+        # so we hint them as "int" to match the actual wire values.
         base = type_name
     if array_size is not None:
         return f"list[{base}]"

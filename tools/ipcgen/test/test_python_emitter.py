@@ -120,12 +120,14 @@ class TestPythonStructGeneration:
         idl = parse(TYPED_IDL)
         code = emit_python_client(idl)
         assert "def pack(self) -> bytes:" in code
+        # Wire format is always LE — these format strings are protocol-correct.
         assert 'struct.pack("<I", self.id)' in code
 
     def test_struct_unpack_method(self):
         idl = parse(TYPED_IDL)
         code = emit_python_client(idl)
         assert "def unpack(cls, data: bytes, offset: int = 0)" in code
+        # Wire format is always LE — these format strings are protocol-correct.
         assert 'struct.unpack_from("<I", data, offset)' in code
 
     def test_string_field_pack(self):
