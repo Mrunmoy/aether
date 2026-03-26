@@ -70,6 +70,8 @@ class _SpscRingBase:
 
     def __init__(self, shm: mmap.mmap, base_offset: int,
                  capacity: int = RING_CAPACITY):
+        assert capacity > 0 and capacity & (capacity - 1) == 0, \
+            "capacity must be a power of two"
         self._shm = shm
         self._base = base_offset
         self._capacity = capacity

@@ -34,7 +34,8 @@ class TestFrameHeader:
 
     def test_round_trip_values(self):
         hdr = FrameHeader(version=1, flags=FRAME_REQUEST, service_id=42,
-                          message_id=7, seq=1000, payload_bytes=256, aux=-1)
+                          message_id=7, seq=1000, payload_bytes=256,
+                          aux=0xFFFFFFFF)
         data = hdr.pack()
         out = FrameHeader.unpack(data)
         assert out.version == 1
@@ -43,8 +44,11 @@ class TestFrameHeader:
         assert out.message_id == 7
         assert out.seq == 1000
         assert out.payload_bytes == 256
-        # aux is signed int32 -> -1 round trips
-        assert out.aux == -1
+        # aux is unsigned uint32 on the wire; 0xFFFFFFFF round-trips.
+        # Use aux_to_signed() to reinterpret as -1.
+        assert out.aux == 0xFFFFFFFF
+        from aether_ipc.constants import aux_to_signed
+        assert aux_to_signed(out.aux) == -1
 
     def test_unpack_too_short(self):
         with pytest.raises(ValueError):

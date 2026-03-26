@@ -15,6 +15,7 @@ from .constants import (
     IPC_SUCCESS, IPC_ERR_DISCONNECTED, IPC_ERR_TIMEOUT,
     IPC_ERR_RING_FULL, IPC_ERR_STOPPED,
     FRAME_HEADER_SIZE, MAX_PAYLOAD,
+    aux_to_signed,
 )
 from .framing import FrameHeader, write_frame, read_frame
 from .transport import AetherTransport
@@ -211,8 +212,10 @@ class AetherClient:
         with self._pending_lock:
             pending = self._pending.get(hdr.seq)
         if pending is not None:
+            # aux is unsigned on the wire; reinterpret as signed status code.
+            status = aux_to_signed(hdr.aux)
             with pending.cv:
-                pending.result = (hdr.aux, payload)
+                pending.result = (status, payload)
                 pending.cv.notify()
 
     # ---- Context manager ----------------------------------------------------

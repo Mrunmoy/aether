@@ -10,7 +10,8 @@ import ctypes.util
 import mmap
 import os
 import socket
-import struct
+import struct as _struct
+import sys
 
 from .constants import (
     PROTOCOL_VERSION, SHM_SIZE, IPCRING_SIZE,
@@ -25,18 +26,27 @@ __all__ = ["AetherTransport"]
 # memfd_create via ctypes (Linux-only, avoids /dev/shm namespace pollution)
 # ---------------------------------------------------------------------------
 
-_libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+# Abstract-namespace Unix socket path limit (108 bytes including NUL).
+# The usable prefix is 107 bytes (the leading NUL is the namespace marker).
+_ABSTRACT_ADDR_MAX = 107
 
-# int memfd_create(const char *name, unsigned int flags)
-_memfd_create = _libc.memfd_create
-_memfd_create.restype = ctypes.c_int
-_memfd_create.argtypes = [ctypes.c_char_p, ctypes.c_uint]
-
+_memfd_create = None
 _MFD_CLOEXEC = 0x0001
+
+if sys.platform == "linux":
+    try:
+        _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+        _memfd_create = _libc.memfd_create
+        _memfd_create.restype = ctypes.c_int
+        _memfd_create.argtypes = [ctypes.c_char_p, ctypes.c_uint]
+    except (OSError, AttributeError):
+        _memfd_create = None
 
 
 def _create_memfd(name: str, size: int) -> int:
     """Create an anonymous shared memory fd via memfd_create + ftruncate."""
+    if _memfd_create is None:
+        raise OSError("memfd_create is only available on Linux")
     fd = _memfd_create(name.encode(), _MFD_CLOEXEC)
     if fd < 0:
         errno = ctypes.get_errno()
@@ -77,11 +87,23 @@ class AetherTransport:
         # 1. Create UDS SEQPACKET socket and connect to abstract namespace.
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
         addr = "\0aether_" + service_name
+        # Validate that the abstract address fits in the kernel limit
+        # (107 usable bytes after the leading NUL byte).
+        addr_bytes = addr.encode("utf-8")
+        if len(addr_bytes) - 1 > _ABSTRACT_ADDR_MAX:
+            raise ValueError(
+                f"service address 'aether_{service_name}' exceeds the "
+                f"{_ABSTRACT_ADDR_MAX}-byte abstract namespace limit"
+            )
         self._sock.connect(addr)
 
-        # 2. Set send timeout (matches C++ setSocketTimeouts — SO_SNDTIMEO only).
-        timeout_sec = SOCKET_TIMEOUT_MS / 1000.0
-        self._sock.settimeout(timeout_sec)
+        # 2. Set send timeout only (matches C++ SO_SNDTIMEO).
+        #    Python's settimeout() sets BOTH SO_SNDTIMEO and SO_RCVTIMEO;
+        #    use setsockopt directly to match the C++ behaviour.
+        timeout_sec = int(SOCKET_TIMEOUT_MS // 1000)
+        timeout_usec = int((SOCKET_TIMEOUT_MS % 1000) * 1000)
+        tv = _struct.pack("ll", timeout_sec, timeout_usec)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDTIMEO, tv)
 
         # 3. Create shared memory via memfd_create.
         self._shm_fd = _create_memfd("aether_shm", SHM_SIZE)
@@ -95,7 +117,7 @@ class AetherTransport:
         self._shm[0:SHM_SIZE] = b"\x00" * SHM_SIZE
 
         # 6. Send handshake: protocol version + shm fd via SCM_RIGHTS.
-        hs_data = struct.pack(SHM_HANDSHAKE_FORMAT,
+        hs_data = _struct.pack(SHM_HANDSHAKE_FORMAT,
                               PROTOCOL_VERSION, 0, b"\x00" * 128)
         self._send_fd(self._shm_fd, hs_data)
 
@@ -152,7 +174,7 @@ class AetherTransport:
         try:
             self._sock.send(b"\x01", socket.MSG_DONTWAIT)
         except BlockingIOError:
-            # EAGAIN/EWOULDBLOCK — peer already has a pending wakeup.
+            # EAGAIN/EWOULDBLOCK --- peer already has a pending wakeup.
             pass
 
     def recv_signal(self):

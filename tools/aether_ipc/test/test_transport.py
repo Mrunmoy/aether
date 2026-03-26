@@ -9,8 +9,13 @@ import mmap
 import os
 import socket
 import struct
+import sys
 import threading
 import pytest
+
+_linux_only = pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux-only transport (UDS + memfd)"
+)
 
 from aether_ipc.constants import (
     PROTOCOL_VERSION, SHM_SIZE, SHM_HANDSHAKE_SIZE, SHM_HANDSHAKE_FORMAT,
@@ -119,6 +124,7 @@ def _echo_server_thread(server_sock: socket.socket, barrier: threading.Barrier):
 # Tests
 # ---------------------------------------------------------------------------
 
+@_linux_only
 class TestTransportHandshake:
     """Test the handshake protocol with a mock server."""
 
@@ -192,6 +198,7 @@ class TestTransportHandshake:
         assert not transport.is_connected
 
 
+@_linux_only
 class TestAetherClientIntegration:
     """Test the high-level AetherClient with a mock echo server."""
 

@@ -33,7 +33,10 @@ TAIL_OFFSET = CACHE_LINE_SIZE                  # 64
 # ---- Frame Header -----------------------------------------------------------
 
 FRAME_HEADER_SIZE = 24
-FRAME_HEADER_FORMAT = "<HHIIIIi"   # little-endian, matches x86 native layout
+FRAME_HEADER_FORMAT = "<HHIIIII"   # little-endian; aux is unsigned uint32
+# NOTE: aux is packed as unsigned ("I") to match the C++ wire format.
+# Callers that need a signed status code must reinterpret:
+#   status = aux if aux < 0x80000000 else aux - 0x100000000
 
 # Maximum payload that fits in a single frame.
 MAX_PAYLOAD = RING_CAPACITY - FRAME_HEADER_SIZE
@@ -76,3 +79,10 @@ SHM_HANDSHAKE_SIZE = 132
 # ---- Socket timeout ---------------------------------------------------------
 
 SOCKET_TIMEOUT_MS = 5000
+
+
+# ---- Helpers ----------------------------------------------------------------
+
+def aux_to_signed(aux: int) -> int:
+    """Reinterpret an unsigned uint32 aux value as a signed int32 status code."""
+    return aux if aux < 0x80000000 else aux - 0x100000000
