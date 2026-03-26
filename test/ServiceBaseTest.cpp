@@ -1061,13 +1061,24 @@ TEST(ServiceBaseTest, NotifySequenceIsMonotonic)
     }
 
     // Read all notification frames and verify aux contains 1, 2, 3, 4, 5.
+    // On Windows, recvSignal drains all queued bytes so we can only rely on
+    // one wakeup.  Wait for the first signal, then read all available frames.
     std::vector<uint32_t> seqs;
+    ASSERT_EQ(recvSignal(client.socketFd), 0) << "initial signal";
+
     for (int i = 0; i < kNotifications; ++i)
     {
-        ASSERT_EQ(recvSignal(client.socketFd), 0) << "signal " << i;
         FrameHeader hdr{};
         std::vector<uint8_t> p;
-        ASSERT_EQ(readFrameAlloc(client.rxRing, &hdr, &p), IPC_SUCCESS) << "frame " << i;
+        // Frames may arrive slightly after the signal on slow CI; brief spin.
+        int rc = IPC_ERR_TIMEOUT;
+        for (int attempt = 0; attempt < 50 && rc != IPC_SUCCESS; ++attempt)
+        {
+            rc = readFrameAlloc(client.rxRing, &hdr, &p);
+            if (rc != IPC_SUCCESS)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        ASSERT_EQ(rc, IPC_SUCCESS) << "frame " << i;
         EXPECT_EQ(hdr.flags, FRAME_NOTIFY);
         seqs.push_back(hdr.aux);
     }
