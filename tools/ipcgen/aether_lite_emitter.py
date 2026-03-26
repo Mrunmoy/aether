@@ -361,6 +361,30 @@ def emit_aether_lite_h(idl: IdlFile, out: TextIO) -> None:
     w("#include <string.h>")
     w("")
 
+    # Emit C99 type definitions for enums and structs inline
+    if idl.enums or idl.structs:
+        w("/* ---- IDL type definitions ------------------------------------- */")
+        for enum_def in idl.enums:
+            w("")
+            w(f"/* enum {enum_def.name} */")
+            for val in enum_def.values:
+                w(f"#define {val.name}  {val.value}")
+            w(f"typedef uint32_t {enum_def.name};")
+        for struct_def in idl.structs:
+            w("")
+            w(f"typedef struct {{")
+            for f in struct_def.fields:
+                ct = _c_type(f.type_name)
+                if f.type_name == "string":
+                    buf_size = (f.array_size or 0) + 1
+                    w(f"    char {f.name}[{buf_size}];")
+                elif f.array_size is not None:
+                    w(f"    {ct} {f.name}[{f.array_size}];")
+                else:
+                    w(f"    {ct} {f.name};")
+            w(f"}} {struct_def.name};")
+        w("")
+
     # Service ID and method count
     w(f"#define {prefix}_SERVICE_ID  0x{service_id:08x}u")
     w(f"#define {prefix}_METHOD_COUNT {method_count}")
@@ -398,25 +422,37 @@ def emit_aether_lite_h(idl: IdlFile, out: TextIO) -> None:
     w("/* Call this from main() after al_init(). */")
     w(f"static inline int {name}_register(void)")
     w("{")
-    for m in idl.methods:
-        dn = _dispatch_name(name, m.name)
-        w(f"    extern int {dn}(const uint8_t *, uint32_t, uint8_t *, uint32_t, uint32_t *);")
-    w("")
-    w(f"    static const al_method_entry_t methods[{prefix}_METHOD_COUNT] = {{")
-    for m in idl.methods:
-        macro = f"{prefix}_{_to_upper_snake(m.name)}"
-        dn = _dispatch_name(name, m.name)
-        w(f"        {{ {macro}, {dn} }},")
-    w("    };")
-    w(f"    return al_register_service({prefix}_SERVICE_ID, methods, {prefix}_METHOD_COUNT);")
-    w("}")
-    w("")
+    if not idl.methods:
+        w("    /* This service has no methods; aether-lite does not allow")
+        w("     * registering services with method_count == 0. */")
+        w("    return AL_ERR_INVALID_ARGUMENT;")
+        w("}")
+        w("")
+    else:
+        for m in idl.methods:
+            dn = _dispatch_name(name, m.name)
+            w(f"    extern int {dn}(const uint8_t *, uint32_t, uint8_t *, uint32_t, uint32_t *);")
+        w("")
+        w(f"#if {prefix}_METHOD_COUNT > AL_MAX_METHODS")
+        w(f'#error "{prefix}_METHOD_COUNT exceeds AL_MAX_METHODS"')
+        w("#endif")
+        w(f"    static const al_method_entry_t methods[{prefix}_METHOD_COUNT] = {{")
+        for m in idl.methods:
+            macro = f"{prefix}_{_to_upper_snake(m.name)}"
+            dn = _dispatch_name(name, m.name)
+            w(f"        {{ {macro}, {dn} }},")
+        w("    };")
+        w(f"    return al_register_service({prefix}_SERVICE_ID, methods, (uint8_t){prefix}_METHOD_COUNT);")
+        w("}")
+        w("")
 
     # Notification senders
     if idl.notifications:
+        w("#if AL_ENABLE_NOTIFICATIONS")
         w("/* ---- Notification senders ------------------------------------- */")
         for n in idl.notifications:
             _emit_notify_sender(w, name, prefix, n, idl)
+        w("#endif /* AL_ENABLE_NOTIFICATIONS */")
         w("")
 
     w(f"#endif /* {guard} */")

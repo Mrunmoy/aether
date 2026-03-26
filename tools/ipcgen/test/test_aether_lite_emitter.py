@@ -222,7 +222,7 @@ class TestRegisterFunction:
 
     def test_register_calls_al_register_service(self):
         h = _gen_h(TEMP_SENSOR_IDL)
-        assert "al_register_service(TEMPERATURE_SENSOR_SERVICE_ID, methods, TEMPERATURE_SENSOR_METHOD_COUNT)" in h
+        assert "al_register_service(TEMPERATURE_SENSOR_SERVICE_ID, methods, (uint8_t)TEMPERATURE_SENSOR_METHOD_COUNT)" in h
 
     def test_register_has_dispatch_externs(self):
         h = _gen_h(TEMP_SENSOR_IDL)
@@ -299,10 +299,13 @@ class TestDispatchWrappers:
 
     def test_uses_memcpy_not_cast(self):
         """All marshaling must use memcpy, not pointer casts."""
+        import re
         c = _gen_c(TEMP_SENSOR_IDL)
-        # Should not contain any C-style casts to float* etc.
+        # Should not contain any C-style casts to float* etc. (with or without spaces)
         assert "(float *)" not in c
         assert "(uint32_t *)" not in c
+        assert not re.search(r"\([a-z_]+\d*_t\s*\*\)", c), \
+            "Generated code contains pointer casts"
 
     def test_includes_header(self):
         c = _gen_c(TEMP_SENSOR_IDL)
@@ -492,6 +495,122 @@ class TestStructMarshaling:
         assert "memcpy(resp + 0, &reading.sensorId, 1);" in c
         assert "memcpy(resp + 1, &reading.timestamp, 4);" in c
         assert "memcpy(resp + 5, &reading.value, 4);" in c
+
+
+class TestZeroMethodService:
+    """Service with no methods should not emit a zero-length array."""
+
+    ZERO_METHOD_IDL = """\
+service EmptyService
+{
+};
+
+notifications EmptyService
+{
+    [notify=1]
+    void Heartbeat();
+};
+"""
+
+    def test_zero_method_returns_error(self):
+        h = _gen_h(self.ZERO_METHOD_IDL)
+        assert "AL_ERR_INVALID_ARGUMENT" in h
+        assert "methods[" not in h
+
+    def test_zero_method_count_macro(self):
+        h = _gen_h(self.ZERO_METHOD_IDL)
+        assert "EMPTY_SERVICE_METHOD_COUNT 0" in h
+
+    def test_zero_method_register_compiles(self):
+        """Register function should not contain al_register_service call."""
+        h = _gen_h(self.ZERO_METHOD_IDL)
+        assert "al_register_service(" not in h
+
+
+class TestNotificationGuard:
+    """Notification senders wrapped in AL_ENABLE_NOTIFICATIONS guard."""
+
+    def test_notification_guard_present(self):
+        h = _gen_h(TEMP_SENSOR_IDL)
+        assert "#if AL_ENABLE_NOTIFICATIONS" in h
+        assert "#endif /* AL_ENABLE_NOTIFICATIONS */" in h
+
+    def test_notification_sender_inside_guard(self):
+        h = _gen_h(TEMP_SENSOR_IDL)
+        guard_start = h.index("#if AL_ENABLE_NOTIFICATIONS")
+        guard_end = h.index("#endif /* AL_ENABLE_NOTIFICATIONS */")
+        sender = h.index("TemperatureSensor_notifyOverTemperature")
+        assert guard_start < sender < guard_end
+
+    def test_no_guard_when_no_notifications(self):
+        h = _gen_h(NO_NOTIFICATIONS_IDL)
+        assert "AL_ENABLE_NOTIFICATIONS" not in h
+
+
+class TestMethodCountGuard:
+    """AL_MAX_METHODS compile-time guard and uint8_t cast."""
+
+    def test_max_methods_guard(self):
+        h = _gen_h(TEMP_SENSOR_IDL)
+        assert "#if TEMPERATURE_SENSOR_METHOD_COUNT > AL_MAX_METHODS" in h
+        assert '#error "TEMPERATURE_SENSOR_METHOD_COUNT exceeds AL_MAX_METHODS"' in h
+
+    def test_uint8_cast(self):
+        h = _gen_h(TEMP_SENSOR_IDL)
+        assert "(uint8_t)TEMPERATURE_SENSOR_METHOD_COUNT" in h
+
+
+class TestInlineTypeDefinitions:
+    """C99 type definitions emitted inline in the header."""
+
+    ENUM_STRUCT_IDL = """\
+enum DeviceType
+{
+    DEVICE_SENSOR = 0,
+    DEVICE_ACTUATOR = 1,
+    DEVICE_CONTROLLER = 2,
+};
+
+struct DeviceInfo
+{
+    uint32 id;
+    string[64] name;
+};
+
+service DeviceQuery
+{
+    [method=1]
+    int GetInfo([in] uint32 slot, [out] DeviceInfo info);
+};
+"""
+
+    def test_enum_defines(self):
+        h = _gen_h(self.ENUM_STRUCT_IDL)
+        assert "#define DEVICE_SENSOR  0" in h
+        assert "#define DEVICE_ACTUATOR  1" in h
+        assert "#define DEVICE_CONTROLLER  2" in h
+
+    def test_enum_typedef(self):
+        h = _gen_h(self.ENUM_STRUCT_IDL)
+        assert "typedef uint32_t DeviceType;" in h
+
+    def test_struct_typedef(self):
+        h = _gen_h(self.ENUM_STRUCT_IDL)
+        assert "typedef struct {" in h
+        assert "uint32_t id;" in h
+        assert "char name[65];" in h
+        assert "} DeviceInfo;" in h
+
+    def test_struct_only_idl(self):
+        """Struct-only IDL (no enum) should still emit typedef."""
+        h = _gen_h(STRUCT_IDL)
+        assert "typedef struct {" in h
+        assert "} DeviceInfo;" in h
+
+    def test_no_types_section_when_no_types(self):
+        """No type definitions section when IDL has no enums/structs."""
+        h = _gen_h(NO_NOTIFICATIONS_IDL)
+        assert "IDL type definitions" not in h
 
 
 class TestCamelToSnake:
