@@ -52,19 +52,49 @@ def clean():
         shutil.rmtree(BUILD_DIR)
 
 
-def configure(examples=False):
+def configure(examples=False, sanitizers=""):
     os.makedirs(BUILD_DIR, exist_ok=True)
     cmd = ["cmake", "-B", BUILD_DIR, "-DCMAKE_BUILD_TYPE=Release"]
     cmd.append(f"-DAETHER_BUILD_EXAMPLES={'ON' if examples else 'OFF'}")
+    if sanitizers:
+        cmd.append(f"-DAETHER_SANITIZERS={sanitizers}")
     run(cmd, cwd=ROOT)
 
 
-def build(examples=False):
-    configure(examples=examples)
+def build(examples=False, sanitizers=""):
+    configure(examples=examples, sanitizers=sanitizers)
     run(["cmake", "--build", BUILD_DIR, f"-j{os.cpu_count()}"], cwd=ROOT)
 
 
-def test():
+def executable_path(*parts):
+    suffix = ".exe" if os.name == "nt" else ""
+    return os.path.join(*parts) + suffix
+
+
+def run_sanitized_tests():
+    env = os.environ.copy()
+    env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    env.setdefault("ASAN_OPTIONS", "detect_leaks=1:halt_on_error=1")
+    env.setdefault("UBSAN_OPTIONS", "print_stacktrace=1:halt_on_error=1")
+    env.setdefault("TSAN_OPTIONS", "halt_on_error=1:history_size=7")
+
+    # GoogleTest discovery via ctest is flaky under sanitized runs; invoke the
+    # binaries directly so the sanitizer jobs exercise the same logic reliably.
+    run([executable_path(BUILD_DIR, "test", "ipc_tests"), "--gtest_brief=1"], cwd=ROOT, env=env)
+
+    for name in ["codegen_server_tests", "codegen_client_tests"]:
+        exe = executable_path(BUILD_DIR, "examples", "echo", name)
+        if os.path.isfile(exe):
+            run([exe, "--gtest_brief=1"], cwd=ROOT, env=env)
+
+    run([sys.executable, "-m", "pytest", "tools/ipcgen/test/", "-v"], cwd=ROOT, env=env)
+
+
+def test(sanitizers=""):
+    if sanitizers:
+        run_sanitized_tests()
+        return
+
     has_cpp_tests = False
     try:
         result = subprocess.run(
@@ -260,16 +290,18 @@ def main():
     parser.add_argument("-t", "--test", action="store_true", help="run tests after building")
     parser.add_argument("-e", "--examples", action="store_true", help="build examples")
     parser.add_argument("-p", "--package", action="store_true", help="package SDK tarball")
+    parser.add_argument("--sanitizers", default="",
+                        help="comma-separated GCC/Clang sanitizers, e.g. address,undefined or thread")
     args = parser.parse_args()
 
     if args.clean:
         clean()
 
     # When testing or packaging, always build examples.
-    build(examples=args.examples or args.test or args.package)
+    build(examples=args.examples or args.test or args.package, sanitizers=args.sanitizers)
 
     if args.test:
-        test()
+        test(sanitizers=args.sanitizers)
 
     if args.package:
         package()

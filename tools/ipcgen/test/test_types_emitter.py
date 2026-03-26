@@ -139,7 +139,8 @@ class TestTypesEmitter:
             };
         """)
         h = emit_client_h(idl)
-        assert "virtual void onInfoChanged(Info info) {}" in h
+        assert "virtual void onInfoChanged(Info info)" in h
+        assert "(void)info;" in h
         cpp = emit_client_cpp(idl)
         assert "Info info;" in cpp
 
@@ -217,7 +218,8 @@ class TestTypesEmitter:
             };
         """)
         h = emit_client_h(idl)
-        assert "virtual void onDataReady(std::array<uint8_t, 64> data) {}" in h
+        assert "virtual void onDataReady(std::array<uint8_t, 64> data)" in h
+        assert "(void)data;" in h
 
     # ── Struct with nested array fields ─────────────────────────────
 

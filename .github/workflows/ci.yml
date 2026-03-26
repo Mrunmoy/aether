@@ -51,6 +51,58 @@ jobs:
           export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
           python3 -m pytest tools/ipcgen/test/ -v
 
+  linux-sanitizers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sanitizer_name: asan-ubsan
+            sanitizers: address,undefined
+            env: ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
+          - sanitizer_name: tsan
+            sanitizers: thread
+            env: TSAN_OPTIONS=halt_on_error=1:history_size=7
+
+    name: linux-sanitizers (${{ matrix.sanitizer_name }})
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure
+        run: >
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=gcc
+          -DCMAKE_CXX_COMPILER=g++
+          -DAETHER_BUILD_EXAMPLES=ON
+          -DAETHER_SANITIZERS=${{ matrix.sanitizers }}
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Sanitized C++ tests
+        run: ${{ matrix.env }} build/test/ipc_tests --gtest_brief=1
+
+      - name: Sanitized codegen tests
+        run: |
+          ${{ matrix.env }} build/examples/echo/codegen_server_tests --gtest_brief=1
+          ${{ matrix.env }} build/examples/echo/codegen_client_tests --gtest_brief=1
+
+      - name: ipcgen pytest suite
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install 'pytest>=7'
+          export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+          ${{ matrix.env }} python3 -m pytest tools/ipcgen/test/ -v
+
   macos-build:
     runs-on: macos-latest
     timeout-minutes: 15

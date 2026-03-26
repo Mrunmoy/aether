@@ -8,6 +8,7 @@ int ExhaustAnalyzer::onRequest(uint32_t messageId,
                                const std::vector<uint8_t> &request,
                                std::vector<uint8_t> *response)
 {
+    (void)request;
     switch (messageId)
     {
     case ExhaustAnalyzer::kGetStatus:

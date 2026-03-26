@@ -31,9 +31,12 @@ namespace aether::ipc
                       const uint8_t *payload,
                       uint32_t payloadBytes) override
         {
-            if (m_shutdown.load(std::memory_order_acquire))
             {
-                return IPC_ERR_DISCONNECTED;
+                std::lock_guard<std::mutex> lock(m_recvMutex);
+                if (m_shutdown)
+                {
+                    return IPC_ERR_DISCONNECTED;
+                }
             }
 
             {
@@ -61,33 +64,36 @@ namespace aether::ipc
         int recvFrame(FrameHeader *header,
                       std::vector<uint8_t> *payload) override
         {
-            while (true)
+            std::unique_lock<std::mutex> lock(m_recvMutex);
+            m_recvCv.wait(lock, [this]
             {
-                std::unique_lock<std::mutex> lock(m_recvMutex);
-                if (m_shutdown.load(std::memory_order_acquire))
-                {
-                    return IPC_ERR_DISCONNECTED;
-                }
-                if (!m_recvQueue.empty())
-                {
-                    Frame f = std::move(m_recvQueue.front());
-                    m_recvQueue.pop();
-                    *header = f.header;
-                    *payload = std::move(f.payload);
-                    return IPC_SUCCESS;
-                }
-                m_recvCv.wait(lock);
+                return m_shutdown || !m_recvQueue.empty();
+            });
+
+            if (m_shutdown)
+            {
+                return IPC_ERR_DISCONNECTED;
             }
+
+            Frame f = std::move(m_recvQueue.front());
+            m_recvQueue.pop();
+            *header = f.header;
+            *payload = std::move(f.payload);
+            return IPC_SUCCESS;
         }
 
         bool connected() const override
         {
-            return !m_shutdown.load(std::memory_order_acquire);
+            std::lock_guard<std::mutex> lock(m_recvMutex);
+            return !m_shutdown;
         }
 
         void shutdown() override
         {
-            m_shutdown.store(true, std::memory_order_release);
+            {
+                std::lock_guard<std::mutex> lock(m_recvMutex);
+                m_shutdown = true;
+            }
             m_recvCv.notify_all();
         }
 
@@ -125,15 +131,14 @@ namespace aether::ipc
         }
 
     private:
-        std::atomic<bool> m_shutdown{false};
-
         mutable std::mutex m_sentMutex;
         std::vector<Frame> m_sent;
         int m_nextSendError{0};
 
-        std::mutex m_recvMutex;
+        mutable std::mutex m_recvMutex;
         std::condition_variable m_recvCv;
         std::queue<Frame> m_recvQueue;
+        bool m_shutdown{false};
     };
 
 } // namespace aether::ipc

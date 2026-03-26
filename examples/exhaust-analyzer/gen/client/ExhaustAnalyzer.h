@@ -36,8 +36,14 @@ public:
     int StopMeasurement(bool *stopped, uint32_t timeoutMs = 2000);
 
 protected:
-    virtual void onReadingsUpdated(GasReadings readings) {}
-    virtual void onStatusChanged(AnalyzerStatus status) {}
+    virtual void onReadingsUpdated(GasReadings readings)
+    {
+        (void)readings;
+    }
+    virtual void onStatusChanged(AnalyzerStatus status)
+    {
+        (void)status;
+    }
 
     void onNotification(uint32_t serviceId, uint32_t messageId,
                         const std::vector<uint8_t> &payload) override;

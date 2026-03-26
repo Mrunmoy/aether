@@ -47,8 +47,9 @@ class TestClientEmitter:
     def test_notification_callbacks(self, idl):
         """Virtual notification callbacks with empty default body."""
         h = emit_client_h(idl)
-        assert "virtual void onDeviceConnected(uint32_t deviceId) {}" in h
-        assert "virtual void onDeviceDisconnected(uint32_t deviceId) {}" in h
+        assert "virtual void onDeviceConnected(uint32_t deviceId)" in h
+        assert "(void)deviceId;" in h
+        assert "virtual void onDeviceDisconnected(uint32_t deviceId)" in h
 
     def test_onNotification_override(self, idl):
         """onNotification override is declared in the header."""
