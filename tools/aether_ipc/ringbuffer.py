@@ -13,14 +13,43 @@ Memory layout must match the C++ ouroboros::spsc::RingBuffer<uint8_t, Capacity>:
 Head and tail are monotonically increasing uint32 values. They wrap naturally
 at 2**32 and are masked (& Mask) when used as indices into the data region.
 
-Atomicity note: On x86-64, aligned 4-byte loads/stores are naturally atomic.
-We use struct.pack_into / struct.unpack_from on the mmap which compile down to
-single aligned accesses. This is sufficient for the single-producer /
-single-consumer protocol on the same machine.
+Platform limitation -- x86-64 only:
+    The SPSC protocol requires atomic loads/stores for the head and tail
+    uint32 fields.  On x86-64, naturally aligned 4-byte reads and writes are
+    atomic by the ISA spec; ``struct.pack_into`` / ``struct.unpack_from`` on
+    an mmap compile down to such accesses.
+
+    **This is NOT safe on ARM / AArch64** where aligned 4-byte accesses are
+    not guaranteed to be atomic without explicit barriers (``__atomic_load`` /
+    ``__atomic_store``).  A correct ARM implementation would need
+    ``ctypes.c_uint32`` pointers with ``__atomic`` intrinsics, which is
+    non-trivial from pure Python.  For now we emit a runtime warning on
+    non-x86 platforms (see ``_check_platform()`` below).
 """
 
 import mmap
+import platform
 import struct
+import warnings
+
+
+def _check_platform():
+    """Warn if the current CPU architecture lacks guaranteed atomicity
+    for aligned 4-byte loads/stores (i.e. anything other than x86/x86-64)."""
+    machine = platform.machine().lower()
+    if machine not in ("x86_64", "amd64", "i686", "i386", "x86"):
+        warnings.warn(
+            f"aether_ipc.ringbuffer: running on {machine!r} architecture. "
+            "The SPSC ring buffer relies on naturally-atomic aligned 4-byte "
+            "loads/stores which are only guaranteed on x86/x86-64. "
+            "On ARM/AArch64 this may produce data races. "
+            "See module docstring for details.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+
+_check_platform()
 from .constants import (
     CACHE_LINE_SIZE, CONTROL_BLOCK_SIZE,
     HEAD_OFFSET, TAIL_OFFSET,

@@ -55,6 +55,11 @@ class FrameHeader:
 def write_frame(ring, header: FrameHeader, payload: bytes = b"") -> int:
     """Write header + payload atomically to *ring* (SpscRingWriter).
 
+    The header and payload are concatenated into a single ``ring.write()``
+    call so that ``head`` is advanced only once, after ALL data is in the
+    buffer.  Two separate writes would advance ``head`` after the header,
+    allowing the consumer to see a partial frame.
+
     Returns IPC_SUCCESS or IPC_ERR_RING_FULL.
     """
     payload_len = len(payload)
@@ -65,13 +70,11 @@ def write_frame(ring, header: FrameHeader, payload: bytes = b"") -> int:
     if ring.write_available() < total:
         return IPC_ERR_RING_FULL
 
-    hdr_bytes = header.pack()
-    if not ring.write(hdr_bytes):
+    # Single write: head is only advanced once, after both header and
+    # payload are in the data region.
+    frame_bytes = header.pack() + payload if payload_len > 0 else header.pack()
+    if not ring.write(frame_bytes):
         return IPC_ERR_RING_FULL
-
-    if payload_len > 0:
-        if not ring.write(payload):
-            return IPC_ERR_RING_FULL
 
     return IPC_SUCCESS
 

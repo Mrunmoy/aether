@@ -34,8 +34,31 @@ from .constants import (  # noqa: F401, E402
 NotificationHandler = Callable[[int, int, bytes], None]
 
 
+class _PendingCall:
+    """Slot used by call() to wait for its response from the receiver thread."""
+    __slots__ = ("cv", "result")
+
+    def __init__(self):
+        self.cv = threading.Condition()
+        self.result: "tuple[int, bytes] | None" = None
+
+
 class AetherClient:
     """High-level client for calling aether IPC services.
+
+    Architecture -- single-consumer SPSC compliance:
+        The rx_ring is an SPSC (single-producer, single-consumer) ring buffer.
+        Only ONE thread may read from it.  A dedicated *receiver thread* is the
+        sole consumer of rx_ring.  It dispatches:
+          - **responses** to the ``call()`` that is waiting for them, via a
+            dict of ``_PendingCall`` condition variables keyed by sequence
+            number (mirrors the C++ ``ClientBase`` pattern).
+          - **notifications** to the registered notification handler.
+
+        ``call()`` never touches rx_ring directly; it registers a pending
+        slot, writes to tx_ring (safe -- only one producer thread at a time
+        due to the GIL + _tx_lock), sends a signal, and waits on its
+        condition variable.
 
     Usage::
 
@@ -51,23 +74,36 @@ class AetherClient:
         self._transport = AetherTransport()
         self._seq = 0
         self._notify_handler: NotificationHandler | None = None
-        self._notify_thread: threading.Thread | None = None
+        self._rx_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        # Pending RPC calls: seq -> _PendingCall.  Protected by _pending_lock.
+        self._pending: dict[int, _PendingCall] = {}
+        self._pending_lock = threading.Lock()
+        # Serialize tx_ring writes from multiple caller threads.
+        self._tx_lock = threading.Lock()
 
     # ---- Lifecycle ----------------------------------------------------------
 
     def connect(self) -> bool:
         ok = self._transport.connect(self._service_name)
-        if ok and self._notify_handler is not None:
-            self._start_notify_thread()
+        if ok:
+            self._start_rx_thread()
         return ok
 
     def disconnect(self):
         self._stop_event.set()
-        if self._notify_thread is not None:
-            self._notify_thread.join(timeout=2.0)
-            self._notify_thread = None
+        if self._rx_thread is not None:
+            self._rx_thread.join(timeout=2.0)
+            self._rx_thread = None
         self._transport.disconnect()
+        # Wake any callers still waiting.
+        with self._pending_lock:
+            for pc in self._pending.values():
+                with pc.cv:
+                    if pc.result is None:
+                        pc.result = (IPC_ERR_DISCONNECTED, b"")
+                    pc.cv.notify()
+            self._pending.clear()
 
     @property
     def is_connected(self) -> bool:
@@ -84,54 +120,49 @@ class AetherClient:
         if not self._transport.is_connected:
             return (IPC_ERR_DISCONNECTED, b"")
 
-        # Build and send request frame.
-        self._seq = (self._seq + 1) & 0xFFFF_FFFF
-        seq = self._seq
+        # Allocate a sequence number (only one thread mutates _seq at a time
+        # thanks to _tx_lock, but we keep this inside the lock for safety).
+        with self._tx_lock:
+            self._seq = (self._seq + 1) & 0xFFFF_FFFF
+            seq = self._seq
 
-        hdr = FrameHeader(
-            version=PROTOCOL_VERSION,
-            flags=FRAME_REQUEST,
-            service_id=service_id,
-            message_id=message_id,
-            seq=seq,
-            payload_bytes=len(request),
-        )
+            hdr = FrameHeader(
+                version=PROTOCOL_VERSION,
+                flags=FRAME_REQUEST,
+                service_id=service_id,
+                message_id=message_id,
+                seq=seq,
+                payload_bytes=len(request),
+            )
 
-        rc = write_frame(self._transport.tx_ring, hdr, request)
-        if rc != IPC_SUCCESS:
-            return (rc, b"")
+            rc = write_frame(self._transport.tx_ring, hdr, request)
+            if rc != IPC_SUCCESS:
+                return (rc, b"")
 
-        self._transport.send_signal()
+            # Register the pending slot BEFORE sending the signal so the
+            # receiver thread cannot miss the response.
+            pending = _PendingCall()
+            with self._pending_lock:
+                self._pending[seq] = pending
 
-        # Wait for matching response.
+            self._transport.send_signal()
+
+        # Wait for the receiver thread to deliver our response.
         deadline = time.monotonic() + timeout_ms / 1000.0
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return (IPC_ERR_TIMEOUT, b"")
+        with pending.cv:
+            while pending.result is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                pending.cv.wait(timeout=remaining)
 
-            # Check if data is already in the ring.
-            if self._transport.rx_ring.read_available() >= FRAME_HEADER_SIZE:
-                status, resp_hdr, payload = read_frame(self._transport.rx_ring)
-                if status == IPC_SUCCESS:
-                    if resp_hdr.seq == seq and (resp_hdr.flags & FRAME_RESPONSE):
-                        return (resp_hdr.aux, payload)
-                    # Not our response -- could be a notification; dispatch it.
-                    if resp_hdr.flags & FRAME_NOTIFY and self._notify_handler:
-                        self._notify_handler(resp_hdr.service_id,
-                                             resp_hdr.message_id, payload)
-                    continue
+        # Clean up the pending entry.
+        with self._pending_lock:
+            self._pending.pop(seq, None)
 
-            # Poll the socket for a signal with timeout.
-            try:
-                sock = self._transport._sock
-                if sock is None:
-                    return (IPC_ERR_DISCONNECTED, b"")
-                ready = select.select([sock], [], [], min(remaining, 0.1))
-                if ready[0]:
-                    self._transport.recv_signal()
-            except (OSError, ConnectionError):
-                return (IPC_ERR_DISCONNECTED, b"")
+        if pending.result is not None:
+            return pending.result
+        return (IPC_ERR_TIMEOUT, b"")
 
     # ---- Notifications ------------------------------------------------------
 
@@ -143,32 +174,46 @@ class AetherClient:
         """
         self._notify_handler = handler
 
-    def _start_notify_thread(self):
-        self._stop_event.clear()
-        self._notify_thread = threading.Thread(
-            target=self._notify_loop, daemon=True, name="aether-notify")
-        self._notify_thread.start()
+    # ---- Receiver thread (sole consumer of rx_ring) -------------------------
 
-    def _notify_loop(self):
+    def _start_rx_thread(self):
+        self._stop_event.clear()
+        self._rx_thread = threading.Thread(
+            target=self._rx_loop, daemon=True, name="aether-rx")
+        self._rx_thread.start()
+
+    def _rx_loop(self):
+        """Single reader of rx_ring.  Dispatches responses and notifications."""
         while not self._stop_event.is_set():
             try:
                 sock = self._transport._sock
                 if sock is None:
                     break
                 ready = select.select([sock], [], [], 0.1)
-                if not ready[0]:
-                    continue
-                self._transport.recv_signal()
-                # Drain all available notification frames.
+                if ready[0]:
+                    self._transport.recv_signal()
+                # Drain all available frames from rx_ring.
                 while self._transport.rx_ring.read_available() >= FRAME_HEADER_SIZE:
                     status, hdr, payload = read_frame(self._transport.rx_ring)
                     if status != IPC_SUCCESS:
                         break
-                    if hdr.flags & FRAME_NOTIFY and self._notify_handler:
-                        self._notify_handler(hdr.service_id, hdr.message_id,
-                                             payload)
+                    if hdr.flags & FRAME_RESPONSE:
+                        self._dispatch_response(hdr, payload)
+                    elif hdr.flags & FRAME_NOTIFY:
+                        if self._notify_handler:
+                            self._notify_handler(
+                                hdr.service_id, hdr.message_id, payload)
             except (OSError, ConnectionError):
                 break
+
+    def _dispatch_response(self, hdr: FrameHeader, payload: bytes):
+        """Deliver a response frame to the call() waiting on this seq."""
+        with self._pending_lock:
+            pending = self._pending.get(hdr.seq)
+        if pending is not None:
+            with pending.cv:
+                pending.result = (hdr.aux, payload)
+                pending.cv.notify()
 
     # ---- Context manager ----------------------------------------------------
 
