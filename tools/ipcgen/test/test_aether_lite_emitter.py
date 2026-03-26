@@ -510,10 +510,10 @@ service DeviceQuery
         # After memcpy of the string[64] field, a NUL byte must be written
         assert "info.name[64] = '\\0';" in c
 
-    def test_notification_null_pointer_guard(self):
-        """Notification sender must guard struct pointer params against NULL."""
+    def test_notification_no_null_guard_for_struct_by_value(self):
+        """Notification sender must NOT emit if(!param) for struct passed by value."""
         h = _gen_h(STRUCT_IDL)
-        assert "if (!info) return AL_ERR_INVALID_ARGUMENT;" in h
+        assert "if (!info)" not in h
 
     def test_struct_out_marshal_with_preceding_scalar(self):
         """GetReading has [in] uint8 channel before [out] SensorReading."""
@@ -731,3 +731,121 @@ service Dummy
                 pytest.fail(f"Unprefixed enum define found: {stripped}")
             if stripped.startswith("#define LOW") or stripped.startswith("#define HIGH"):
                 pytest.fail(f"Unprefixed enum define found: {stripped}")
+
+
+NESTED_ARRAY_IDL = """\
+struct Inner
+{
+    uint16 x;
+    uint16 y;
+};
+
+struct Outer
+{
+    uint8 tag;
+    Inner[3] items;
+};
+
+service NestedService
+{
+    [method=1]
+    int GetOuter([out] Outer data);
+
+    [method=2]
+    int SetOuter([in] Outer data);
+};
+
+notifications NestedService
+{
+    [notify=1]
+    void OuterChanged([in] Outer data);
+};
+"""
+
+
+class TestNestedArrayLoopVariables:
+    """Nested arrays of structs must use distinct loop variables."""
+
+    def test_marshal_uses_depth_indexed_vars(self):
+        """Outer.items[3] uses _ai0; if Inner had nested arrays they'd use _ai1."""
+        c = _gen_c(NESTED_ARRAY_IDL)
+        # The struct marshal for Outer should use _ai0 for Inner items
+        assert "_ai0" in c
+        # Must not use bare _ai (without digit suffix)
+        import re
+        assert not re.search(r'\bunsigned _ai\b[^0-9]', c), \
+            "Found bare _ai without depth suffix"
+
+    def test_unmarshal_uses_depth_indexed_vars(self):
+        c = _gen_c(NESTED_ARRAY_IDL)
+        assert "_ai0" in c
+
+    def test_notification_marshal_uses_depth_indexed_vars(self):
+        h = _gen_h(NESTED_ARRAY_IDL)
+        assert "_ai0" in h
+        import re
+        assert not re.search(r'\bunsigned _ai\b[^0-9]', h), \
+            "Found bare _ai without depth suffix"
+
+
+STRUCT_NOTIFY_BY_VALUE_IDL = """\
+struct SensorData
+{
+    uint8 sensorId;
+    float32 value;
+};
+
+service SensorNotify
+{
+    [method=1]
+    int GetData([out] SensorData data);
+};
+
+notifications SensorNotify
+{
+    [notify=1]
+    void DataReady([in] SensorData data);
+};
+"""
+
+
+class TestStructNotifyByValue:
+    """Struct notification params passed by value must not get NULL guards."""
+
+    def test_no_null_guard_for_struct_by_value(self):
+        h = _gen_h(STRUCT_NOTIFY_BY_VALUE_IDL)
+        assert "if (!data)" not in h
+
+    def test_struct_notification_marshals_fields(self):
+        h = _gen_h(STRUCT_NOTIFY_BY_VALUE_IDL)
+        assert "memcpy(buf + 0, &data.sensorId, 1);" in h
+        assert "memcpy(buf + 1, &data.value, 4);" in h
+
+
+ARRAY_OF_STRUCT_NOTIFY_IDL = """\
+struct Point
+{
+    float32 x;
+    float32 y;
+};
+
+service Shape
+{
+    [method=1]
+    int GetPoints([out] Point[4] pts);
+};
+
+notifications Shape
+{
+    [notify=1]
+    void PointsUpdated([in] Point[4] pts);
+};
+"""
+
+
+class TestArrayOfStructNotifyNullGuard:
+    """Array-of-struct notification params (pointers) must get NULL guards."""
+
+    def test_null_guard_for_array_of_struct(self):
+        h = _gen_h(ARRAY_OF_STRUCT_NOTIFY_IDL)
+        assert "if (!pts) return AL_ERR_INVALID_ARGUMENT;" in h

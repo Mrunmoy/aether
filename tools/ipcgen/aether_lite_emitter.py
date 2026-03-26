@@ -193,7 +193,8 @@ def _notify_sender_name(service: str, notify_name: str) -> str:
 # ---- Field-by-field struct marshaling helpers --------------------------
 
 def _emit_struct_marshal(w, sd: StructDef, idl: IdlFile, src_var: str,
-                         buf_var: str, offset_expr: str) -> str:
+                         buf_var: str, offset_expr: str,
+                         depth: int = 0) -> str:
     """Emit field-by-field memcpy to marshal a struct into a byte buffer.
     Returns the updated offset expression after all fields."""
     field_offset_int = 0
@@ -222,11 +223,13 @@ def _emit_struct_marshal(w, sd: StructDef, idl: IdlFile, src_var: str,
                 elem_sz = _struct_wire_size_int(nested, idl)
                 if elem_sz is not None:
                     # Array of structs: loop and marshal each element
-                    w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {f.array_size}; ++_ai) {{")
-                    elem_offset = f"{cur_offset} + {elem_sz} * _ai"
+                    _var = f"_ai{depth}"
+                    w(f"    {{ unsigned {_var}; for ({_var} = 0; {_var} < {f.array_size}; ++{_var}) {{")
+                    elem_offset = f"{cur_offset} + {elem_sz} * {_var}"
                     _emit_struct_marshal(w, nested, idl,
-                                         f"{src_var}.{f.name}[_ai]",
-                                         buf_var, elem_offset)
+                                         f"{src_var}.{f.name}[{_var}]",
+                                         buf_var, elem_offset,
+                                         depth=depth + 1)
                     w(f"    }} }}")
                     wire = elem_sz * f.array_size
                     if field_offset_int is not None:
@@ -267,7 +270,7 @@ def _emit_struct_marshal(w, sd: StructDef, idl: IdlFile, src_var: str,
                         # Recursively marshal nested struct
                         new_offset = _emit_struct_marshal(
                             w, nested, idl, f"{src_var}.{f.name}",
-                            buf_var, cur_offset)
+                            buf_var, cur_offset, depth=depth)
                         if new_offset.isdigit():
                             field_offset_int = int(new_offset)
                         else:
@@ -298,7 +301,8 @@ def _emit_struct_marshal(w, sd: StructDef, idl: IdlFile, src_var: str,
 
 
 def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
-                           buf_var: str, offset_expr: str) -> str:
+                           buf_var: str, offset_expr: str,
+                           depth: int = 0) -> str:
     """Emit field-by-field memcpy to unmarshal a struct from a byte buffer.
     Returns the updated offset expression after all fields."""
     field_offset_int = 0
@@ -328,11 +332,13 @@ def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
                 elem_sz = _struct_wire_size_int(nested, idl)
                 if elem_sz is not None:
                     # Array of structs: loop and unmarshal each element
-                    w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {f.array_size}; ++_ai) {{")
-                    elem_offset = f"{cur_offset} + {elem_sz} * _ai"
+                    _var = f"_ai{depth}"
+                    w(f"    {{ unsigned {_var}; for ({_var} = 0; {_var} < {f.array_size}; ++{_var}) {{")
+                    elem_offset = f"{cur_offset} + {elem_sz} * {_var}"
                     _emit_struct_unmarshal(w, nested, idl,
-                                           f"{dst_var}.{f.name}[_ai]",
-                                           buf_var, elem_offset)
+                                           f"{dst_var}.{f.name}[{_var}]",
+                                           buf_var, elem_offset,
+                                           depth=depth + 1)
                     w(f"    }} }}")
                     wire = elem_sz * f.array_size
                     if field_offset_int is not None:
@@ -372,7 +378,7 @@ def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
                     if n is not None:
                         new_offset = _emit_struct_unmarshal(
                             w, nested, idl, f"{dst_var}.{f.name}",
-                            buf_var, cur_offset)
+                            buf_var, cur_offset, depth=depth)
                         if new_offset.isdigit():
                             field_offset_int = int(new_offset)
                         else:
@@ -577,7 +583,7 @@ def _emit_notify_sender(w, service_name, prefix, n, idl):
     for p in n.params:
         if p.type_name == "string":
             continue  # string NULL is handled below with the if-guard
-        if p.array_size is not None or _is_struct_type(idl, p.type_name):
+        if p.array_size is not None:
             w(f"    if (!{p.name}) return AL_ERR_INVALID_ARGUMENT;")
 
     # Calculate total buffer size
@@ -613,9 +619,10 @@ def _emit_notify_sender(w, service_name, prefix, n, idl):
             sd = _find_struct(idl, p.type_name)
             elem_sz = _struct_wire_size_int(sd, idl)
             if elem_sz is not None:
-                w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {p.array_size}; ++_ai) {{")
-                elem_offset = f"{offset_expr} + {elem_sz} * _ai"
-                _emit_struct_marshal(w, sd, idl, f"{p.name}[_ai]", "buf", elem_offset)
+                w(f"    {{ unsigned _ai0; for (_ai0 = 0; _ai0 < {p.array_size}; ++_ai0) {{")
+                elem_offset = f"{offset_expr} + {elem_sz} * _ai0"
+                _emit_struct_marshal(w, sd, idl, f"{p.name}[_ai0]", "buf", elem_offset,
+                                     depth=1)
                 w(f"    }} }}")
             else:
                 w(f"    memcpy(buf + {offset_expr}, {p.name}, {sz_expr});")
@@ -728,9 +735,10 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
             w(f"    {ct} {p.name}[{p.array_size}];")
             w(f"    memset({p.name}, 0, sizeof({p.name}));")
             if elem_sz is not None:
-                w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {p.array_size}; ++_ai) {{")
-                elem_offset = f"{offset_expr} + {elem_sz} * _ai"
-                _emit_struct_unmarshal(w, sd, idl, f"{p.name}[_ai]", "req", elem_offset)
+                w(f"    {{ unsigned _ai0; for (_ai0 = 0; _ai0 < {p.array_size}; ++_ai0) {{")
+                elem_offset = f"{offset_expr} + {elem_sz} * _ai0"
+                _emit_struct_unmarshal(w, sd, idl, f"{p.name}[_ai0]", "req", elem_offset,
+                                       depth=1)
                 w(f"    }} }}")
             else:
                 w(f"    memcpy({p.name}, req + {offset_expr}, {sz_expr});")
@@ -809,9 +817,10 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
                 sd = _find_struct(idl, p.type_name)
                 elem_sz = _struct_wire_size_int(sd, idl)
                 if elem_sz is not None:
-                    w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {p.array_size}; ++_ai) {{")
-                    elem_offset = f"{offset_expr} + {elem_sz} * _ai"
-                    _emit_struct_marshal(w, sd, idl, f"{p.name}[_ai]", "resp", elem_offset)
+                    w(f"    {{ unsigned _ai0; for (_ai0 = 0; _ai0 < {p.array_size}; ++_ai0) {{")
+                    elem_offset = f"{offset_expr} + {elem_sz} * _ai0"
+                    _emit_struct_marshal(w, sd, idl, f"{p.name}[_ai0]", "resp", elem_offset,
+                                         depth=1)
                     w(f"    }} }}")
                 else:
                     w(f"    memcpy(resp + {offset_expr}, {p.name}, {sz_expr});")
