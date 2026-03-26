@@ -6,12 +6,45 @@ project(aether
     DESCRIPTION "IPC framework — UDS signaling, shared memory transport, FD passing"
 )
 
+set(AETHER_SANITIZERS "" CACHE STRING
+    "Comma-separated sanitizers for GCC/Clang builds (e.g. address,undefined or thread)")
+
 # ── Compiler warnings ────────────────────────────────────────────────
 if(MSVC)
     add_compile_options(/W4 /WX)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
+
+if(AETHER_SANITIZERS)
+    if(MSVC)
+        message(FATAL_ERROR "AETHER_SANITIZERS is not supported with MSVC")
+    endif()
+
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        message(FATAL_ERROR
+            "AETHER_SANITIZERS requires GCC or Clang-family compilers, got ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+
+    string(REPLACE "," ";" AETHER_SANITIZER_LIST "${AETHER_SANITIZERS}")
+    set(_valid_sanitizers address undefined thread)
+    foreach(_sanitizer IN LISTS AETHER_SANITIZER_LIST)
+        if(NOT _sanitizer IN_LIST _valid_sanitizers)
+            message(FATAL_ERROR
+                "Unsupported sanitizer '${_sanitizer}'. Valid values: ${_valid_sanitizers}")
+        endif()
+    endforeach()
+
+    list(FIND AETHER_SANITIZER_LIST thread _thread_index)
+    list(LENGTH AETHER_SANITIZER_LIST _sanitizer_count)
+    if(NOT _thread_index EQUAL -1 AND NOT _sanitizer_count EQUAL 1)
+        message(FATAL_ERROR "ThreadSanitizer cannot be combined with other sanitizers")
+    endif()
+
+    string(REPLACE ";" "," AETHER_SANITIZER_FLAGS "${AETHER_SANITIZER_LIST}")
+    add_compile_options(-fsanitize=${AETHER_SANITIZER_FLAGS} -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=${AETHER_SANITIZER_FLAGS})
 endif()
 
 # ── Dependencies ─────────────────────────────────────────────────────

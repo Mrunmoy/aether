@@ -78,12 +78,14 @@ namespace aether::ipc
             std::atomic<bool> dead{false}; // set when client disconnects
         };
 
-        void acceptLoop();
+        void acceptLoop(platform::Handle listenFd);
         void receiverLoop(ClientConn *client);
 
         void onAcceptReady();
-        void onClientReady(ClientConn *client);
-        void removeClient(ClientConn *client);
+        void onClientReady(const std::shared_ptr<ClientConn> &client);
+        void removeClient(const std::shared_ptr<ClientConn> &client);
+        void removeClientLocked(const std::shared_ptr<ClientConn> &client);
+        void closeRunLoopClient(ClientConn *client);
 
         // Returns true if the peer on socketFd passes the UID filter.
         // Always returns true when no filter is set or on non-Linux platforms.

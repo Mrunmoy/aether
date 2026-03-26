@@ -46,7 +46,8 @@ namespace aether::ipc
         }
         else
         {
-            m_acceptThread = std::thread([this] { acceptLoop(); });
+            platform::Handle listenFd = m_listenFd;
+            m_acceptThread = std::thread([this, listenFd] { acceptLoop(listenFd); });
         }
         return true;
     }
@@ -69,22 +70,24 @@ namespace aether::ipc
                 m_listenFd = platform::kInvalidHandle;
             }
 
-            // Snapshot client list and remove sources (under lock).
-            std::vector<ClientConn *> snapshot;
+            // Snapshot client list, then coordinate teardown per client while
+            // holding handlerMutex so RunLoop callbacks cannot race shutdown.
+            std::vector<std::shared_ptr<ClientConn>> snapshot;
             {
                 std::lock_guard<std::mutex> lock(m_clientsMutex);
                 for (auto &c : m_clients)
                 {
-                    m_loop->removeSource(c->conn.socketFd);
-                    snapshot.push_back(c.get());
+                    snapshot.push_back(c);
                 }
             }
 
-            // Wait for in-flight handlers and close (without m_clientsMutex).
-            for (auto *c : snapshot)
+            // Wait for in-flight handlers, then remove sources and close
+            // without holding m_clientsMutex.
+            for (const auto &c : snapshot)
             {
                 std::lock_guard<std::mutex> hlock(c->handlerMutex);
-                c->conn.close();
+                m_loop->removeSource(c->conn.socketFd);
+                closeRunLoopClient(c.get());
             }
 
             // Clear the list.
@@ -167,11 +170,11 @@ namespace aether::ipc
 
     // ── Accept Loop ──────────────────────────────────────────────────
 
-    void ServiceBase::acceptLoop()
+    void ServiceBase::acceptLoop(platform::Handle listenFd)
     {
         while (m_running.load(std::memory_order_acquire))
         {
-            Connection conn = acceptConnection(m_listenFd);
+            Connection conn = acceptConnection(listenFd);
             if (!conn.valid())
             {
                 continue;
@@ -260,16 +263,15 @@ namespace aether::ipc
             auto client = std::make_shared<ClientConn>();
             client->conn = std::move(conn);
 
-            ClientConn *ptr = client.get();
-            m_loop->addSource(ptr->conn.socketFd,
-                              [this, ptr] { onClientReady(ptr); },
-                              [this, ptr] { removeClient(ptr); });
+            m_loop->addSource(client->conn.socketFd,
+                              [this, client] { onClientReady(client); },
+                              [this, client] { removeClient(client); });
 
             m_clients.push_back(std::move(client));
         }
     }
 
-    void ServiceBase::onClientReady(ClientConn *client)
+    void ServiceBase::onClientReady(const std::shared_ptr<ClientConn> &client)
     {
         std::lock_guard<std::mutex> lock(client->handlerMutex);
 
@@ -281,7 +283,7 @@ namespace aether::ipc
         // Drain the signal byte (epoll told us it's readable, won't block).
         if (platform::recvSignal(client->conn.socketFd) != 0)
         {
-            removeClient(client);
+            removeClientLocked(client);
             return;
         }
 
@@ -327,13 +329,19 @@ namespace aether::ipc
 
             if (sendFailed)
             {
-                removeClient(client);
+                removeClientLocked(client);
                 return;
             }
         }
     }
 
-    void ServiceBase::removeClient(ClientConn *client)
+    void ServiceBase::removeClient(const std::shared_ptr<ClientConn> &client)
+    {
+        std::lock_guard<std::mutex> hlock(client->handlerMutex);
+        removeClientLocked(client);
+    }
+
+    void ServiceBase::removeClientLocked(const std::shared_ptr<ClientConn> &client)
     {
         // Guard: might be called from both the read and error callbacks.
         if (client->dead.load(std::memory_order_acquire))
@@ -344,17 +352,18 @@ namespace aether::ipc
 
         // Mark dead and close conn under sendMutex so we can't race with a concurrent
         // sendNotify that has passed the dead-flag check and is about to write to txRing.
-        {
-            std::lock_guard<std::mutex> slock(client->sendMutex);
-            client->dead.store(true, std::memory_order_release);
-            client->conn.close();
-        }
+        closeRunLoopClient(client.get());
 
-        // Do NOT erase from m_clients here: the caller (onClientReady) still holds
-        // a raw pointer to this ClientConn and its lock_guard on handlerMutex.
-        // Destroying the unique_ptr here would make the lock_guard destructor
-        // unlock an already-freed mutex (UB). The entry is reaped on the next
-        // sendNotify call or during stop().
+        // Do NOT erase from m_clients here: other RunLoop callbacks may still
+        // hold a shared_ptr to this ClientConn while handlerMutex is held. The
+        // dead entry is reaped on the next sendNotify call or during stop().
+    }
+
+    void ServiceBase::closeRunLoopClient(ClientConn *client)
+    {
+        std::lock_guard<std::mutex> slock(client->sendMutex);
+        client->dead.store(true, std::memory_order_release);
+        client->conn.close();
     }
 
     // ── Receiver Loop (per client) ───────────────────────────────────

@@ -216,6 +216,7 @@ def emit_server_cpp(idl: IdlFile) -> str:
     w(f"{pad}const std::vector<uint8_t> &request,")
     w(f"{pad}std::vector<uint8_t> *response)")
     w("{")
+    w("    (void)request;")
     w("    switch (messageId)")
     w("    {")
 
@@ -403,7 +404,11 @@ def emit_client_h(idl: IdlFile) -> str:
 
     for n in idl.notifications:
         parts = [_param_decl(p, idl, is_out=False) for p in n.params]
-        w(f"    virtual void on{n.name}({', '.join(parts)}) {{}}")
+        w(f"    virtual void on{n.name}({', '.join(parts)})")
+        w("    {")
+        for p in n.params:
+            w(f"        (void){p.name};")
+        w("    }")
 
     w("")
     w("    void onNotification(uint32_t serviceId, uint32_t messageId,")
