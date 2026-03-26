@@ -16,6 +16,10 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DAETHER_BUILD_BENCHMARKS=ON
 
@@ -25,7 +29,7 @@ jobs:
       - name: Run benchmarks
         run: ./build/bench/aether_benchmarks --benchmark_format=json --benchmark_out=benchmark_result.json
 
-      - name: Store benchmark result
+      - name: Store benchmark result (trend charts)
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: 'googlecpp'
@@ -37,3 +41,20 @@ jobs:
           alert-threshold: '150%'
           comment-on-alert: true
           fail-on-alert: false
+
+      - name: Generate dashboard page
+        run: python3 tools/gen_bench_page.py benchmark_result.json > dashboard.html
+
+      - name: Deploy dashboard to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages
+          git checkout gh-pages
+          cp dashboard.html index.html
+          mkdir -p bench
+          cp benchmark_result.json bench/benchmark_result.json
+          git add index.html bench/benchmark_result.json
+          git diff --cached --quiet || git commit -m "Update benchmark dashboard"
+          git push origin gh-pages
+
