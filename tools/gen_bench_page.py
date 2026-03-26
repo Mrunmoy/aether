@@ -50,7 +50,19 @@ def extract_param(name: str) -> str:
     return ""
 
 
+COMPARISON_TRANSPORTS = {"Aether", "UDS", "Pipe", "TCP"}
+
+
+def is_comparison(name: str) -> bool:
+    """Return True if this is a comparison benchmark (BM_Aether_RoundTrip etc)."""
+    base = name.split("/")[0].replace("BM_", "")
+    parts = base.split("_")
+    return len(parts) >= 2 and parts[0] in COMPARISON_TRANSPORTS and "RoundTrip" in base
+
+
 def categorize(name: str) -> str:
+    if is_comparison(name):
+        return "Comparison"
     if "WriteFrame" in name or "ReadFrame" in name or "Peek" in name or "Pipeline" in name or "RoundTrip" in name:
         return "Ring I/O"
     elif "Call" in name or "Connect" in name or "Parallel" in name:
@@ -64,6 +76,119 @@ def ops_per_sec(time_ns: float) -> float:
     if time_ns <= 0:
         return 0
     return 1e9 / time_ns
+
+
+TRANSPORT_COLORS = {
+    "Aether": "#00ffd1",
+    "UDS": "#66ccff",
+    "Pipe": "#b088f9",
+    "TCP": "#ff5c8a",
+}
+
+TRANSPORT_ORDER = ["Aether", "UDS", "Pipe", "TCP"]
+
+PAYLOAD_LABELS = {"64": "64 B", "1024": "1 KB", "16384": "16 KB"}
+
+
+def build_comparison_section(benchmarks: list) -> str:
+    """Build the HTML for the transport comparison section with bar charts."""
+    comp = [b for b in benchmarks if is_comparison(b["name"])]
+    if not comp:
+        return ""
+
+    # Group: {payload_param: {transport: time_ns}}
+    data: dict[str, dict[str, float]] = {}
+    for b in comp:
+        base = b["name"].split("/")[0].replace("BM_", "")
+        transport = base.split("_")[0]
+        param = extract_param(b["name"])
+        data.setdefault(param, {})[transport] = to_ns(b)
+
+    # Find the global max for scaling bars
+    max_ns = max(ns for by_t in data.values() for ns in by_t.values()) if data else 1
+
+    html = '    <h2>Transport Comparison</h2>\n'
+    html += '    <p class="muted" style="margin-bottom:18px;">Round-trip echo latency — lower is better. '
+    html += 'Aether uses shared-memory ring buffers; others use kernel-mediated I/O.</p>\n'
+
+    for param in sorted(data.keys(), key=int):
+        label = PAYLOAD_LABELS.get(param, f"{param} B")
+        html += f'    <h3 class="chart-label">{label} payload</h3>\n'
+        html += '    <div class="bar-chart">\n'
+        for transport in TRANSPORT_ORDER:
+            ns = data[param].get(transport, 0)
+            pct = (ns / max_ns * 100) if max_ns > 0 else 0
+            color = TRANSPORT_COLORS.get(transport, "#888")
+            time_str = format_time(ns) if ns > 0 else "—"
+            html += f'      <div class="bar-row">\n'
+            html += f'        <span class="bar-label">{transport}</span>\n'
+            html += f'        <div class="bar-track">\n'
+            html += f'          <div class="bar-fill" style="width:{pct:.1f}%;background:{color};"></div>\n'
+            html += f'        </div>\n'
+            html += f'        <span class="bar-value">{time_str}</span>\n'
+            html += f'      </div>\n'
+        html += '    </div>\n'
+
+    # Summary table
+    html += '    <table>\n      <thead>\n'
+    html += '        <tr><th>Transport</th>'
+    for param in sorted(data.keys(), key=int):
+        label = PAYLOAD_LABELS.get(param, f"{param} B")
+        html += f'<th>{label}</th>'
+    html += '</tr>\n      </thead>\n      <tbody>\n'
+    for transport in TRANSPORT_ORDER:
+        html += f'        <tr><td style="color:{TRANSPORT_COLORS.get(transport, "#888")}">{transport}</td>'
+        for param in sorted(data.keys(), key=int):
+            ns = data[param].get(transport, 0)
+            html += f'<td>{format_time(ns)}</td>'
+        html += '</tr>\n'
+    html += '      </tbody>\n    </table>\n'
+
+    return html
+
+
+def build_feature_matrix() -> str:
+    """Build a feature comparison matrix showing Aether's advantages."""
+    features = [
+        ("Typed RPC (request/response)", True, False, False, False),
+        ("IDL code generation", True, False, False, False),
+        ("Async notifications", True, False, False, False),
+        ("Shared-memory transport", True, False, False, False),
+        ("Zero kernel-copy data plane", True, False, False, False),
+        ("Automatic serialization", True, False, False, False),
+        ("Multi-client support", True, False, False, True),
+        ("Cross-platform (Linux/macOS/Win)", True, False, False, True),
+        ("Bidirectional communication", True, True, False, True),
+        ("No framing needed", True, False, False, False),
+        ("Connection management", True, False, False, True),
+        ("Sequence correlation", True, False, False, False),
+        ("Lock-free data plane", True, False, False, False),
+        ("Kernel-mediated transport", False, True, True, True),
+        ("Network-capable", False, False, False, True),
+    ]
+
+    yes = '<span class="feat-yes">✓</span>'
+    no = '<span class="feat-no">✗</span>'
+
+    html = '    <h2>Feature Comparison</h2>\n'
+    html += '    <p class="muted" style="margin-bottom:18px;">Aether provides a complete IPC framework '
+    html += 'with typed APIs, code generation, and shared-memory performance — '
+    html += 'features that raw socket/pipe mechanisms lack.</p>\n'
+    html += '    <table class="feat-table">\n      <thead>\n'
+    html += '        <tr><th>Feature</th>'
+    for t in TRANSPORT_ORDER:
+        color = TRANSPORT_COLORS.get(t, "#888")
+        html += f'<th style="color:{color}">{t}</th>'
+    html += '</tr>\n      </thead>\n      <tbody>\n'
+
+    for feat_name, *vals in features:
+        html += f'        <tr><td>{feat_name}</td>'
+        for v in vals:
+            html += f'<td style="text-align:center">{yes if v else no}</td>'
+        html += '</tr>\n'
+
+    html += '      </tbody>\n    </table>\n'
+    return html
 
 
 def main():
@@ -134,6 +259,9 @@ def main():
     for cat_order in ["Ring I/O", "IPC Round-Trip", "Notifications", "Other"]:
         if cat_order in rows_by_cat:
             tables += table_html(cat_order, rows_by_cat[cat_order])
+
+    comparison_html = build_comparison_section(benchmarks)
+    feature_html = build_feature_matrix()
 
     html = f"""<!doctype html>
 <html>
@@ -283,6 +411,73 @@ def main():
     td {{ color: rgba(230,241,255,0.88); }}
     a {{ color: var(--accent2); text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+
+    h3.chart-label {{
+      margin: 16px 0 6px 0;
+      font-size: 13px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }}
+
+    .bar-chart {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 16px;
+    }}
+
+    .bar-row {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }}
+
+    .bar-label {{
+      width: 60px;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      text-align: right;
+      color: var(--muted);
+      flex-shrink: 0;
+    }}
+
+    .bar-track {{
+      flex: 1;
+      height: 22px;
+      background: rgba(12,18,35,0.55);
+      border: 1px solid rgba(102,204,255,0.08);
+      border-radius: 4px;
+      overflow: hidden;
+    }}
+
+    .bar-fill {{
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.6s ease;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    }}
+
+    .bar-value {{
+      width: 70px;
+      font-size: 12px;
+      color: var(--text);
+      flex-shrink: 0;
+    }}
+
+    .feat-yes {{ color: #00ffd1; font-weight: bold; }}
+    .feat-no {{ color: rgba(230,241,255,0.25); }}
+
+    .feat-table td:first-child {{
+      font-size: 12px;
+      color: var(--muted);
+    }}
+
+    .section-divider {{
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--line), transparent);
+      margin: 30px 0 10px 0;
+    }}
   </style>
 </head>
 <body>
@@ -316,6 +511,12 @@ def main():
     </div>
 
 {tables}
+{comparison_html}
+    <div class="section-divider"></div>
+
+{feature_html}
+    <div class="section-divider"></div>
+
     <h2>Raw Data</h2>
     <div class="muted">
       <a href="dev/bench/index.html">Historical trend charts</a> &bull;

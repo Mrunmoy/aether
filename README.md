@@ -1,5 +1,7 @@
 # aether
 
+![Build](https://github.com/Mrunmoy/aether/actions/workflows/ci.yml/badge.svg?branch=main&event=push) [![Benchmark Dashboard](https://img.shields.io/badge/Benchmark-Live-darkblue?style=flat-square)](https://mrunmoy.github.io/aether/)
+
 A lightweight IPC framework for Linux, macOS, and Windows that lets you define service interfaces
 in a simple IDL and generates type-safe C++ server and client code. Built on
 shared memory for high performance, with zero manual serialization.
