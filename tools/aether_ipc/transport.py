@@ -9,9 +9,15 @@ import ctypes
 import ctypes.util
 import mmap
 import os
+import signal
 import socket
 import struct as _struct
 import sys
+
+# Suppress SIGPIPE globally so that UDS sends to a dead peer raise
+# BrokenPipeError instead of killing the process.  This mirrors the
+# C++ side's use of MSG_NOSIGNAL on every send().
+signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
 from .constants import (
     PROTOCOL_VERSION, SHM_SIZE, IPCRING_SIZE,
@@ -175,7 +181,7 @@ class AetherTransport:
         """Send a single wakeup byte (matches C++ sendSignal)."""
         assert self._sock is not None
         try:
-            self._sock.send(b"\x01", socket.MSG_DONTWAIT)
+            self._sock.send(b"\x01", socket.MSG_NOSIGNAL | socket.MSG_DONTWAIT)
         except BlockingIOError:
             # EAGAIN/EWOULDBLOCK --- peer already has a pending wakeup.
             pass
@@ -197,7 +203,7 @@ class AetherTransport:
         assert self._sock is not None
         fds = array.array("i", [fd])
         ancdata = [(socket.SOL_SOCKET, socket.SCM_RIGHTS, fds)]
-        self._sock.sendmsg([data], ancdata)
+        self._sock.sendmsg([data], ancdata, socket.MSG_NOSIGNAL)
 
     # ---- Context manager ----------------------------------------------------
 

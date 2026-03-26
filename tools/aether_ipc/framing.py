@@ -61,22 +61,33 @@ def write_frame(ring, header: FrameHeader, payload: bytes = b"") -> int:
     allowing the consumer to see a partial frame.
 
     Returns IPC_SUCCESS or IPC_ERR_RING_FULL.
+
+    Note: the caller's *header* object is **not** modified.  A working
+    copy is used to synchronize ``payload_bytes`` with the actual payload
+    length.
     """
     payload_len = len(payload)
     if payload_len > MAX_PAYLOAD:
         return IPC_ERR_RING_FULL
 
-    # Ensure the serialized header always agrees with the actual payload
-    # length, even if the caller passed a stale or mismatched value.
-    header.payload_bytes = payload_len
-
     total = FRAME_HEADER_SIZE + payload_len
     if ring.write_available() < total:
         return IPC_ERR_RING_FULL
 
+    # Work on a shallow copy so the caller's header stays untouched.
+    hdr = FrameHeader(
+        version=header.version,
+        flags=header.flags,
+        service_id=header.service_id,
+        message_id=header.message_id,
+        seq=header.seq,
+        payload_bytes=payload_len,
+        aux=header.aux,
+    )
+
     # Single write: head is only advanced once, after both header and
     # payload are in the data region.
-    frame_bytes = header.pack() + payload if payload_len > 0 else header.pack()
+    frame_bytes = hdr.pack() + payload if payload_len > 0 else hdr.pack()
     if not ring.write(frame_bytes):
         return IPC_ERR_RING_FULL
 
@@ -100,12 +111,18 @@ def read_frame(ring) -> "tuple[int, FrameHeader | None, bytes]":
     """Read a complete frame (header + payload).
 
     Returns (status, header, payload).
+
+    If the peeked header indicates a corrupt frame (payload_bytes exceeds
+    MAX_PAYLOAD), the header bytes are consumed so the reader advances past
+    the bad data instead of spinning on the same corrupt header.
     """
     hdr = peek_frame_header(ring)
     if hdr is None:
         return (IPC_ERR_DISCONNECTED, None, b"")
 
     if hdr.payload_bytes > MAX_PAYLOAD:
+        # Consume the corrupt header so we don't re-read it forever.
+        ring.skip(FRAME_HEADER_SIZE)
         return (IPC_ERR_DISCONNECTED, None, b"")
 
     total = FRAME_HEADER_SIZE + hdr.payload_bytes
