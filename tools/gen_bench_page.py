@@ -87,7 +87,7 @@ TRANSPORT_COLORS = {
 
 TRANSPORT_ORDER = ["Aether", "UDS", "Pipe", "TCP"]
 
-PAYLOAD_LABELS = {"64": "64 B", "1024": "1 KB", "16384": "16 KB"}
+PAYLOAD_LABELS = {"64": "64 B", "1024": "1 KB", "16384": "16 KB", "65536": "64 KB"}
 
 
 def build_comparison_section(benchmarks: list) -> str:
@@ -109,7 +109,10 @@ def build_comparison_section(benchmarks: list) -> str:
 
     html = '    <h2>Transport Comparison</h2>\n'
     html += '    <p class="muted" style="margin-bottom:18px;">Round-trip echo latency — lower is better. '
-    html += 'Aether uses shared-memory ring buffers; others use kernel-mediated I/O.</p>\n'
+    html += 'Raw transports use minimal length-prefixed framing (4-byte header). '
+    html += 'Aether includes full framework overhead: 24-byte frame headers, service dispatch, '
+    html += 'sequence correlation, and UDS wakeup signalling — the cost of a complete IPC framework '
+    html += 'vs bare syscalls.</p>\n'
 
     for param in sorted(data.keys(), key=int):
         label = PAYLOAD_LABELS.get(param, f"{param} B")

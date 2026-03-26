@@ -1,5 +1,11 @@
-// Comparison benchmarks: Aether IPC vs common Linux IPC mechanisms.
+// Comparison benchmarks: Aether IPC vs common IPC mechanisms.
 // Measures request/response round-trip latency with the same payload sizes.
+//
+// The raw transport benchmarks include length-prefixed framing (4-byte
+// header) to approximate what any real protocol would need.  Aether
+// additionally performs service dispatch, sequence correlation, and
+// wakeup signalling, so its overhead reflects the cost of a complete
+// IPC framework -- not just raw byte transfer.
 
 #if !defined(_WIN32)
 
@@ -15,15 +21,101 @@
 #include <thread>
 #include <vector>
 
-#include <sys/socket.h>
-#include <sys/un.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 using namespace aether::ipc;
 
-// ── Aether echo service (reused from bench_roundtrip) ──────────────
+// -- helpers -----------------------------------------------------------------
+
+static inline bool sendAll(int fd, const void *buf, size_t len)
+{
+    auto p = static_cast<const uint8_t *>(buf);
+    while (len > 0)
+    {
+        ssize_t w = send(fd, p, len, 0);
+        if (w <= 0)
+            return false;
+        p += w;
+        len -= static_cast<size_t>(w);
+    }
+    return true;
+}
+
+static inline bool recvAll(int fd, void *buf, size_t len)
+{
+    auto p = static_cast<uint8_t *>(buf);
+    while (len > 0)
+    {
+        ssize_t r = recv(fd, p, len, MSG_WAITALL);
+        if (r <= 0)
+            return false;
+        p += r;
+        len -= static_cast<size_t>(r);
+    }
+    return true;
+}
+
+static inline bool writeAll(int fd, const void *buf, size_t len)
+{
+    auto p = static_cast<const uint8_t *>(buf);
+    while (len > 0)
+    {
+        ssize_t w = write(fd, p, len);
+        if (w <= 0)
+            return false;
+        p += w;
+        len -= static_cast<size_t>(w);
+    }
+    return true;
+}
+
+static inline bool readAll(int fd, void *buf, size_t len)
+{
+    auto p = static_cast<uint8_t *>(buf);
+    while (len > 0)
+    {
+        ssize_t r = read(fd, p, len);
+        if (r <= 0)
+            return false;
+        p += r;
+        len -= static_cast<size_t>(r);
+    }
+    return true;
+}
+
+// Length-prefixed framing: [uint32_t len][payload]
+static inline bool sendFramed(int fd, const uint8_t *data, uint32_t len,
+                              bool useSend = true)
+{
+    uint32_t hdr = len;
+    if (useSend)
+        return sendAll(fd, &hdr, sizeof(hdr)) && sendAll(fd, data, len);
+    return writeAll(fd, &hdr, sizeof(hdr)) && writeAll(fd, data, len);
+}
+
+static inline bool recvFramed(int fd, std::vector<uint8_t> &buf,
+                              bool useSend = true)
+{
+    uint32_t hdr = 0;
+    if (useSend)
+    {
+        if (!recvAll(fd, &hdr, sizeof(hdr)))
+            return false;
+        buf.resize(hdr);
+        return recvAll(fd, buf.data(), hdr);
+    }
+    if (!readAll(fd, &hdr, sizeof(hdr)))
+        return false;
+    buf.resize(hdr);
+    return readAll(fd, buf.data(), hdr);
+}
+
+// -- Aether echo service -----------------------------------------------------
 
 class CompEchoService : public ServiceBase
 {
@@ -46,7 +138,7 @@ static std::string uniqueName()
     return "bench_cmp_" + std::to_string(s_counter.fetch_add(1));
 }
 
-// ── Aether round-trip ──────────────────────────────────────────────
+// -- Aether round-trip -------------------------------------------------------
 
 static void BM_Aether_RoundTrip(benchmark::State &state)
 {
@@ -71,11 +163,11 @@ static void BM_Aether_RoundTrip(benchmark::State &state)
     svc.stop();
 }
 
-// ── Unix Domain Socket (SOCK_STREAM) round-trip ────────────────────
+// -- Unix Domain Socket (SOCK_STREAM) round-trip -----------------------------
 
 static void BM_UDS_RoundTrip(benchmark::State &state)
 {
-    auto payloadSize = static_cast<size_t>(state.range(0));
+    auto payloadSize = static_cast<uint32_t>(state.range(0));
     int sv[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0)
     {
@@ -83,40 +175,25 @@ static void BM_UDS_RoundTrip(benchmark::State &state)
         return;
     }
 
-    // Echo thread: read N bytes, write them back.
     std::atomic<bool> running{true};
     std::thread echoThread([&]() {
-        std::vector<uint8_t> buf(payloadSize > 0 ? payloadSize : 1);
+        std::vector<uint8_t> buf;
         while (running.load(std::memory_order_relaxed))
         {
-            ssize_t n = recv(sv[1], buf.data(), buf.size(), MSG_WAITALL);
-            if (n <= 0) break;
-            ssize_t sent = 0;
-            while (sent < n)
-            {
-                ssize_t w = send(sv[1], buf.data() + sent,
-                                 static_cast<size_t>(n - sent), 0);
-                if (w <= 0) break;
-                sent += w;
-            }
+            if (!recvFramed(sv[1], buf))
+                break;
+            if (!sendFramed(sv[1], buf.data(), static_cast<uint32_t>(buf.size())))
+                break;
         }
     });
 
-    std::vector<uint8_t> request(payloadSize > 0 ? payloadSize : 1, 0xAB);
-    std::vector<uint8_t> response(request.size());
+    std::vector<uint8_t> request(payloadSize, 0xAB);
+    std::vector<uint8_t> response;
 
     for (auto _ : state)
     {
-        send(sv[0], request.data(), request.size(), 0);
-        ssize_t total = 0;
-        while (total < static_cast<ssize_t>(request.size()))
-        {
-            ssize_t r = recv(sv[0], response.data() + total,
-                             response.size() - static_cast<size_t>(total),
-                             MSG_WAITALL);
-            if (r <= 0) break;
-            total += r;
-        }
+        sendFramed(sv[0], request.data(), payloadSize);
+        recvFramed(sv[0], response);
     }
 
     running.store(false, std::memory_order_relaxed);
@@ -126,12 +203,11 @@ static void BM_UDS_RoundTrip(benchmark::State &state)
     close(sv[1]);
 }
 
-// ── Pipe round-trip ────────────────────────────────────────────────
+// -- Pipe round-trip ---------------------------------------------------------
 
 static void BM_Pipe_RoundTrip(benchmark::State &state)
 {
-    auto payloadSize = static_cast<size_t>(state.range(0));
-    // Two pipes: client→server and server→client.
+    auto payloadSize = static_cast<uint32_t>(state.range(0));
     int toServer[2], toClient[2];
     if (pipe(toServer) < 0 || pipe(toClient) < 0)
     {
@@ -141,44 +217,24 @@ static void BM_Pipe_RoundTrip(benchmark::State &state)
 
     std::atomic<bool> running{true};
     std::thread echoThread([&]() {
-        std::vector<uint8_t> buf(payloadSize > 0 ? payloadSize : 1);
+        std::vector<uint8_t> buf;
         while (running.load(std::memory_order_relaxed))
         {
-            ssize_t total = 0;
-            while (total < static_cast<ssize_t>(buf.size()))
-            {
-                ssize_t r = read(toServer[0], buf.data() + total,
-                                 buf.size() - static_cast<size_t>(total));
-                if (r <= 0) goto done;
-                total += r;
-            }
-            ssize_t sent = 0;
-            while (sent < static_cast<ssize_t>(buf.size()))
-            {
-                ssize_t w = write(toClient[1], buf.data() + sent,
-                                  buf.size() - static_cast<size_t>(sent));
-                if (w <= 0) goto done;
-                sent += w;
-            }
+            if (!recvFramed(toServer[0], buf, false))
+                break;
+            if (!sendFramed(toClient[1], buf.data(),
+                            static_cast<uint32_t>(buf.size()), false))
+                break;
         }
-        done:;
     });
 
-    std::vector<uint8_t> request(payloadSize > 0 ? payloadSize : 1, 0xAB);
-    std::vector<uint8_t> response(request.size());
+    std::vector<uint8_t> request(payloadSize, 0xAB);
+    std::vector<uint8_t> response;
 
     for (auto _ : state)
     {
-        ssize_t wr = write(toServer[1], request.data(), request.size());
-        (void)wr;
-        ssize_t total = 0;
-        while (total < static_cast<ssize_t>(request.size()))
-        {
-            ssize_t r = read(toClient[0], response.data() + total,
-                             response.size() - static_cast<size_t>(total));
-            if (r <= 0) break;
-            total += r;
-        }
+        sendFramed(toServer[1], request.data(), payloadSize, false);
+        recvFramed(toClient[0], response, false);
     }
 
     running.store(false, std::memory_order_relaxed);
@@ -189,11 +245,11 @@ static void BM_Pipe_RoundTrip(benchmark::State &state)
     close(toClient[1]);
 }
 
-// ── TCP Loopback round-trip ────────────────────────────────────────
+// -- TCP Loopback round-trip -------------------------------------------------
 
 static void BM_TCP_RoundTrip(benchmark::State &state)
 {
-    auto payloadSize = static_cast<size_t>(state.range(0));
+    auto payloadSize = static_cast<uint32_t>(state.range(0));
 
     int listenFd = socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd < 0)
@@ -208,7 +264,7 @@ static void BM_TCP_RoundTrip(benchmark::State &state)
     struct sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0; // kernel picks a free port
+    addr.sin_port = 0;
 
     if (bind(listenFd, reinterpret_cast<struct sockaddr *>(&addr),
              sizeof(addr)) < 0)
@@ -229,28 +285,15 @@ static void BM_TCP_RoundTrip(benchmark::State &state)
         int flag = 1;
         setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 
-        std::vector<uint8_t> buf(payloadSize > 0 ? payloadSize : 1);
+        std::vector<uint8_t> buf;
         while (running.load(std::memory_order_relaxed))
         {
-            ssize_t total = 0;
-            while (total < static_cast<ssize_t>(buf.size()))
-            {
-                ssize_t r = recv(clientFd, buf.data() + total,
-                                 buf.size() - static_cast<size_t>(total),
-                                 MSG_WAITALL);
-                if (r <= 0) goto done;
-                total += r;
-            }
-            ssize_t sent = 0;
-            while (sent < static_cast<ssize_t>(buf.size()))
-            {
-                ssize_t w = send(clientFd, buf.data() + sent,
-                                 buf.size() - static_cast<size_t>(sent), 0);
-                if (w <= 0) goto done;
-                sent += w;
-            }
+            if (!recvFramed(clientFd, buf))
+                break;
+            if (!sendFramed(clientFd, buf.data(),
+                            static_cast<uint32_t>(buf.size())))
+                break;
         }
-        done:
         close(clientFd);
     });
 
@@ -259,21 +302,13 @@ static void BM_TCP_RoundTrip(benchmark::State &state)
     setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
     connect(clientFd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
 
-    std::vector<uint8_t> request(payloadSize > 0 ? payloadSize : 1, 0xAB);
-    std::vector<uint8_t> response(request.size());
+    std::vector<uint8_t> request(payloadSize, 0xAB);
+    std::vector<uint8_t> response;
 
     for (auto _ : state)
     {
-        send(clientFd, request.data(), request.size(), 0);
-        ssize_t total = 0;
-        while (total < static_cast<ssize_t>(request.size()))
-        {
-            ssize_t r = recv(clientFd, response.data() + total,
-                             response.size() - static_cast<size_t>(total),
-                             MSG_WAITALL);
-            if (r <= 0) break;
-            total += r;
-        }
+        sendFramed(clientFd, request.data(), payloadSize);
+        recvFramed(clientFd, response);
     }
 
     running.store(false, std::memory_order_relaxed);
@@ -283,22 +318,22 @@ static void BM_TCP_RoundTrip(benchmark::State &state)
     close(listenFd);
 }
 
-// ── Registration ───────────────────────────────────────────────────
+// -- Registration ------------------------------------------------------------
 
 BENCHMARK(BM_Aether_RoundTrip)
-    ->Arg(64)->Arg(1024)->Arg(16384)
+    ->Arg(64)->Arg(1024)->Arg(16384)->Arg(65536)
     ->Unit(benchmark::kMicrosecond);
 
 BENCHMARK(BM_UDS_RoundTrip)
-    ->Arg(64)->Arg(1024)->Arg(16384)
+    ->Arg(64)->Arg(1024)->Arg(16384)->Arg(65536)
     ->Unit(benchmark::kMicrosecond);
 
 BENCHMARK(BM_Pipe_RoundTrip)
-    ->Arg(64)->Arg(1024)->Arg(16384)
+    ->Arg(64)->Arg(1024)->Arg(16384)->Arg(65536)
     ->Unit(benchmark::kMicrosecond);
 
 BENCHMARK(BM_TCP_RoundTrip)
-    ->Arg(64)->Arg(1024)->Arg(16384)
+    ->Arg(64)->Arg(1024)->Arg(16384)->Arg(65536)
     ->Unit(benchmark::kMicrosecond);
 
 #endif // !defined(_WIN32)
