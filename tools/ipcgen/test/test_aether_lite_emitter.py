@@ -579,9 +579,9 @@ service DeviceQuery
 
     def test_enum_defines(self):
         h = _gen_h(self.ENUM_STRUCT_IDL)
-        assert "#define DEVICE_SENSOR  0" in h
-        assert "#define DEVICE_ACTUATOR  1" in h
-        assert "#define DEVICE_CONTROLLER  2" in h
+        assert "#define DEVICE_TYPE_DEVICE_SENSOR  0" in h
+        assert "#define DEVICE_TYPE_DEVICE_ACTUATOR  1" in h
+        assert "#define DEVICE_TYPE_DEVICE_CONTROLLER  2" in h
 
     def test_enum_typedef(self):
         h = _gen_h(self.ENUM_STRUCT_IDL)
@@ -614,3 +614,86 @@ class TestCamelToSnake:
         assert "DEVICE_MONITOR_SERVICE_ID" in h
         assert "DEVICE_MONITOR_METHOD_COUNT" in h
         assert "DEVICE_MONITOR_GET_DEVICE_COUNT" in h
+
+
+class TestEnumWireSize:
+    """Enum types are uint32 on the wire; wire-size helpers must handle them."""
+
+    ENUM_FIELD_IDL = """enum DeviceStatus
+{
+    ONLINE = 0,
+    OFFLINE = 1,
+};
+
+struct StatusReport
+{
+    uint8 flags;
+    DeviceStatus status;
+};
+
+service Monitor
+{
+    [method=1]
+    int GetReport([out] StatusReport report);
+};
+"""
+
+    def test_struct_wire_size_includes_enum(self):
+        """StatusReport wire size = 1 (uint8) + 4 (enum/uint32) = 5, not None."""
+        c = _gen_c(self.ENUM_FIELD_IDL)
+        assert "if (resp_cap < 5) return AL_ERR_OVERFLOW;" in c
+
+    def test_resp_len_uses_packed_size(self):
+        """*resp_len must be 5, not sizeof(StatusReport)."""
+        c = _gen_c(self.ENUM_FIELD_IDL)
+        assert "*resp_len = 5;" in c
+
+    def test_no_sizeof_fallback(self):
+        """No sizeof(StatusReport) should appear — all sizes are known."""
+        c = _gen_c(self.ENUM_FIELD_IDL)
+        assert "sizeof(StatusReport)" not in c
+
+    def test_enum_field_marshal_memcpy(self):
+        """Enum field should be marshaled with memcpy like a uint32."""
+        c = _gen_c(self.ENUM_FIELD_IDL)
+        assert "memcpy(resp + 1, &report.status, 4);" in c
+
+
+class TestEnumPrefixedDefines:
+    """Enum #define macros are prefixed with the enum type name."""
+
+    MULTI_ENUM_IDL = """enum DeviceStatus
+{
+    ONLINE = 0,
+    OFFLINE = 1,
+};
+
+enum Priority
+{
+    LOW = 0,
+    HIGH = 1,
+};
+
+service Dummy
+{
+    [method=1]
+    int Noop();
+};
+"""
+
+    def test_defines_are_prefixed(self):
+        h = _gen_h(self.MULTI_ENUM_IDL)
+        assert "#define DEVICE_STATUS_ONLINE  0" in h
+        assert "#define DEVICE_STATUS_OFFLINE  1" in h
+        assert "#define PRIORITY_LOW  0" in h
+        assert "#define PRIORITY_HIGH  1" in h
+
+    def test_unprefixed_defines_absent(self):
+        """Bare names like #define ONLINE must not appear."""
+        h = _gen_h(self.MULTI_ENUM_IDL)
+        for line in h.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#define ONLINE") or stripped.startswith("#define OFFLINE"):
+                pytest.fail(f"Unprefixed enum define found: {stripped}")
+            if stripped.startswith("#define LOW") or stripped.startswith("#define HIGH"):
+                pytest.fail(f"Unprefixed enum define found: {stripped}")

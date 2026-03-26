@@ -53,6 +53,11 @@ def _is_struct_type(idl: IdlFile, type_name: str) -> bool:
     return _find_struct(idl, type_name) is not None
 
 
+def _is_enum_type(idl: IdlFile, type_name: str) -> bool:
+    """Return True if *type_name* refers to an enum defined in the IDL."""
+    return any(e.name == type_name for e in idl.enums)
+
+
 def _struct_wire_size_int(sd: StructDef, idl: IdlFile) -> Optional[int]:
     """Compute the packed wire size of a struct as the sum of its field
     wire sizes.  Returns None if any field has an unknown size."""
@@ -73,6 +78,8 @@ def _struct_wire_size_int(sd: StructDef, idl: IdlFile) -> Optional[int]:
                     if n is None:
                         return None
                     total += n * f.array_size
+                elif _is_enum_type(idl, f.type_name):
+                    total += 4 * f.array_size  # enums are uint32 on the wire
                 else:
                     return None
         else:
@@ -86,6 +93,8 @@ def _struct_wire_size_int(sd: StructDef, idl: IdlFile) -> Optional[int]:
                     if n is None:
                         return None
                     total += n
+                elif _is_enum_type(idl, f.type_name):
+                    total += 4  # enums are uint32 on the wire
                 else:
                     return None
     return total
@@ -106,6 +115,8 @@ def _wire_size_int(p: Param, idl: Optional[IdlFile] = None) -> Optional[int]:
                 n = _struct_wire_size_int(sd, idl)
                 if n is not None:
                     return n * p.array_size
+            if _is_enum_type(idl, p.type_name):
+                return 4 * p.array_size  # enums are uint32 on the wire
         return None  # user-defined element type
     base = _C99_WIRE_SIZE.get(p.type_name)
     if base is not None:
@@ -114,6 +125,8 @@ def _wire_size_int(p: Param, idl: Optional[IdlFile] = None) -> Optional[int]:
         sd = _find_struct(idl, p.type_name)
         if sd is not None:
             return _struct_wire_size_int(sd, idl)
+        if _is_enum_type(idl, p.type_name):
+            return 4  # enums are uint32 on the wire
     return None
 
 
@@ -266,6 +279,13 @@ def _emit_struct_marshal(w, sd: StructDef, idl: IdlFile, src_var: str,
                         w(f"    memcpy({buf_var} + {cur_offset}, &{src_var}.{f.name}, {sz});")
                         offset_expr = f"{cur_offset} + {sz}"
                         field_offset_int = None
+                elif _is_enum_type(idl, f.type_name):
+                    sz = "4"  # enums are uint32 on the wire
+                    w(f"    memcpy({buf_var} + {cur_offset}, &{src_var}.{f.name}, {sz});")
+                    if field_offset_int is not None:
+                        field_offset_int += 4
+                    else:
+                        offset_expr = f"{cur_offset} + {sz}"
                 else:
                     sz = f"sizeof({_c_type(f.type_name)})"
                     w(f"    memcpy({buf_var} + {cur_offset}, &{src_var}.{f.name}, {sz});")
@@ -363,6 +383,13 @@ def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
                         w(f"    memcpy(&{dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
                         offset_expr = f"{cur_offset} + {sz}"
                         field_offset_int = None
+                elif _is_enum_type(idl, f.type_name):
+                    sz = "4"  # enums are uint32 on the wire
+                    w(f"    memcpy(&{dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
+                    if field_offset_int is not None:
+                        field_offset_int += 4
+                    else:
+                        offset_expr = f"{cur_offset} + {sz}"
                 else:
                     sz = f"sizeof({_c_type(f.type_name)})"
                     w(f"    memcpy(&{dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
@@ -402,7 +429,8 @@ def emit_aether_lite_h(idl: IdlFile) -> str:
             w("")
             w(f"/* enum {enum_def.name} */")
             for val in enum_def.values:
-                w(f"#define {val.name}  {val.value}")
+                enum_prefix = _to_upper_snake(enum_def.name)
+                w(f"#define {enum_prefix}_{val.name}  {val.value}")
             w(f"typedef uint32_t {enum_def.name};")
         for struct_def in idl.structs:
             w("")
