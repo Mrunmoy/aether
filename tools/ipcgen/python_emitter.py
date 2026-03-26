@@ -14,6 +14,8 @@ from typing import Optional
 from .parser import IdlFile, EnumDef, StructDef, StructField, Method, Notification, Param
 from .types import fnv1a_32
 
+__all__ = ["emit_python_client"]
+
 
 # Wire format is always little-endian (LE), matching the C++ aether protocol.
 # IDL type → Python struct format character (little-endian).
@@ -66,8 +68,8 @@ def _py_type_hint(type_name: str, array_size: Optional[int]) -> str:
         else:
             base = "int"
     else:
-        # Enum classes are plain int-constant namespaces (not enum.IntEnum),
-        # so we hint them as "int" to match the actual wire values.
+        # Enum/struct types defined in the IDL — hint them by name
+        # so the generated API is self-documenting.
         base = type_name
     if array_size is not None:
         return f"list[{base}]"
