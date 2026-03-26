@@ -30,6 +30,7 @@ jobs:
         with:
           tool: 'googlecpp'
           output-file-path: benchmark_result.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           benchmark-data-dir-path: dev/bench
           auto-push: true
