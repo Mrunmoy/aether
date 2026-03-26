@@ -17,6 +17,7 @@ pkgs.mkShell {
     cmake
     gnumake
     gcc
+    llvmPackages.clang
     python3
     python3Packages.pytest
     pkg-config
@@ -25,6 +26,7 @@ pkgs.mkShell {
 
   buildInputs = with pkgs; [
     qt5.qtbase
+    gbenchmark
   ];
 
   shellHook = ''

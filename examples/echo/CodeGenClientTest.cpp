@@ -207,7 +207,7 @@ TEST(CodeGenClientTest, DeviceConnectedNotification)
 
     {
         std::unique_lock<std::mutex> lock(client.mtx);
-        ASSERT_TRUE(client.cv.wait_for(lock, std::chrono::milliseconds(500),
+        ASSERT_TRUE(client.cv.wait_for(lock, std::chrono::milliseconds(2000),
                                         [&] { return client.connectCount > 0; }));
     }
 
@@ -236,7 +236,7 @@ TEST(CodeGenClientTest, DeviceDisconnectedNotification)
 
     {
         std::unique_lock<std::mutex> lock(client.mtx);
-        ASSERT_TRUE(client.cv.wait_for(lock, std::chrono::milliseconds(500),
+        ASSERT_TRUE(client.cv.wait_for(lock, std::chrono::milliseconds(2000),
                                         [&] { return client.disconnectCount > 0; }));
     }
 

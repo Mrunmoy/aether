@@ -139,6 +139,21 @@ if(AETHER_BUILD_LITE)
     add_subdirectory(aether-lite)
 endif()
 
+# ── Fuzz testing (requires Clang with libFuzzer) ────────────────
+option(AETHER_BUILD_FUZZ "Build libFuzzer harnesses" OFF)
+if(AETHER_BUILD_FUZZ)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "AETHER_BUILD_FUZZ requires Clang (for -fsanitize=fuzzer)")
+    endif()
+    add_subdirectory(test/fuzz)
+endif()
+
+# ── Performance benchmarks (Google Benchmark) ───────────────────
+option(AETHER_BUILD_BENCHMARKS "Build performance micro-benchmarks" OFF)
+if(AETHER_BUILD_BENCHMARKS)
+    add_subdirectory(bench)
+endif()
+
 # ── Tests (only when building standalone) ────────────────────────────
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     enable_testing()
