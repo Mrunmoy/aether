@@ -86,6 +86,12 @@ class AetherClient:
     # ---- Lifecycle ----------------------------------------------------------
 
     def connect(self) -> bool:
+        # Join any leftover receiver thread from a previous connection
+        # to avoid leaking threads (mirrors C++ ClientBase::connect).
+        if self._rx_thread is not None:
+            self._stop_event.set()
+            self._rx_thread.join(timeout=2.0)
+            self._rx_thread = None
         ok = self._transport.connect(self._service_name)
         if ok:
             self._start_rx_thread()
@@ -121,11 +127,27 @@ class AetherClient:
         if not self._transport.is_connected:
             return (IPC_ERR_DISCONNECTED, b"")
 
-        # Allocate a sequence number (only one thread mutates _seq at a time
-        # thanks to _tx_lock, but we keep this inside the lock for safety).
+        # Allocate a sequence number and register the pending slot BEFORE
+        # writing the frame, matching C++ ClientBase::call() ordering.
         with self._tx_lock:
             self._seq = (self._seq + 1) & 0xFFFF_FFFF
+            if self._seq == 0:
+                self._seq = 1
             seq = self._seq
+
+            # Skip sequence numbers that collide with in-flight calls
+            # (mirrors C++ PR #23 wraparound collision fix).
+            with self._pending_lock:
+                while seq in self._pending:
+                    seq = (seq + 1) & 0xFFFF_FFFF
+                    if seq == 0:
+                        seq = 1
+                self._seq = seq
+
+                # Register pending BEFORE writeFrame so the receiver
+                # thread cannot miss the response.
+                pending = _PendingCall()
+                self._pending[seq] = pending
 
             hdr = FrameHeader(
                 version=PROTOCOL_VERSION,
@@ -138,13 +160,10 @@ class AetherClient:
 
             rc = write_frame(self._transport.tx_ring, hdr, request)
             if rc != IPC_SUCCESS:
+                # Write failed -- erase the pending entry.
+                with self._pending_lock:
+                    self._pending.pop(seq, None)
                 return (rc, b"")
-
-            # Register the pending slot BEFORE sending the signal so the
-            # receiver thread cannot miss the response.
-            pending = _PendingCall()
-            with self._pending_lock:
-                self._pending[seq] = pending
 
             self._transport.send_signal()
 
@@ -198,6 +217,10 @@ class AetherClient:
                     status, hdr, payload = read_frame(self._transport.rx_ring)
                     if status != IPC_SUCCESS:
                         break
+                    # Version check -- skip frames with mismatched protocol
+                    # version (matches C++ receiverLoop behaviour).
+                    if hdr.version != PROTOCOL_VERSION:
+                        continue
                     if hdr.flags & FRAME_RESPONSE:
                         self._dispatch_response(hdr, payload)
                     elif hdr.flags & FRAME_NOTIFY:
@@ -206,6 +229,16 @@ class AetherClient:
                                 hdr.service_id, hdr.message_id, payload)
             except (OSError, ConnectionError):
                 break
+
+        # Loop exited (socket error or stop requested) -- fail all pending
+        # calls with IPC_ERR_DISCONNECTED (matches C++ receiverLoop exit).
+        self._transport._connected = False
+        with self._pending_lock:
+            for pc in self._pending.values():
+                with pc.cv:
+                    if pc.result is None:
+                        pc.result = (IPC_ERR_DISCONNECTED, b"")
+                    pc.cv.notify()
 
     def _dispatch_response(self, hdr: FrameHeader, payload: bytes):
         """Deliver a response frame to the call() waiting on this seq."""
