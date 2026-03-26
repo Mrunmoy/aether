@@ -374,6 +374,126 @@ class TestMultipleInParams:
         assert "MultiParam_handleTransfer(srcAddr, dstAddr, length, &status)" in c
 
 
+STRUCT_IDL = """\
+struct DeviceInfo
+{
+    uint32 id;
+    string[64] name;
+};
+
+service DeviceQuery
+{
+    [method=1]
+    int GetInfo([in] uint32 slot, [out] DeviceInfo info);
+};
+
+notifications DeviceQuery
+{
+    [notify=1]
+    void InfoChanged([in] DeviceInfo info);
+};
+"""
+
+STRUCT_MULTI_FIELD_IDL = """\
+struct SensorReading
+{
+    uint8 sensorId;
+    uint32 timestamp;
+    float32 value;
+};
+
+service SensorHub
+{
+    [method=1]
+    int GetReading([in] uint8 channel, [out] SensorReading reading);
+
+    [method=2]
+    int SetReading([in] SensorReading reading);
+};
+"""
+
+
+class TestStructMarshaling:
+    """Struct params use field-by-field memcpy, not sizeof."""
+
+    def test_struct_out_marshal_field_by_field(self):
+        """[out] DeviceInfo must marshal id then name individually."""
+        c = _gen_c(STRUCT_IDL)
+        # Must have field-by-field memcpy, not a single sizeof(DeviceInfo)
+        assert "sizeof(DeviceInfo)" not in c
+        assert "memcpy(resp + 0, &info.id, 4);" in c
+        assert "memcpy(resp + 4, info.name, 65);" in c
+
+    def test_struct_in_unmarshal_field_by_field(self):
+        """[in] SensorReading must unmarshal fields individually."""
+        c = _gen_c(STRUCT_MULTI_FIELD_IDL)
+        assert "sizeof(SensorReading)" not in c
+        # SetReading: [in] SensorReading reading at offset 0
+        assert "memcpy(&reading.sensorId, req + 0, 1);" in c
+        assert "memcpy(&reading.timestamp, req + 1, 4);" in c
+        assert "memcpy(&reading.value, req + 5, 4);" in c
+
+    def test_struct_wire_size_is_sum_of_fields(self):
+        """Wire size for DeviceInfo = 4 (uint32) + 65 (string[64]) = 69."""
+        c = _gen_c(STRUCT_IDL)
+        # resp_cap check should use 69, not sizeof(DeviceInfo)
+        assert "if (resp_cap < 69) return AL_ERR_OVERFLOW;" in c
+
+    def test_struct_wire_size_multi_field(self):
+        """Wire size for SensorReading = 1 + 4 + 4 = 9."""
+        c = _gen_c(STRUCT_MULTI_FIELD_IDL)
+        # GetReading: [out] SensorReading -> resp_cap check
+        assert "if (resp_cap < 9) return AL_ERR_OVERFLOW;" in c
+        # SetReading: [in] SensorReading -> req_len check
+        assert "if (req_len < 9) return AL_ERR_INVALID_ARGUMENT;" in c
+
+    def test_struct_out_resp_len(self):
+        """*resp_len should be set to the packed wire size."""
+        c = _gen_c(STRUCT_IDL)
+        assert "*resp_len = 69;" in c
+
+    def test_struct_zero_init(self):
+        """[out] struct params should be zero-initialized with memset."""
+        c = _gen_c(STRUCT_IDL)
+        assert "DeviceInfo info;" in c
+        assert "memset(&info, 0, sizeof(info));" in c
+
+    def test_struct_in_zero_init(self):
+        """[in] struct params should be zero-initialized with memset."""
+        c = _gen_c(STRUCT_MULTI_FIELD_IDL)
+        assert "SensorReading reading;" in c
+        assert "memset(&reading, 0, sizeof(reading));" in c
+
+    def test_struct_notification_field_by_field(self):
+        """Notification sender for struct param uses field-by-field marshal."""
+        h = _gen_h(STRUCT_IDL)
+        assert "sizeof(DeviceInfo)" not in h
+        assert "memcpy(buf + 0, &info.id, 4);" in h
+        assert "memcpy(buf + 4, info.name, 65);" in h
+
+    def test_struct_notification_buf_size(self):
+        """Notification buffer size should be the packed wire size."""
+        h = _gen_h(STRUCT_IDL)
+        assert "uint8_t buf[69];" in h
+
+    def test_struct_no_cpp_comments(self):
+        """Struct-containing generated code must not use // comments."""
+        h = _gen_h(STRUCT_IDL)
+        c = _gen_c(STRUCT_IDL)
+        for line in h.splitlines():
+            assert not line.lstrip().startswith("//"), f"C++ comment: {line}"
+        for line in c.splitlines():
+            assert not line.lstrip().startswith("//"), f"C++ comment: {line}"
+
+    def test_struct_out_marshal_with_preceding_scalar(self):
+        """GetReading has [in] uint8 channel before [out] SensorReading."""
+        c = _gen_c(STRUCT_MULTI_FIELD_IDL)
+        # The [out] SensorReading marshal starts at offset 0 in resp
+        assert "memcpy(resp + 0, &reading.sensorId, 1);" in c
+        assert "memcpy(resp + 1, &reading.timestamp, 4);" in c
+        assert "memcpy(resp + 5, &reading.value, 4);" in c
+
+
 class TestCamelToSnake:
     """CamelCase to UPPER_SNAKE_CASE conversion."""
 

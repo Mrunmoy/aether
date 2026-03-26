@@ -11,7 +11,7 @@ Each service produces two flat files:
 import re
 from typing import Optional, TextIO
 
-from .parser import IdlFile, Param
+from .parser import IdlFile, Param, StructDef
 from .types import TYPE_MAP, cpp_type, fnv1a_32
 
 
@@ -40,22 +40,86 @@ def _c_type(idl_type: str) -> str:
     return idl_type
 
 
-def _wire_size_int(p: Param) -> Optional[int]:
+def _find_struct(idl: IdlFile, type_name: str) -> Optional[StructDef]:
+    """Look up a struct definition by name in the IDL, or None."""
+    for s in idl.structs:
+        if s.name == type_name:
+            return s
+    return None
+
+
+def _is_struct_type(idl: IdlFile, type_name: str) -> bool:
+    """Return True if *type_name* refers to a struct defined in the IDL."""
+    return _find_struct(idl, type_name) is not None
+
+
+def _struct_wire_size_int(sd: StructDef, idl: IdlFile) -> Optional[int]:
+    """Compute the packed wire size of a struct as the sum of its field
+    wire sizes.  Returns None if any field has an unknown size."""
+    total = 0
+    for f in sd.fields:
+        if f.type_name == "string":
+            if f.array_size is None:
+                return None
+            total += f.array_size + 1
+        elif f.array_size is not None:
+            base = _C99_WIRE_SIZE.get(f.type_name)
+            if base is not None:
+                total += base * f.array_size
+            else:
+                nested = _find_struct(idl, f.type_name)
+                if nested is not None:
+                    n = _struct_wire_size_int(nested, idl)
+                    if n is None:
+                        return None
+                    total += n * f.array_size
+                else:
+                    return None
+        else:
+            base = _C99_WIRE_SIZE.get(f.type_name)
+            if base is not None:
+                total += base
+            else:
+                nested = _find_struct(idl, f.type_name)
+                if nested is not None:
+                    n = _struct_wire_size_int(nested, idl)
+                    if n is None:
+                        return None
+                    total += n
+                else:
+                    return None
+    return total
+
+
+def _wire_size_int(p: Param, idl: Optional[IdlFile] = None) -> Optional[int]:
     """Return the fixed wire size in bytes for *p*, or None if it
-    cannot be expressed as a plain integer (e.g. user-defined struct)."""
+    cannot be expressed as a plain integer (e.g. unknown user type)."""
     if p.type_name == "string":
         return (p.array_size + 1) if p.array_size else None
     if p.array_size is not None:
         base = _C99_WIRE_SIZE.get(p.type_name)
         if base is not None:
             return base * p.array_size
+        if idl is not None:
+            sd = _find_struct(idl, p.type_name)
+            if sd is not None:
+                n = _struct_wire_size_int(sd, idl)
+                if n is not None:
+                    return n * p.array_size
         return None  # user-defined element type
-    return _C99_WIRE_SIZE.get(p.type_name)
+    base = _C99_WIRE_SIZE.get(p.type_name)
+    if base is not None:
+        return base
+    if idl is not None:
+        sd = _find_struct(idl, p.type_name)
+        if sd is not None:
+            return _struct_wire_size_int(sd, idl)
+    return None
 
 
-def _wire_size_expr(p: Param) -> str:
+def _wire_size_expr(p: Param, idl: Optional[IdlFile] = None) -> str:
     """C expression for the wire size of a single param."""
-    n = _wire_size_int(p)
+    n = _wire_size_int(p, idl)
     if n is not None:
         return str(n)
     # Fall back to sizeof for user-defined types.
@@ -65,7 +129,7 @@ def _wire_size_expr(p: Param) -> str:
     return f"sizeof({ct})"
 
 
-def _total_wire_size(params: list) -> tuple:
+def _total_wire_size(params: list, idl: Optional[IdlFile] = None) -> tuple:
     """Return (int_total_or_None, c_expression_str) for a list of params.
 
     When all params have known integer sizes the expression is a single
@@ -76,12 +140,12 @@ def _total_wire_size(params: list) -> tuple:
     sym_parts = []
     all_int = True
     for p in params:
-        n = _wire_size_int(p)
+        n = _wire_size_int(p, idl)
         if n is not None:
             int_accum += n
         else:
             all_int = False
-            sym_parts.append(_wire_size_expr(p))
+            sym_parts.append(_wire_size_expr(p, idl))
     if not params:
         return (0, "0")
     if all_int:
@@ -111,6 +175,169 @@ def _dispatch_name(service: str, method_name: str) -> str:
 
 def _notify_sender_name(service: str, notify_name: str) -> str:
     return f"{service}_notify{notify_name}"
+
+
+# ---- Field-by-field struct marshaling helpers --------------------------
+
+def _emit_struct_marshal(w, sd: StructDef, idl: IdlFile, src_var: str,
+                         buf_var: str, offset_expr: str) -> str:
+    """Emit field-by-field memcpy to marshal a struct into a byte buffer.
+    Returns the updated offset expression after all fields."""
+    field_offset_int = 0
+    if offset_expr.isdigit():
+        field_offset_int = int(offset_expr)
+    else:
+        field_offset_int = None
+
+    for f in sd.fields:
+        if field_offset_int is not None:
+            cur_offset = str(field_offset_int)
+        else:
+            cur_offset = offset_expr
+
+        if f.type_name == "string":
+            wire = f.array_size + 1
+            w(f"    memcpy({buf_var} + {cur_offset}, {src_var}.{f.name}, {wire});")
+            if field_offset_int is not None:
+                field_offset_int += wire
+            else:
+                offset_expr = f"{cur_offset} + {wire}"
+        elif f.array_size is not None:
+            base = _C99_WIRE_SIZE.get(f.type_name)
+            if base is not None:
+                wire = base * f.array_size
+            else:
+                nested = _find_struct(idl, f.type_name)
+                if nested is not None:
+                    n = _struct_wire_size_int(nested, idl)
+                    wire = n * f.array_size if n is not None else None
+                else:
+                    wire = None
+            sz = str(wire) if wire is not None else f"{f.array_size} * sizeof({_c_type(f.type_name)})"
+            w(f"    memcpy({buf_var} + {cur_offset}, {src_var}.{f.name}, {sz});")
+            if wire is not None and field_offset_int is not None:
+                field_offset_int += wire
+            else:
+                offset_expr = f"{cur_offset} + {sz}"
+                field_offset_int = None
+        else:
+            base = _C99_WIRE_SIZE.get(f.type_name)
+            if base is not None:
+                sz = str(base)
+                w(f"    memcpy({buf_var} + {cur_offset}, &{src_var}.{f.name}, {sz});")
+                if field_offset_int is not None:
+                    field_offset_int += base
+                else:
+                    offset_expr = f"{cur_offset} + {sz}"
+            else:
+                nested = _find_struct(idl, f.type_name)
+                if nested is not None:
+                    n = _struct_wire_size_int(nested, idl)
+                    if n is not None:
+                        # Recursively marshal nested struct
+                        new_offset = _emit_struct_marshal(
+                            w, nested, idl, f"{src_var}.{f.name}",
+                            buf_var, cur_offset)
+                        if new_offset.isdigit():
+                            field_offset_int = int(new_offset)
+                        else:
+                            offset_expr = new_offset
+                            field_offset_int = None
+                        continue
+                    else:
+                        sz = f"sizeof({_c_type(f.type_name)})"
+                        w(f"    memcpy({buf_var} + {cur_offset}, &{src_var}.{f.name}, {sz});")
+                        offset_expr = f"{cur_offset} + {sz}"
+                        field_offset_int = None
+                else:
+                    sz = f"sizeof({_c_type(f.type_name)})"
+                    w(f"    memcpy({buf_var} + {cur_offset}, &{src_var}.{f.name}, {sz});")
+                    offset_expr = f"{cur_offset} + {sz}"
+                    field_offset_int = None
+
+    if field_offset_int is not None:
+        return str(field_offset_int)
+    return offset_expr
+
+
+def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
+                           buf_var: str, offset_expr: str) -> str:
+    """Emit field-by-field memcpy to unmarshal a struct from a byte buffer.
+    Returns the updated offset expression after all fields."""
+    field_offset_int = 0
+    if offset_expr.isdigit():
+        field_offset_int = int(offset_expr)
+    else:
+        field_offset_int = None
+
+    for f in sd.fields:
+        if field_offset_int is not None:
+            cur_offset = str(field_offset_int)
+        else:
+            cur_offset = offset_expr
+
+        if f.type_name == "string":
+            wire = f.array_size + 1
+            w(f"    memcpy({dst_var}.{f.name}, {buf_var} + {cur_offset}, {wire});")
+            if field_offset_int is not None:
+                field_offset_int += wire
+            else:
+                offset_expr = f"{cur_offset} + {wire}"
+        elif f.array_size is not None:
+            base = _C99_WIRE_SIZE.get(f.type_name)
+            if base is not None:
+                wire = base * f.array_size
+            else:
+                nested = _find_struct(idl, f.type_name)
+                if nested is not None:
+                    n = _struct_wire_size_int(nested, idl)
+                    wire = n * f.array_size if n is not None else None
+                else:
+                    wire = None
+            sz = str(wire) if wire is not None else f"{f.array_size} * sizeof({_c_type(f.type_name)})"
+            w(f"    memcpy({dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
+            if wire is not None and field_offset_int is not None:
+                field_offset_int += wire
+            else:
+                offset_expr = f"{cur_offset} + {sz}"
+                field_offset_int = None
+        else:
+            base = _C99_WIRE_SIZE.get(f.type_name)
+            if base is not None:
+                sz = str(base)
+                w(f"    memcpy(&{dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
+                if field_offset_int is not None:
+                    field_offset_int += base
+                else:
+                    offset_expr = f"{cur_offset} + {sz}"
+            else:
+                nested = _find_struct(idl, f.type_name)
+                if nested is not None:
+                    n = _struct_wire_size_int(nested, idl)
+                    if n is not None:
+                        new_offset = _emit_struct_unmarshal(
+                            w, nested, idl, f"{dst_var}.{f.name}",
+                            buf_var, cur_offset)
+                        if new_offset.isdigit():
+                            field_offset_int = int(new_offset)
+                        else:
+                            offset_expr = new_offset
+                            field_offset_int = None
+                        continue
+                    else:
+                        sz = f"sizeof({_c_type(f.type_name)})"
+                        w(f"    memcpy(&{dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
+                        offset_expr = f"{cur_offset} + {sz}"
+                        field_offset_int = None
+                else:
+                    sz = f"sizeof({_c_type(f.type_name)})"
+                    w(f"    memcpy(&{dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
+                    offset_expr = f"{cur_offset} + {sz}"
+                    field_offset_int = None
+
+    if field_offset_int is not None:
+        return str(field_offset_int)
+    return offset_expr
 
 
 # ---- Header (.h) emitter ----------------------------------------------
@@ -189,7 +416,7 @@ def emit_aether_lite_h(idl: IdlFile, out: TextIO) -> None:
     if idl.notifications:
         w("/* ---- Notification senders ------------------------------------- */")
         for n in idl.notifications:
-            _emit_notify_sender(w, name, prefix, n)
+            _emit_notify_sender(w, name, prefix, n, idl)
         w("")
 
     w(f"#endif /* {guard} */")
@@ -222,7 +449,7 @@ def _handler_param_list(in_params, out_params) -> list:
     return parts
 
 
-def _emit_notify_sender(w, service_name, prefix, n):
+def _emit_notify_sender(w, service_name, prefix, n, idl):
     """Emit a static inline notification sender into the header."""
     sender = _notify_sender_name(service_name, n.name)
     macro = f"{prefix}_{_to_upper_snake(n.name)}"
@@ -248,14 +475,14 @@ def _emit_notify_sender(w, service_name, prefix, n):
         return
 
     # Calculate total buffer size
-    _, size_expr = _total_wire_size(n.params)
+    _, size_expr = _total_wire_size(n.params, idl)
     w(f"    uint8_t buf[{size_expr}];")
 
     offset_int = 0
     offset_expr = "0"
     for i, p in enumerate(n.params):
-        sz_int = _wire_size_int(p)
-        sz_expr = _wire_size_expr(p)
+        sz_int = _wire_size_int(p, idl)
+        sz_expr = _wire_size_expr(p, idl)
         ct = _c_type(p.type_name)
 
         if p.type_name == "string":
@@ -264,6 +491,17 @@ def _emit_notify_sender(w, service_name, prefix, n):
             w(f"    memset(buf + {offset_expr}, 0, {buf_size});")
             # Use a length-limited copy. strncpy is available in <string.h>.
             w(f"    if ({p.name}) {{ unsigned _i; for (_i = 0; _i < {p.array_size} && {p.name}[_i]; ++_i) buf[{offset_expr} + _i] = (uint8_t){p.name}[_i]; }}")
+        elif _is_struct_type(idl, p.type_name) and p.array_size is None:
+            # Field-by-field marshal for struct params
+            sd = _find_struct(idl, p.type_name)
+            new_offset = _emit_struct_marshal(w, sd, idl, p.name, "buf", offset_expr)
+            if new_offset.isdigit():
+                offset_int = int(new_offset)
+                offset_expr = new_offset
+            else:
+                offset_int = None
+                offset_expr = new_offset
+            continue
         elif p.array_size is not None:
             w(f"    memcpy(buf + {offset_expr}, {p.name}, {sz_expr});")
         else:
@@ -305,14 +543,14 @@ def emit_aether_lite_c(idl: IdlFile, out: TextIO) -> None:
     for m in idl.methods:
         in_params = [p for p in m.params if p.direction == "in"]
         out_params = [p for p in m.params if p.direction == "out"]
-        _emit_dispatch_wrapper(w, name, prefix, m, in_params, out_params)
+        _emit_dispatch_wrapper(w, name, prefix, m, in_params, out_params, idl)
 
     w("")
 
     out.write("\n".join(lines))
 
 
-def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_params):
+def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_params, idl):
     dn = _dispatch_name(service_name, method.name)
     hn = _handler_name(service_name, method.name)
 
@@ -330,12 +568,12 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
 
     # Validate request size for [in] params
     if in_params:
-        _, req_size_expr = _total_wire_size(in_params)
+        _, req_size_expr = _total_wire_size(in_params, idl)
         w(f"    if (req_len < {req_size_expr}) return AL_ERR_INVALID_ARGUMENT;")
 
     # Validate response capacity for [out] params
     if out_params:
-        _, resp_size_expr = _total_wire_size(out_params)
+        _, resp_size_expr = _total_wire_size(out_params, idl)
         w(f"    if (resp_cap < {resp_size_expr}) return AL_ERR_OVERFLOW;")
 
     w("")
@@ -345,14 +583,27 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
     offset_expr = "0"
     for p in in_params:
         ct = _c_type(p.type_name)
-        sz_int = _wire_size_int(p)
-        sz_expr = _wire_size_expr(p)
+        sz_int = _wire_size_int(p, idl)
+        sz_expr = _wire_size_expr(p, idl)
 
         if p.type_name == "string":
             buf_size = p.array_size + 1
             w(f"    char {p.name}[{buf_size}];")
             w(f"    memcpy({p.name}, req + {offset_expr}, {p.array_size});")
             w(f"    {p.name}[{p.array_size}] = '\\0';")
+        elif _is_struct_type(idl, p.type_name) and p.array_size is None:
+            # Field-by-field unmarshal for struct params
+            sd = _find_struct(idl, p.type_name)
+            w(f"    {ct} {p.name};")
+            w(f"    memset(&{p.name}, 0, sizeof({p.name}));")
+            new_offset = _emit_struct_unmarshal(w, sd, idl, p.name, "req", offset_expr)
+            if new_offset.isdigit():
+                offset_int = int(new_offset)
+                offset_expr = new_offset
+            else:
+                offset_int = None
+                offset_expr = new_offset
+            continue
         elif p.array_size is not None:
             w(f"    {ct} {p.name}[{p.array_size}];")
             w(f"    memcpy({p.name}, req + {offset_expr}, {sz_expr});")
@@ -374,6 +625,9 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
             buf_size = p.array_size + 1
             w(f"    char {p.name}[{buf_size}];")
             w(f"    memset({p.name}, 0, {buf_size});")
+        elif _is_struct_type(idl, p.type_name) and p.array_size is None:
+            w(f"    {ct} {p.name};")
+            w(f"    memset(&{p.name}, 0, sizeof({p.name}));")
         elif p.array_size is not None:
             w(f"    {ct} {p.name}[{p.array_size}];")
             w(f"    memset({p.name}, 0, sizeof({p.name}));")
@@ -385,6 +639,8 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
     for p in in_params:
         if p.type_name == "string" or p.array_size is not None:
             call_args.append(p.name)  # decays to pointer
+        elif _is_struct_type(idl, p.type_name):
+            call_args.append(p.name)  # pass struct by value
         else:
             call_args.append(p.name)
     for p in out_params:
@@ -403,8 +659,20 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
         offset_expr = "0"
         for p in out_params:
             ct = _c_type(p.type_name)
-            sz_int = _wire_size_int(p)
-            sz_expr = _wire_size_expr(p)
+            sz_int = _wire_size_int(p, idl)
+            sz_expr = _wire_size_expr(p, idl)
+
+            if _is_struct_type(idl, p.type_name) and p.array_size is None:
+                # Field-by-field marshal for struct params
+                sd = _find_struct(idl, p.type_name)
+                new_offset = _emit_struct_marshal(w, sd, idl, p.name, "resp", offset_expr)
+                if new_offset.isdigit():
+                    offset_int = int(new_offset)
+                    offset_expr = new_offset
+                else:
+                    offset_int = None
+                    offset_expr = new_offset
+                continue
 
             if p.type_name == "string" or p.array_size is not None:
                 src = p.name
@@ -420,7 +688,7 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
                 offset_expr = f"{offset_expr} + {sz_expr}"
                 offset_int = None
 
-        _, total_expr = _total_wire_size(out_params)
+        _, total_expr = _total_wire_size(out_params, idl)
         w(f"    *resp_len = {total_expr};")
     else:
         w("    *resp_len = 0;")
