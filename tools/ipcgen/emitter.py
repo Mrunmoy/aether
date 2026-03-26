@@ -217,6 +217,7 @@ def emit_server_cpp(idl: IdlFile) -> str:
     w(f"{pad}std::vector<uint8_t> *response)")
     w("{")
     w("    (void)request;")
+    w("    (void)response;")
     w("    switch (messageId)")
     w("    {")
 

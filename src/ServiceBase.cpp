@@ -86,7 +86,10 @@ namespace aether::ipc
             for (const auto &c : snapshot)
             {
                 std::lock_guard<std::mutex> hlock(c->handlerMutex);
-                m_loop->removeSource(c->conn.socketFd);
+                if (!c->dead && platform::isValidHandle(c->conn.socketFd))
+                {
+                    m_loop->removeSource(c->conn.socketFd);
+                }
                 closeRunLoopClient(c.get());
             }
 

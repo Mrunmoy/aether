@@ -543,6 +543,28 @@ TEST(ServiceBaseTest, RunLoop_StopCleansUp)
     client.close();
 }
 
+TEST(ServiceBaseTest, RunLoop_StopAfterClientMarkedDead)
+{
+    ms::RunLoop loop;
+    loop.init("SvcRLStopDead");
+
+    EchoService svc(SVC_NAME, &loop);
+    ASSERT_TRUE(svc.start());
+
+    RunLoopGuard guard(loop);
+    settle();
+
+    Connection client = connectToServer(SVC_NAME);
+    ASSERT_TRUE(client.valid());
+    settle();
+
+    client.close();
+    settle();
+
+    svc.stop();
+    EXPECT_FALSE(svc.isRunning());
+}
+
 #else
 
 TEST(ServiceBaseTest, RunLoopModeNotSupportedOnWindows)
