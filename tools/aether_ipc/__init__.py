@@ -102,6 +102,11 @@ class AetherClient:
     # ---- Lifecycle ----------------------------------------------------------
 
     def connect(self) -> bool:
+        # Already connected -- no-op, matches C++ ClientBase::connect()
+        # which checks m_running before proceeding.
+        if self._transport.is_connected:
+            return False
+
         # Join any leftover receiver thread from a previous connection
         # to avoid leaking threads (mirrors C++ ClientBase::connect).
         if self._rx_thread is not None:
@@ -181,7 +186,13 @@ class AetherClient:
                     self._pending.pop(seq, None)
                 return (rc, b"")
 
-            self._transport.send_signal()
+            try:
+                self._transport.send_signal()
+            except (OSError, BrokenPipeError):
+                # Transport died between write and signal -- erase pending.
+                with self._pending_lock:
+                    self._pending.pop(seq, None)
+                return (IPC_ERR_DISCONNECTED, b"")
 
         # Wait for the receiver thread to deliver our response.
         deadline = time.monotonic() + timeout_ms / 1000.0

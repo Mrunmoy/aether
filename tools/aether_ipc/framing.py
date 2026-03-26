@@ -66,6 +66,10 @@ def write_frame(ring, header: FrameHeader, payload: bytes = b"") -> int:
     if payload_len > MAX_PAYLOAD:
         return IPC_ERR_RING_FULL
 
+    # Ensure the serialized header always agrees with the actual payload
+    # length, even if the caller passed a stale or mismatched value.
+    header.payload_bytes = payload_len
+
     total = FRAME_HEADER_SIZE + payload_len
     if ring.write_available() < total:
         return IPC_ERR_RING_FULL
