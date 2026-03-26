@@ -26,5 +26,6 @@ add_executable(aether_benchmarks
     bench_frameio.cpp
     bench_roundtrip.cpp
     bench_notify.cpp
+    bench_comparison.cpp
 )
 target_link_libraries(aether_benchmarks PRIVATE aether benchmark::benchmark_main Threads::Threads)
