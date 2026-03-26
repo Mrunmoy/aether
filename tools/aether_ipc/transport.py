@@ -112,9 +112,8 @@ class AetherTransport:
         self._shm = mmap.mmap(self._shm_fd, SHM_SIZE,
                               mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
 
-        # 5. Zero-init both ring control blocks (placement-new equivalent).
-        # The mmap of a fresh memfd is already zero-filled, but be explicit.
-        self._shm[0:SHM_SIZE] = b"\x00" * SHM_SIZE
+        # 5. memfd pages are already zero-filled by the kernel; no explicit
+        #    zeroing needed.
 
         # 6. Send handshake: protocol version + shm fd via SCM_RIGHTS.
         hs_data = _struct.pack(SHM_HANDSHAKE_FORMAT,
@@ -153,6 +152,10 @@ class AetherTransport:
     @property
     def is_connected(self) -> bool:
         return self._connected
+
+    def mark_disconnected(self):
+        """Mark this transport as disconnected (called by the receiver thread)."""
+        self._connected = False
 
     # ---- Ring access --------------------------------------------------------
 

@@ -20,7 +20,23 @@ from .constants import (
 from .framing import FrameHeader, write_frame, read_frame
 from .transport import AetherTransport
 
-__all__ = ["AetherClient"]
+__all__ = [
+    "AetherClient",
+    "IPC_SUCCESS",
+    "IPC_ERR_DISCONNECTED",
+    "IPC_ERR_TIMEOUT",
+    "IPC_ERR_INVALID_SERVICE",
+    "IPC_ERR_INVALID_METHOD",
+    "IPC_ERR_VERSION_MISMATCH",
+    "IPC_ERR_RING_FULL",
+    "IPC_ERR_STOPPED",
+    "IPC_ERR_INVALID_ARGUMENT",
+    "IPC_ERR_TRANSPORT",
+    "IPC_ERR_CRC",
+    "IPC_ERR_NOT_SUPPORTED",
+    "IPC_ERR_NO_SPACE",
+    "IPC_ERR_OVERFLOW",
+]
 
 # Re-export commonly used constants.
 from .constants import (  # noqa: F401, E402
@@ -232,7 +248,7 @@ class AetherClient:
 
         # Loop exited (socket error or stop requested) -- fail all pending
         # calls with IPC_ERR_DISCONNECTED (matches C++ receiverLoop exit).
-        self._transport._connected = False
+        self._transport.mark_disconnected()
         with self._pending_lock:
             for pc in self._pending.values():
                 with pc.cv:
