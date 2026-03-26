@@ -8,6 +8,7 @@ The generated code depends on the ``aether_ipc`` runtime package (AetherClient)
 which handles the actual transport.  This emitter only produces the code-gen layer.
 """
 
+import keyword
 import re
 from typing import Optional
 
@@ -17,8 +18,9 @@ from .types import fnv1a_32
 __all__ = ["emit_python_client"]
 
 
-# Wire format is always little-endian (LE), matching the C++ aether protocol.
-# IDL type → Python struct format character (little-endian).
+# Shared-memory frames use native byte order (both sides are same machine).
+# The struct formats below assume little-endian, which is correct for x86-64.
+# Big-endian hosts would need format adjustment.
 PY_STRUCT_FMT = {
     "uint8":   "B",
     "uint16":  "H",
@@ -54,6 +56,13 @@ def _snake_case(name: str) -> str:
     s = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
     s = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s)
     return s.lower()
+
+
+def _safe_name(name: str) -> str:
+    """Append an underscore if *name* is a Python keyword (e.g. 'class' -> 'class_')."""
+    if keyword.iskeyword(name):
+        return name + "_"
+    return name
 
 
 def _py_type_hint(type_name: str, array_size: Optional[int]) -> str:
@@ -187,7 +196,7 @@ def _emit_field_pack(w, field_name: str, field: StructField, idl: IdlFile,
 def _emit_field_unpack(w, field: StructField, idl: IdlFile,
                        var_prefix: str = "", indent: str = "        "):
     """Emit unpack code for a single struct field. Reads from `data` at `offset`."""
-    fname = field.name
+    fname = _safe_name(field.name)
     if field.type_name == "string":
         total = field.array_size + 1
         w(f"{indent}{var_prefix}{fname} = data[offset:offset+{total}].split(b\"\\x00\", 1)[0].decode(\"utf-8\")")
@@ -237,81 +246,83 @@ def _emit_field_unpack(w, field: StructField, idl: IdlFile,
 
 def _emit_param_pack(w, p: Param, idl: IdlFile, indent: str = "    "):
     """Emit code to pack a parameter value into `req` bytes."""
+    pn = _safe_name(p.name)
     if p.type_name == "string":
-        w(f"{indent}{p.name}_bytes = {p.name}.encode(\"utf-8\")[:{p.array_size}]")
+        w(f"{indent}{pn}_bytes = {pn}.encode(\"utf-8\")[:{p.array_size}]")
         total = p.array_size + 1
-        w(f"{indent}req += {p.name}_bytes + b\"\\x00\" * ({total} - len({p.name}_bytes))")
+        w(f"{indent}req += {pn}_bytes + b\"\\x00\" * ({total} - len({pn}_bytes))")
     elif p.type_name in PY_STRUCT_FMT:
         fmt = PY_STRUCT_FMT[p.type_name]
         if p.array_size is not None:
-            w(f"{indent}if len({p.name}) != {p.array_size}:")
-            w(f"{indent}    raise ValueError(\"{p.name} must have length {p.array_size}\")")
-            w(f"{indent}for _item in {p.name}:")
+            w(f"{indent}if len({pn}) != {p.array_size}:")
+            w(f"{indent}    raise ValueError(\"{pn} must have length {p.array_size}\")")
+            w(f"{indent}for _item in {pn}:")
             w(f"{indent}    req += struct.pack(\"<{fmt}\", _item)")
         else:
-            w(f"{indent}req += struct.pack(\"<{fmt}\", {p.name})")
+            w(f"{indent}req += struct.pack(\"<{fmt}\", {pn})")
     elif _is_enum(p.type_name, idl):
         if p.array_size is not None:
-            w(f"{indent}if len({p.name}) != {p.array_size}:")
-            w(f"{indent}    raise ValueError(\"{p.name} must have length {p.array_size}\")")
-            w(f"{indent}for _item in {p.name}:")
+            w(f"{indent}if len({pn}) != {p.array_size}:")
+            w(f"{indent}    raise ValueError(\"{pn} must have length {p.array_size}\")")
+            w(f"{indent}for _item in {pn}:")
             w(f"{indent}    req += struct.pack(\"<I\", _item)")
         else:
-            w(f"{indent}req += struct.pack(\"<I\", {p.name})")
+            w(f"{indent}req += struct.pack(\"<I\", {pn})")
     elif _is_struct(p.type_name, idl):
         if p.array_size is not None:
-            w(f"{indent}if len({p.name}) != {p.array_size}:")
-            w(f"{indent}    raise ValueError(\"{p.name} must have length {p.array_size}\")")
-            w(f"{indent}for _item in {p.name}:")
+            w(f"{indent}if len({pn}) != {p.array_size}:")
+            w(f"{indent}    raise ValueError(\"{pn} must have length {p.array_size}\")")
+            w(f"{indent}for _item in {pn}:")
             w(f"{indent}    req += _item.pack()")
         else:
-            w(f"{indent}req += {p.name}.pack()")
+            w(f"{indent}req += {pn}.pack()")
 
 
 def _emit_param_unpack(w, p: Param, idl: IdlFile, data_var: str = "resp",
                        indent: str = "        "):
     """Emit code to unpack a parameter from `data_var` at `offset`."""
+    pn = _safe_name(p.name)
     if p.type_name == "string":
         total = p.array_size + 1
-        w(f"{indent}{p.name} = {data_var}[offset:offset+{total}].split(b\"\\x00\", 1)[0].decode(\"utf-8\")")
+        w(f"{indent}{pn} = {data_var}[offset:offset+{total}].split(b\"\\x00\", 1)[0].decode(\"utf-8\")")
         w(f"{indent}offset += {total}")
     elif p.type_name in PY_STRUCT_FMT:
         fmt = PY_STRUCT_FMT[p.type_name]
         sz = PY_TYPE_SIZE[p.type_name]
         is_bool = p.type_name == "bool"
         if p.array_size is not None:
-            w(f"{indent}{p.name} = []")
+            w(f"{indent}{pn} = []")
             w(f"{indent}for _ in range({p.array_size}):")
             if is_bool:
-                w(f"{indent}    {p.name}.append(bool(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0]))")
+                w(f"{indent}    {pn}.append(bool(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0]))")
             else:
-                w(f"{indent}    {p.name}.append(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0])")
+                w(f"{indent}    {pn}.append(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0])")
             w(f"{indent}    offset += {sz}")
         else:
             if is_bool:
-                w(f"{indent}{p.name} = bool(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0])")
+                w(f"{indent}{pn} = bool(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0])")
             else:
-                w(f"{indent}{p.name} = struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0]")
+                w(f"{indent}{pn} = struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0]")
             w(f"{indent}offset += {sz}")
     elif _is_enum(p.type_name, idl):
         if p.array_size is not None:
-            w(f"{indent}{p.name} = []")
+            w(f"{indent}{pn} = []")
             w(f"{indent}for _ in range({p.array_size}):")
-            w(f"{indent}    {p.name}.append(struct.unpack_from(\"<I\", {data_var}, offset)[0])")
+            w(f"{indent}    {pn}.append(struct.unpack_from(\"<I\", {data_var}, offset)[0])")
             w(f"{indent}    offset += 4")
         else:
-            w(f"{indent}{p.name} = struct.unpack_from(\"<I\", {data_var}, offset)[0]")
+            w(f"{indent}{pn} = struct.unpack_from(\"<I\", {data_var}, offset)[0]")
             w(f"{indent}offset += 4")
     elif _is_struct(p.type_name, idl):
         st = _find_struct(p.type_name, idl)
         st_size = _struct_wire_size(st, idl)
         if p.array_size is not None:
-            w(f"{indent}{p.name} = []")
+            w(f"{indent}{pn} = []")
             w(f"{indent}for _ in range({p.array_size}):")
-            w(f"{indent}    {p.name}.append({p.type_name}.unpack({data_var}, offset))")
+            w(f"{indent}    {pn}.append({p.type_name}.unpack({data_var}, offset))")
             w(f"{indent}    offset += {st_size}")
         else:
-            w(f"{indent}{p.name} = {p.type_name}.unpack({data_var}, offset)")
+            w(f"{indent}{pn} = {p.type_name}.unpack({data_var}, offset)")
             w(f"{indent}offset += {st_size}")
 
 
@@ -372,7 +383,7 @@ def emit_python_client(idl: IdlFile) -> str:
             w("")
             w(f"class {enum_def.name}:")
             for val in enum_def.values:
-                w(f"    {val.name} = {val.value}")
+                w(f"    {_safe_name(val.name)} = {val.value}")
 
     # ── Structs ──
     if idl.structs:
@@ -381,7 +392,7 @@ def emit_python_client(idl: IdlFile) -> str:
         w("# -- Structs --")
         for struct_def in idl.structs:
             wire_size = _struct_wire_size(struct_def, idl)
-            field_names = [f.name for f in struct_def.fields]
+            field_names = [_safe_name(f.name) for f in struct_def.fields]
 
             w("")
             w(f"class {struct_def.name}:")
@@ -393,48 +404,48 @@ def emit_python_client(idl: IdlFile) -> str:
             init_params = []
             for f in struct_def.fields:
                 if f.type_name == "string":
-                    init_params.append(f'{f.name}: str = ""')
+                    init_params.append(f'{_safe_name(f.name)}: str = ""')
                 elif f.type_name in PY_STRUCT_FMT:
                     if f.array_size is not None:
-                        init_params.append(f"{f.name}: list = None")
+                        init_params.append(f"{_safe_name(f.name)}: list = None")
                     elif f.type_name.startswith("float"):
-                        init_params.append(f"{f.name}: float = 0.0")
+                        init_params.append(f"{_safe_name(f.name)}: float = 0.0")
                     elif f.type_name == "bool":
-                        init_params.append(f"{f.name}: bool = False")
+                        init_params.append(f"{_safe_name(f.name)}: bool = False")
                     else:
-                        init_params.append(f"{f.name}: int = 0")
+                        init_params.append(f"{_safe_name(f.name)}: int = 0")
                 elif _is_enum(f.type_name, idl):
                     if f.array_size is not None:
-                        init_params.append(f"{f.name}: list = None")
+                        init_params.append(f"{_safe_name(f.name)}: list = None")
                     else:
-                        init_params.append(f"{f.name}: int = 0")
+                        init_params.append(f"{_safe_name(f.name)}: int = 0")
                 elif _is_struct(f.type_name, idl):
                     if f.array_size is not None:
-                        init_params.append(f"{f.name}: list = None")
+                        init_params.append(f"{_safe_name(f.name)}: list = None")
                     else:
-                        init_params.append(f"{f.name} = None")
+                        init_params.append(f"{_safe_name(f.name)} = None")
                 else:
-                    init_params.append(f"{f.name}: int = 0")
+                    init_params.append(f"{_safe_name(f.name)}: int = 0")
 
             w(f"    def __init__(self, {', '.join(init_params)}):")
             for f in struct_def.fields:
                 if f.array_size is not None and f.type_name != "string":
                     if _is_struct(f.type_name, idl):
-                        w(f"        self.{f.name} = {f.name} if {f.name} is not None else [{f.type_name}() for _ in range({f.array_size})]")
+                        w(f"        self.{_safe_name(f.name)} = {_safe_name(f.name)} if {_safe_name(f.name)} is not None else [{f.type_name}() for _ in range({f.array_size})]")
                     else:
                         default = "0.0" if f.type_name.startswith("float") else "False" if f.type_name == "bool" else "0"
-                        w(f"        self.{f.name} = {f.name} if {f.name} is not None else [{default}] * {f.array_size}")
+                        w(f"        self.{_safe_name(f.name)} = {_safe_name(f.name)} if {_safe_name(f.name)} is not None else [{default}] * {f.array_size}")
                 elif _is_struct(f.type_name, idl) and f.array_size is None:
-                    w(f"        self.{f.name} = {f.name} if {f.name} is not None else {f.type_name}()")
+                    w(f"        self.{_safe_name(f.name)} = {_safe_name(f.name)} if {_safe_name(f.name)} is not None else {f.type_name}()")
                 else:
-                    w(f"        self.{f.name} = {f.name}")
+                    w(f"        self.{_safe_name(f.name)} = {_safe_name(f.name)}")
             w("")
 
             # pack()
             w("    def pack(self) -> bytes:")
             w("        buf = bytearray()")
             for f in struct_def.fields:
-                _emit_field_pack(w, f.name, f, idl)
+                _emit_field_pack(w, _safe_name(f.name), f, idl)
             w("        return bytes(buf)")
             w("")
 
@@ -443,7 +454,7 @@ def emit_python_client(idl: IdlFile) -> str:
             w(f"    def unpack(cls, data: bytes, offset: int = 0) -> \"{struct_def.name}\":")
             for f in struct_def.fields:
                 _emit_field_unpack(w, f, idl)
-            field_kwargs = ", ".join(f"{f.name}={f.name}" for f in struct_def.fields)
+            field_kwargs = ", ".join(f"{_safe_name(f.name)}={_safe_name(f.name)}" for f in struct_def.fields)
             w(f"        return cls({field_kwargs})")
 
     # ── Client class ──
@@ -470,13 +481,13 @@ def emit_python_client(idl: IdlFile) -> str:
     for m in idl.methods:
         in_params = [p for p in m.params if p.direction == "in"]
         out_params = [p for p in m.params if p.direction == "out"]
-        snake = _snake_case(m.name)
+        snake = _safe_name(_snake_case(m.name))
 
         # Build signature
         sig_parts = ["self"]
         for p in in_params:
             hint = _py_type_hint(p.type_name, p.array_size)
-            sig_parts.append(f"{p.name}: {hint}")
+            sig_parts.append(f"{_safe_name(p.name)}: {hint}")
         sig_parts.append("timeout_ms: int = 2000")
 
         # Build return type hint
@@ -489,7 +500,7 @@ def emit_python_client(idl: IdlFile) -> str:
         w(f"    def {snake}({', '.join(sig_parts)}) -> tuple[{', '.join(ret_parts)}]:")
 
         # Build docstring
-        out_names = [p.name for p in out_params]
+        out_names = [_safe_name(p.name) for p in out_params]
         w(f'        """Returns (status, {", ".join(out_names)})."""' if out_names
           else f'        """Returns (status,)."""')
 
@@ -521,7 +532,7 @@ def emit_python_client(idl: IdlFile) -> str:
             for p in out_params:
                 _emit_param_unpack(w, p, idl, data_var="resp", indent="        ")
 
-            out_vars = ", ".join(p.name for p in out_params)
+            out_vars = ", ".join(_safe_name(p.name) for p in out_params)
             w(f"        return (rc, {out_vars})")
         else:
             w("        return (rc,)")
@@ -553,15 +564,15 @@ def emit_python_client(idl: IdlFile) -> str:
         for i, n in enumerate(idl.notifications):
             snake = _snake_case(n.name)
             const = f"self.NOTIFY_{snake.upper()}"
-            keyword = "if" if i == 0 else "elif"
-            w(f"        {keyword} message_id == {const} and self._on_{snake}:")
+            kw = "if" if i == 0 else "elif"
+            w(f"        {kw} message_id == {const} and self._on_{snake}:")
             expected = sum(_param_wire_size(p, idl) for p in n.params)
             if n.params:
                 w(f"            if len(payload) >= {expected}:")
                 w("                offset = 0")
                 for p in n.params:
                     _emit_param_unpack(w, p, idl, data_var="payload", indent="                ")
-                args = ", ".join(p.name for p in n.params)
+                args = ", ".join(_safe_name(p.name) for p in n.params)
                 w(f"                self._on_{snake}({args})")
             else:
                 w(f"            self._on_{snake}()")
