@@ -398,6 +398,11 @@ TEST(PlatformTest, GetPeerCredentialsInvalidFd)
 
 TEST(PlatformTest, LongServiceNameFails)
 {
+#if defined(__APPLE__)
+    // macOS hashes the name to a fixed-length path (/tmp/aether_UID/aether_HASH.sock)
+    // so the name length never overflows sun_path.
+    GTEST_SKIP() << "macOS socket path uses hashed names — length overflow impossible";
+#endif
     // A 200+ character name must not silently truncate — it should fail.
     std::string longName(250, 'x');
     Handle fd = serverSocket(longName.c_str());
