@@ -9,10 +9,10 @@ which handles the actual transport.  This emitter only produces the code-gen lay
 """
 
 import re
-from typing import Optional, TextIO
+from typing import Optional
 
 from .parser import IdlFile, EnumDef, StructDef, StructField, Method, Notification, Param
-from .types import TYPE_MAP, fnv1a_32
+from .types import fnv1a_32
 
 
 # IDL type → Python struct format character (little-endian).
@@ -152,19 +152,28 @@ def _emit_field_pack(w, field_name: str, field: StructField, idl: IdlFile,
     elif field.type_name in PY_STRUCT_FMT:
         fmt = PY_STRUCT_FMT[field.type_name]
         if field.array_size is not None:
-            w(f"{indent}for _item in self.{field_name}:")
+            w(f"{indent}_items = self.{field_name}")
+            w(f"{indent}if len(_items) != {field.array_size}:")
+            w(f"{indent}    raise ValueError(f\"Field '{field_name}' must have length {field.array_size}, got {{len(_items)}}\")")
+            w(f"{indent}for _item in _items:")
             w(f"{indent}    buf += struct.pack(\"<{fmt}\", _item)")
         else:
             w(f"{indent}buf += struct.pack(\"<{fmt}\", self.{field_name})")
     elif _is_enum(field.type_name, idl):
         if field.array_size is not None:
-            w(f"{indent}for _item in self.{field_name}:")
+            w(f"{indent}_items = self.{field_name}")
+            w(f"{indent}if len(_items) != {field.array_size}:")
+            w(f"{indent}    raise ValueError(f\"Field '{field_name}' must have length {field.array_size}, got {{len(_items)}}\")")
+            w(f"{indent}for _item in _items:")
             w(f"{indent}    buf += struct.pack(\"<I\", _item)")
         else:
             w(f"{indent}buf += struct.pack(\"<I\", self.{field_name})")
     elif _is_struct(field.type_name, idl):
         if field.array_size is not None:
-            w(f"{indent}for _item in self.{field_name}:")
+            w(f"{indent}_items = self.{field_name}")
+            w(f"{indent}if len(_items) != {field.array_size}:")
+            w(f"{indent}    raise ValueError(f\"Field '{field_name}' must have length {field.array_size}, got {{len(_items)}}\")")
+            w(f"{indent}for _item in _items:")
             w(f"{indent}    buf += _item.pack()")
         else:
             w(f"{indent}buf += self.{field_name}.pack()")
@@ -230,18 +239,24 @@ def _emit_param_pack(w, p: Param, idl: IdlFile, indent: str = "    "):
     elif p.type_name in PY_STRUCT_FMT:
         fmt = PY_STRUCT_FMT[p.type_name]
         if p.array_size is not None:
+            w(f"{indent}if len({p.name}) != {p.array_size}:")
+            w(f"{indent}    raise ValueError(\"{p.name} must have length {p.array_size}\")")
             w(f"{indent}for _item in {p.name}:")
             w(f"{indent}    req += struct.pack(\"<{fmt}\", _item)")
         else:
             w(f"{indent}req += struct.pack(\"<{fmt}\", {p.name})")
     elif _is_enum(p.type_name, idl):
         if p.array_size is not None:
+            w(f"{indent}if len({p.name}) != {p.array_size}:")
+            w(f"{indent}    raise ValueError(\"{p.name} must have length {p.array_size}\")")
             w(f"{indent}for _item in {p.name}:")
             w(f"{indent}    req += struct.pack(\"<I\", _item)")
         else:
             w(f"{indent}req += struct.pack(\"<I\", {p.name})")
     elif _is_struct(p.type_name, idl):
         if p.array_size is not None:
+            w(f"{indent}if len({p.name}) != {p.array_size}:")
+            w(f"{indent}    raise ValueError(\"{p.name} must have length {p.array_size}\")")
             w(f"{indent}for _item in {p.name}:")
             w(f"{indent}    req += _item.pack()")
         else:
@@ -301,7 +316,11 @@ def _param_default(p: Param, idl: IdlFile) -> str:
         return '""'
     if p.type_name in PY_STRUCT_FMT:
         if p.array_size is not None:
-            return "[]"
+            if p.type_name.startswith("float"):
+                return f"[0.0] * {p.array_size}"
+            if p.type_name == "bool":
+                return f"[False] * {p.array_size}"
+            return f"[0] * {p.array_size}"
         if p.type_name.startswith("float"):
             return "0.0"
         if p.type_name == "bool":
@@ -309,11 +328,11 @@ def _param_default(p: Param, idl: IdlFile) -> str:
         return "0"
     if _is_enum(p.type_name, idl):
         if p.array_size is not None:
-            return "[]"
+            return f"[0] * {p.array_size}"
         return "0"
     if _is_struct(p.type_name, idl):
         if p.array_size is not None:
-            return "[]"
+            return f"[{p.type_name}() for _ in range({p.array_size})]"
         return f"{p.type_name}()"
     return "0"
 
@@ -408,10 +427,10 @@ def emit_python_client(idl: IdlFile) -> str:
 
             # pack()
             w("    def pack(self) -> bytes:")
-            w("        buf = b\"\"")
+            w("        buf = bytearray()")
             for f in struct_def.fields:
                 _emit_field_pack(w, f.name, f, idl)
-            w("        return buf")
+            w("        return bytes(buf)")
             w("")
 
             # unpack()
@@ -471,9 +490,10 @@ def emit_python_client(idl: IdlFile) -> str:
 
         # Marshal [in] params
         if in_params:
-            w("        req = b\"\"")
+            w("        req = bytearray()")
             for p in in_params:
                 _emit_param_pack(w, p, idl, indent="        ")
+            w("        req = bytes(req)")
         else:
             w("        req = b\"\"")
 
