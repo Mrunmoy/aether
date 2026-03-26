@@ -204,22 +204,39 @@ def _emit_struct_marshal(w, sd: StructDef, idl: IdlFile, src_var: str,
                 offset_expr = f"{cur_offset} + {wire}"
         elif f.array_size is not None:
             base = _C99_WIRE_SIZE.get(f.type_name)
-            if base is not None:
-                wire = base * f.array_size
+            nested = _find_struct(idl, f.type_name) if base is None else None
+            if nested is not None:
+                elem_sz = _struct_wire_size_int(nested, idl)
+                if elem_sz is not None:
+                    # Array of structs: loop and marshal each element
+                    w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {f.array_size}; ++_ai) {{")
+                    elem_offset = f"{cur_offset} + {elem_sz} * _ai"
+                    _emit_struct_marshal(w, nested, idl,
+                                         f"{src_var}.{f.name}[_ai]",
+                                         buf_var, elem_offset)
+                    w(f"    }} }}")
+                    wire = elem_sz * f.array_size
+                    if field_offset_int is not None:
+                        field_offset_int += wire
+                    else:
+                        offset_expr = f"{cur_offset} + {wire}"
+                else:
+                    sz = f"{f.array_size} * sizeof({_c_type(f.type_name)})"
+                    w(f"    memcpy({buf_var} + {cur_offset}, {src_var}.{f.name}, {sz});")
+                    offset_expr = f"{cur_offset} + {sz}"
+                    field_offset_int = None
             else:
-                nested = _find_struct(idl, f.type_name)
-                if nested is not None:
-                    n = _struct_wire_size_int(nested, idl)
-                    wire = n * f.array_size if n is not None else None
+                if base is not None:
+                    wire = base * f.array_size
                 else:
                     wire = None
-            sz = str(wire) if wire is not None else f"{f.array_size} * sizeof({_c_type(f.type_name)})"
-            w(f"    memcpy({buf_var} + {cur_offset}, {src_var}.{f.name}, {sz});")
-            if wire is not None and field_offset_int is not None:
-                field_offset_int += wire
-            else:
-                offset_expr = f"{cur_offset} + {sz}"
-                field_offset_int = None
+                sz = str(wire) if wire is not None else f"{f.array_size} * sizeof({_c_type(f.type_name)})"
+                w(f"    memcpy({buf_var} + {cur_offset}, {src_var}.{f.name}, {sz});")
+                if wire is not None and field_offset_int is not None:
+                    field_offset_int += wire
+                else:
+                    offset_expr = f"{cur_offset} + {sz}"
+                    field_offset_int = None
         else:
             base = _C99_WIRE_SIZE.get(f.type_name)
             if base is not None:
@@ -285,22 +302,39 @@ def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
                 offset_expr = f"{cur_offset} + {wire}"
         elif f.array_size is not None:
             base = _C99_WIRE_SIZE.get(f.type_name)
-            if base is not None:
-                wire = base * f.array_size
+            nested = _find_struct(idl, f.type_name) if base is None else None
+            if nested is not None:
+                elem_sz = _struct_wire_size_int(nested, idl)
+                if elem_sz is not None:
+                    # Array of structs: loop and unmarshal each element
+                    w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {f.array_size}; ++_ai) {{")
+                    elem_offset = f"{cur_offset} + {elem_sz} * _ai"
+                    _emit_struct_unmarshal(w, nested, idl,
+                                           f"{dst_var}.{f.name}[_ai]",
+                                           buf_var, elem_offset)
+                    w(f"    }} }}")
+                    wire = elem_sz * f.array_size
+                    if field_offset_int is not None:
+                        field_offset_int += wire
+                    else:
+                        offset_expr = f"{cur_offset} + {wire}"
+                else:
+                    sz = f"{f.array_size} * sizeof({_c_type(f.type_name)})"
+                    w(f"    memcpy({dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
+                    offset_expr = f"{cur_offset} + {sz}"
+                    field_offset_int = None
             else:
-                nested = _find_struct(idl, f.type_name)
-                if nested is not None:
-                    n = _struct_wire_size_int(nested, idl)
-                    wire = n * f.array_size if n is not None else None
+                if base is not None:
+                    wire = base * f.array_size
                 else:
                     wire = None
-            sz = str(wire) if wire is not None else f"{f.array_size} * sizeof({_c_type(f.type_name)})"
-            w(f"    memcpy({dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
-            if wire is not None and field_offset_int is not None:
-                field_offset_int += wire
-            else:
-                offset_expr = f"{cur_offset} + {sz}"
-                field_offset_int = None
+                sz = str(wire) if wire is not None else f"{f.array_size} * sizeof({_c_type(f.type_name)})"
+                w(f"    memcpy({dst_var}.{f.name}, {buf_var} + {cur_offset}, {sz});")
+                if wire is not None and field_offset_int is not None:
+                    field_offset_int += wire
+                else:
+                    offset_expr = f"{cur_offset} + {sz}"
+                    field_offset_int = None
         else:
             base = _C99_WIRE_SIZE.get(f.type_name)
             if base is not None:
@@ -538,6 +572,17 @@ def _emit_notify_sender(w, service_name, prefix, n, idl):
                 offset_int = None
                 offset_expr = new_offset
             continue
+        elif p.array_size is not None and _is_struct_type(idl, p.type_name):
+            # Array of structs: loop and marshal each element field-by-field
+            sd = _find_struct(idl, p.type_name)
+            elem_sz = _struct_wire_size_int(sd, idl)
+            if elem_sz is not None:
+                w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {p.array_size}; ++_ai) {{")
+                elem_offset = f"{offset_expr} + {elem_sz} * _ai"
+                _emit_struct_marshal(w, sd, idl, f"{p.name}[_ai]", "buf", elem_offset)
+                w(f"    }} }}")
+            else:
+                w(f"    memcpy(buf + {offset_expr}, {p.name}, {sz_expr});")
         elif p.array_size is not None:
             w(f"    memcpy(buf + {offset_expr}, {p.name}, {sz_expr});")
         else:
@@ -640,6 +685,19 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
                 offset_int = None
                 offset_expr = new_offset
             continue
+        elif p.array_size is not None and _is_struct_type(idl, p.type_name):
+            # Array of structs: loop and unmarshal each element field-by-field
+            sd = _find_struct(idl, p.type_name)
+            elem_sz = _struct_wire_size_int(sd, idl)
+            w(f"    {ct} {p.name}[{p.array_size}];")
+            w(f"    memset({p.name}, 0, sizeof({p.name}));")
+            if elem_sz is not None:
+                w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {p.array_size}; ++_ai) {{")
+                elem_offset = f"{offset_expr} + {elem_sz} * _ai"
+                _emit_struct_unmarshal(w, sd, idl, f"{p.name}[_ai]", "req", elem_offset)
+                w(f"    }} }}")
+            else:
+                w(f"    memcpy({p.name}, req + {offset_expr}, {sz_expr});")
         elif p.array_size is not None:
             w(f"    {ct} {p.name}[{p.array_size}];")
             w(f"    memcpy({p.name}, req + {offset_expr}, {sz_expr});")
@@ -710,12 +768,21 @@ def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_param
                     offset_expr = new_offset
                 continue
 
-            if p.type_name == "string" or p.array_size is not None:
-                src = p.name
+            if p.array_size is not None and _is_struct_type(idl, p.type_name):
+                # Array of structs: loop and marshal each element field-by-field
+                sd = _find_struct(idl, p.type_name)
+                elem_sz = _struct_wire_size_int(sd, idl)
+                if elem_sz is not None:
+                    w(f"    {{ unsigned _ai; for (_ai = 0; _ai < {p.array_size}; ++_ai) {{")
+                    elem_offset = f"{offset_expr} + {elem_sz} * _ai"
+                    _emit_struct_marshal(w, sd, idl, f"{p.name}[_ai]", "resp", elem_offset)
+                    w(f"    }} }}")
+                else:
+                    w(f"    memcpy(resp + {offset_expr}, {p.name}, {sz_expr});")
+            elif p.type_name == "string" or p.array_size is not None:
+                w(f"    memcpy(resp + {offset_expr}, {p.name}, {sz_expr});")
             else:
-                src = f"&{p.name}"
-
-            w(f"    memcpy(resp + {offset_expr}, {src}, {sz_expr});")
+                w(f"    memcpy(resp + {offset_expr}, &{p.name}, {sz_expr});")
 
             if sz_int is not None and isinstance(offset_int, int):
                 offset_int += sz_int
