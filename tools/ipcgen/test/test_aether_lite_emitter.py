@@ -1,6 +1,5 @@
 """Tests for the aether-lite C99 code emitter."""
 
-import io
 import pytest
 
 from ipcgen.types import fnv1a_32
@@ -101,17 +100,11 @@ notifications EventSource
 
 
 def _gen_h(idl_text):
-    idl = parse(idl_text)
-    buf = io.StringIO()
-    emit_aether_lite_h(idl, buf)
-    return buf.getvalue()
+    return emit_aether_lite_h(parse(idl_text))
 
 
 def _gen_c(idl_text):
-    idl = parse(idl_text)
-    buf = io.StringIO()
-    emit_aether_lite_c(idl, buf)
-    return buf.getvalue()
+    return emit_aether_lite_c(parse(idl_text))
 
 
 class TestHeaderStructure:

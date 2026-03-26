@@ -9,7 +9,7 @@ Each service produces two flat files:
 """
 
 import re
-from typing import Optional, TextIO
+from typing import Optional
 
 from .parser import IdlFile, Param, StructDef
 from .types import TYPE_MAP, cpp_type, fnv1a_32
@@ -376,7 +376,7 @@ def _emit_struct_unmarshal(w, sd: StructDef, idl: IdlFile, dst_var: str,
 
 # ---- Header (.h) emitter ----------------------------------------------
 
-def emit_aether_lite_h(idl: IdlFile, out: TextIO) -> None:
+def emit_aether_lite_h(idl: IdlFile) -> str:
     name = idl.service_name
     prefix = _to_upper_snake(name)
     service_id = fnv1a_32(name)
@@ -492,7 +492,7 @@ def emit_aether_lite_h(idl: IdlFile, out: TextIO) -> None:
     w(f"#endif /* {guard} */")
     w("")
 
-    out.write("\n".join(lines))
+    return "\n".join(lines)
 
 
 def _handler_param_list(in_params, out_params) -> list:
@@ -606,7 +606,7 @@ def _emit_notify_sender(w, service_name, prefix, n, idl):
 
 # ---- Implementation (.c) emitter --------------------------------------
 
-def emit_aether_lite_c(idl: IdlFile, out: TextIO) -> None:
+def emit_aether_lite_c(idl: IdlFile) -> str:
     name = idl.service_name
     prefix = _to_upper_snake(name)
 
@@ -628,7 +628,7 @@ def emit_aether_lite_c(idl: IdlFile, out: TextIO) -> None:
 
     w("")
 
-    out.write("\n".join(lines))
+    return "\n".join(lines)
 
 
 def _emit_dispatch_wrapper(w, service_name, prefix, method, in_params, out_params, idl):

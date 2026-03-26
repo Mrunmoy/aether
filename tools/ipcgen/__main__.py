@@ -43,17 +43,11 @@ def main():
 
     if args.backend == "aether_lite":
         # Flat output: {ServiceName}.h and {ServiceName}.c in outdir.
-        import io
         os.makedirs(args.outdir, exist_ok=True)
 
-        h_buf = io.StringIO()
-        emit_aether_lite_h(idl, h_buf)
-        c_buf = io.StringIO()
-        emit_aether_lite_c(idl, c_buf)
-
         files = [
-            (args.outdir, f"{name}.h", h_buf.getvalue()),
-            (args.outdir, f"{name}.c", c_buf.getvalue()),
+            (args.outdir, f"{name}.h", emit_aether_lite_h(idl)),
+            (args.outdir, f"{name}.c", emit_aether_lite_c(idl)),
         ]
     else:
         server_dir = os.path.join(args.outdir, "server")
