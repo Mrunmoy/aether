@@ -1,1 +1,250 @@
-<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=dev/bench/index.html"></head><body>Redirecting to benchmarks...</body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aether IPC — Benchmark Dashboard</title>
+  <style>
+    :root {
+      --bg: #05070d;
+      --panel: rgba(12, 18, 35, 0.72);
+      --panel2: rgba(8, 12, 24, 0.72);
+      --text: #e6f1ff;
+      --muted: rgba(230, 241, 255, 0.65);
+      --line: rgba(0, 255, 209, 0.18);
+      --line2: rgba(102, 204, 255, 0.16);
+      --accent: #00ffd1;
+      --accent2: #66ccff;
+      --shadow: 0 10px 30px rgba(0,0,0,0.55);
+      --radius: 14px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 20% 0%, rgba(0,255,209,0.12), transparent 55%),
+        radial-gradient(900px 500px at 90% 10%, rgba(102,204,255,0.10), transparent 55%),
+        radial-gradient(800px 500px at 50% 100%, rgba(255,59,129,0.06), transparent 60%),
+        linear-gradient(180deg, #03040a, #070a14 35%, #040611);
+      padding: 26px;
+    }
+
+    .grid {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(to right, rgba(0,255,209,0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,255,209,0.04) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(circle at 50% 20%, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 40%, rgba(0,0,0,0) 85%);
+    }
+
+    .wrap { max-width: 1180px; margin: 0 auto; }
+
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 34px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 26px 0 10px 0;
+      font-size: 18px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: rgba(230,241,255,0.9);
+    }
+
+    .muted {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--line), transparent);
+      margin: 18px 0 6px 0;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin: 18px 0 22px 0;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(12,18,35,0.84), rgba(8,12,24,0.72));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(400px 120px at 10% 10%, rgba(0,255,209,0.12), transparent 60%),
+        radial-gradient(380px 110px at 90% 20%, rgba(102,204,255,0.10), transparent 60%);
+      opacity: 0.9;
+      pointer-events: none;
+    }
+
+    .card .label {
+      position: relative;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+
+    .card .value {
+      position: relative;
+      font-size: 26px;
+      margin-top: 8px;
+      color: var(--accent);
+      text-shadow: 0 0 12px rgba(0,255,209,0.18);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 18px 0;
+      background: rgba(8,12,24,0.55);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(102,204,255,0.10);
+      font-size: 13px;
+      vertical-align: top;
+    }
+
+    th {
+      text-align: left;
+      color: rgba(230,241,255,0.85);
+      background: rgba(12,18,35,0.65);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+
+    tr:hover td { background: rgba(0,255,209,0.04); }
+    td { color: rgba(230,241,255,0.88); }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="wrap">
+    <h1>Aether IPC — Benchmark Dashboard</h1>
+    <div class="muted">
+      Host: <b>runnervm46oaq</b> &bull; CPUs: <b>4</b> @ <b>3269 MHz</b><br/>
+      Generated: <b>2026-03-26T11:13:42+00:00</b>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="label">Best Ring Write</div>
+        <div class="value">70.80 µs</div>
+      </div>
+      <div class="card">
+        <div class="label">Best IPC Call</div>
+        <div class="value">45.32 µs</div>
+      </div>
+      <div class="card">
+        <div class="label">Best Notify</div>
+        <div class="value">1.31 µs</div>
+      </div>
+      <div class="card">
+        <div class="label">Peak Throughput</div>
+        <div class="value">741.09 Mop/s</div>
+      </div>
+    </div>
+
+    <h2>Ring I/O</h2>
+    <table>
+      <thead>
+        <tr><th>Benchmark</th><th>Param</th><th>Latency</th><th>Throughput</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>WriteFrame</td><td>0 B</td><td>71.10 µs</td><td>14.06 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>64 B</td><td>70.80 µs</td><td>14.12 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>1024 B</td><td>71.63 µs</td><td>13.96 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>16384 B</td><td>71.88 µs</td><td>13.91 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>65536 B</td><td>73.46 µs</td><td>13.61 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>0 B</td><td>2.95 µs</td><td>339.00 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>64 B</td><td>2.98 µs</td><td>335.63 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>1024 B</td><td>3.06 µs</td><td>326.86 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>16384 B</td><td>3.93 µs</td><td>254.42 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>65536 B</td><td>7.10 µs</td><td>140.90 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>0 B</td><td>2.95 µs</td><td>339.35 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>64 B</td><td>2.98 µs</td><td>335.79 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>1024 B</td><td>3.03 µs</td><td>330.07 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>16384 B</td><td>3.93 µs</td><td>254.70 Kop/s</td></tr>
+        <tr><td>PeekFrameHeader</td><td></td><td>1.35 ns</td><td>741.09 Mop/s</td></tr>
+        <tr><td>MultiFramePipeline</td><td>64 B</td><td>94.72 µs</td><td>10.56 Kop/s</td></tr>
+        <tr><td>MultiFramePipeline</td><td>1024 B</td><td>18.54 µs</td><td>53.94 Kop/s</td></tr>
+      </tbody>
+    </table>
+    <h2>IPC Round-Trip</h2>
+    <table>
+      <thead>
+        <tr><th>Benchmark</th><th>Param</th><th>Latency</th><th>Throughput</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>CallLatency</td><td>0 B</td><td>45.39 µs</td><td>22.03 Kop/s</td></tr>
+        <tr><td>CallLatency</td><td>64 B</td><td>45.32 µs</td><td>22.07 Kop/s</td></tr>
+        <tr><td>CallLatency</td><td>1024 B</td><td>45.65 µs</td><td>21.91 Kop/s</td></tr>
+        <tr><td>CallLatency</td><td>16384 B</td><td>54.22 µs</td><td>18.44 Kop/s</td></tr>
+        <tr><td>CallThroughput</td><td></td><td>45.36 µs</td><td>22.04 Kop/s</td></tr>
+        <tr><td>ConnectDisconnect</td><td></td><td>538.82 µs</td><td>1.86 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>1 clients</td><td>45.64 µs</td><td>21.91 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>2 clients</td><td>92.16 µs</td><td>10.85 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>4 clients</td><td>185.27 µs</td><td>5.40 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>8 clients</td><td>372.95 µs</td><td>2.68 Kop/s</td></tr>
+      </tbody>
+    </table>
+    <h2>Notifications</h2>
+    <table>
+      <thead>
+        <tr><th>Benchmark</th><th>Param</th><th>Latency</th><th>Throughput</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>NotifyLatency</td><td>0 B</td><td>1.62 µs</td><td>615.85 Kop/s</td></tr>
+        <tr><td>NotifyLatency</td><td>64 B</td><td>1.63 µs</td><td>614.39 Kop/s</td></tr>
+        <tr><td>NotifyLatency</td><td>1024 B</td><td>1.31 µs</td><td>765.90 Kop/s</td></tr>
+        <tr><td>NotifyLatency</td><td>16384 B</td><td>2.35 µs</td><td>425.94 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>1 clients</td><td>1.63 µs</td><td>613.41 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>2 clients</td><td>4.04 µs</td><td>247.52 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>4 clients</td><td>16.99 µs</td><td>58.87 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>8 clients</td><td>38.90 µs</td><td>25.70 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>16 clients</td><td>80.50 µs</td><td>12.42 Kop/s</td></tr>
+        <tr><td>NotifyThroughput</td><td></td><td>1.62 µs</td><td>617.58 Kop/s</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Raw Data</h2>
+    <div class="muted">
+      <a href="dev/bench/index.html">Historical trend charts</a> &bull;
+      <a href="bench/benchmark_result.json">benchmark_result.json</a>
+    </div>
+  </div>
+</body>
+</html>
