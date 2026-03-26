@@ -146,6 +146,73 @@
     td { color: rgba(230,241,255,0.88); }
     a { color: var(--accent2); text-decoration: none; }
     a:hover { text-decoration: underline; }
+
+    h3.chart-label {
+      margin: 16px 0 6px 0;
+      font-size: 13px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .bar-label {
+      width: 60px;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      text-align: right;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .bar-track {
+      flex: 1;
+      height: 22px;
+      background: rgba(12,18,35,0.55);
+      border: 1px solid rgba(102,204,255,0.08);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.6s ease;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    }
+
+    .bar-value {
+      width: 70px;
+      font-size: 12px;
+      color: var(--text);
+      flex-shrink: 0;
+    }
+
+    .feat-yes { color: #00ffd1; font-weight: bold; }
+    .feat-no { color: rgba(230,241,255,0.25); }
+
+    .feat-table td:first-child {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .section-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--line), transparent);
+      margin: 30px 0 10px 0;
+    }
   </style>
 </head>
 <body>
@@ -153,8 +220,8 @@
   <div class="wrap">
     <h1>Aether IPC — Benchmark Dashboard</h1>
     <div class="muted">
-      Host: <b>runnervm46oaq</b> &bull; CPUs: <b>4</b> @ <b>3269 MHz</b><br/>
-      Generated: <b>2026-03-26T11:13:42+00:00</b>
+      Host: <b>runnervm46oaq</b> &bull; CPUs: <b>4</b> @ <b>3299 MHz</b><br/>
+      Generated: <b>2026-03-26T11:40:50+00:00</b>
     </div>
 
     <div class="divider"></div>
@@ -162,19 +229,19 @@
     <div class="cards">
       <div class="card">
         <div class="label">Best Ring Write</div>
-        <div class="value">70.80 µs</div>
+        <div class="value">3.48 µs</div>
       </div>
       <div class="card">
         <div class="label">Best IPC Call</div>
-        <div class="value">45.32 µs</div>
+        <div class="value">44.85 µs</div>
       </div>
       <div class="card">
         <div class="label">Best Notify</div>
-        <div class="value">1.31 µs</div>
+        <div class="value">1.19 µs</div>
       </div>
       <div class="card">
         <div class="label">Peak Throughput</div>
-        <div class="value">741.09 Mop/s</div>
+        <div class="value">740.49 Mop/s</div>
       </div>
     </div>
 
@@ -184,23 +251,23 @@
         <tr><th>Benchmark</th><th>Param</th><th>Latency</th><th>Throughput</th></tr>
       </thead>
       <tbody>
-        <tr><td>WriteFrame</td><td>0 B</td><td>71.10 µs</td><td>14.06 Kop/s</td></tr>
-        <tr><td>WriteFrame</td><td>64 B</td><td>70.80 µs</td><td>14.12 Kop/s</td></tr>
-        <tr><td>WriteFrame</td><td>1024 B</td><td>71.63 µs</td><td>13.96 Kop/s</td></tr>
-        <tr><td>WriteFrame</td><td>16384 B</td><td>71.88 µs</td><td>13.91 Kop/s</td></tr>
-        <tr><td>WriteFrame</td><td>65536 B</td><td>73.46 µs</td><td>13.61 Kop/s</td></tr>
-        <tr><td>ReadFrameAlloc</td><td>0 B</td><td>2.95 µs</td><td>339.00 Kop/s</td></tr>
-        <tr><td>ReadFrameAlloc</td><td>64 B</td><td>2.98 µs</td><td>335.63 Kop/s</td></tr>
-        <tr><td>ReadFrameAlloc</td><td>1024 B</td><td>3.06 µs</td><td>326.86 Kop/s</td></tr>
-        <tr><td>ReadFrameAlloc</td><td>16384 B</td><td>3.93 µs</td><td>254.42 Kop/s</td></tr>
-        <tr><td>ReadFrameAlloc</td><td>65536 B</td><td>7.10 µs</td><td>140.90 Kop/s</td></tr>
-        <tr><td>WriteReadRoundTrip</td><td>0 B</td><td>2.95 µs</td><td>339.35 Kop/s</td></tr>
-        <tr><td>WriteReadRoundTrip</td><td>64 B</td><td>2.98 µs</td><td>335.79 Kop/s</td></tr>
-        <tr><td>WriteReadRoundTrip</td><td>1024 B</td><td>3.03 µs</td><td>330.07 Kop/s</td></tr>
-        <tr><td>WriteReadRoundTrip</td><td>16384 B</td><td>3.93 µs</td><td>254.70 Kop/s</td></tr>
-        <tr><td>PeekFrameHeader</td><td></td><td>1.35 ns</td><td>741.09 Mop/s</td></tr>
-        <tr><td>MultiFramePipeline</td><td>64 B</td><td>94.72 µs</td><td>10.56 Kop/s</td></tr>
-        <tr><td>MultiFramePipeline</td><td>1024 B</td><td>18.54 µs</td><td>53.94 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>0 B</td><td>3.50 µs</td><td>285.59 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>64 B</td><td>3.48 µs</td><td>287.27 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>1024 B</td><td>3.50 µs</td><td>285.76 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>16384 B</td><td>4.11 µs</td><td>243.14 Kop/s</td></tr>
+        <tr><td>WriteFrame</td><td>65536 B</td><td>73.40 µs</td><td>13.62 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>0 B</td><td>2.94 µs</td><td>340.09 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>64 B</td><td>2.96 µs</td><td>337.43 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>1024 B</td><td>3.02 µs</td><td>331.64 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>16384 B</td><td>4.06 µs</td><td>246.21 Kop/s</td></tr>
+        <tr><td>ReadFrameAlloc</td><td>65536 B</td><td>7.11 µs</td><td>140.64 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>0 B</td><td>2.93 µs</td><td>341.38 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>64 B</td><td>2.97 µs</td><td>336.89 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>1024 B</td><td>3.02 µs</td><td>331.64 Kop/s</td></tr>
+        <tr><td>WriteReadRoundTrip</td><td>16384 B</td><td>3.91 µs</td><td>255.48 Kop/s</td></tr>
+        <tr><td>PeekFrameHeader</td><td></td><td>1.35 ns</td><td>740.49 Mop/s</td></tr>
+        <tr><td>MultiFramePipeline</td><td>64 B</td><td>95.46 µs</td><td>10.48 Kop/s</td></tr>
+        <tr><td>MultiFramePipeline</td><td>1024 B</td><td>18.51 µs</td><td>54.04 Kop/s</td></tr>
       </tbody>
     </table>
     <h2>IPC Round-Trip</h2>
@@ -209,16 +276,16 @@
         <tr><th>Benchmark</th><th>Param</th><th>Latency</th><th>Throughput</th></tr>
       </thead>
       <tbody>
-        <tr><td>CallLatency</td><td>0 B</td><td>45.39 µs</td><td>22.03 Kop/s</td></tr>
-        <tr><td>CallLatency</td><td>64 B</td><td>45.32 µs</td><td>22.07 Kop/s</td></tr>
-        <tr><td>CallLatency</td><td>1024 B</td><td>45.65 µs</td><td>21.91 Kop/s</td></tr>
-        <tr><td>CallLatency</td><td>16384 B</td><td>54.22 µs</td><td>18.44 Kop/s</td></tr>
-        <tr><td>CallThroughput</td><td></td><td>45.36 µs</td><td>22.04 Kop/s</td></tr>
-        <tr><td>ConnectDisconnect</td><td></td><td>538.82 µs</td><td>1.86 Kop/s</td></tr>
-        <tr><td>ParallelClients</td><td>1 clients</td><td>45.64 µs</td><td>21.91 Kop/s</td></tr>
-        <tr><td>ParallelClients</td><td>2 clients</td><td>92.16 µs</td><td>10.85 Kop/s</td></tr>
-        <tr><td>ParallelClients</td><td>4 clients</td><td>185.27 µs</td><td>5.40 Kop/s</td></tr>
-        <tr><td>ParallelClients</td><td>8 clients</td><td>372.95 µs</td><td>2.68 Kop/s</td></tr>
+        <tr><td>CallLatency</td><td>0 B</td><td>44.85 µs</td><td>22.30 Kop/s</td></tr>
+        <tr><td>CallLatency</td><td>64 B</td><td>45.71 µs</td><td>21.88 Kop/s</td></tr>
+        <tr><td>CallLatency</td><td>1024 B</td><td>45.93 µs</td><td>21.77 Kop/s</td></tr>
+        <tr><td>CallLatency</td><td>16384 B</td><td>55.12 µs</td><td>18.14 Kop/s</td></tr>
+        <tr><td>CallThroughput</td><td></td><td>45.71 µs</td><td>21.88 Kop/s</td></tr>
+        <tr><td>ConnectDisconnect</td><td></td><td>543.78 µs</td><td>1.84 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>1 clients</td><td>45.98 µs</td><td>21.75 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>2 clients</td><td>93.13 µs</td><td>10.74 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>4 clients</td><td>187.09 µs</td><td>5.34 Kop/s</td></tr>
+        <tr><td>ParallelClients</td><td>8 clients</td><td>378.16 µs</td><td>2.64 Kop/s</td></tr>
       </tbody>
     </table>
     <h2>Notifications</h2>
@@ -227,18 +294,154 @@
         <tr><th>Benchmark</th><th>Param</th><th>Latency</th><th>Throughput</th></tr>
       </thead>
       <tbody>
-        <tr><td>NotifyLatency</td><td>0 B</td><td>1.62 µs</td><td>615.85 Kop/s</td></tr>
-        <tr><td>NotifyLatency</td><td>64 B</td><td>1.63 µs</td><td>614.39 Kop/s</td></tr>
-        <tr><td>NotifyLatency</td><td>1024 B</td><td>1.31 µs</td><td>765.90 Kop/s</td></tr>
-        <tr><td>NotifyLatency</td><td>16384 B</td><td>2.35 µs</td><td>425.94 Kop/s</td></tr>
-        <tr><td>NotifyBroadcast</td><td>1 clients</td><td>1.63 µs</td><td>613.41 Kop/s</td></tr>
-        <tr><td>NotifyBroadcast</td><td>2 clients</td><td>4.04 µs</td><td>247.52 Kop/s</td></tr>
-        <tr><td>NotifyBroadcast</td><td>4 clients</td><td>16.99 µs</td><td>58.87 Kop/s</td></tr>
-        <tr><td>NotifyBroadcast</td><td>8 clients</td><td>38.90 µs</td><td>25.70 Kop/s</td></tr>
-        <tr><td>NotifyBroadcast</td><td>16 clients</td><td>80.50 µs</td><td>12.42 Kop/s</td></tr>
-        <tr><td>NotifyThroughput</td><td></td><td>1.62 µs</td><td>617.58 Kop/s</td></tr>
+        <tr><td>NotifyLatency</td><td>0 B</td><td>1.63 µs</td><td>612.32 Kop/s</td></tr>
+        <tr><td>NotifyLatency</td><td>64 B</td><td>1.64 µs</td><td>608.74 Kop/s</td></tr>
+        <tr><td>NotifyLatency</td><td>1024 B</td><td>1.65 µs</td><td>607.11 Kop/s</td></tr>
+        <tr><td>NotifyLatency</td><td>16384 B</td><td>1.19 µs</td><td>840.20 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>1 clients</td><td>1.65 µs</td><td>605.04 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>2 clients</td><td>5.70 µs</td><td>175.48 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>4 clients</td><td>17.23 µs</td><td>58.03 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>8 clients</td><td>38.98 µs</td><td>25.65 Kop/s</td></tr>
+        <tr><td>NotifyBroadcast</td><td>16 clients</td><td>81.44 µs</td><td>12.28 Kop/s</td></tr>
+        <tr><td>NotifyThroughput</td><td></td><td>1.67 µs</td><td>598.63 Kop/s</td></tr>
       </tbody>
     </table>
+
+    <h2>Transport Comparison</h2>
+    <p class="muted" style="margin-bottom:18px;">Round-trip echo latency — lower is better. Aether uses shared-memory ring buffers; others use kernel-mediated I/O.</p>
+    <h3 class="chart-label">64 B payload</h3>
+    <div class="bar-chart">
+      <div class="bar-row">
+        <span class="bar-label">Aether</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:83.0%;background:#00ffd1;"></div>
+        </div>
+        <span class="bar-value">45.60 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">UDS</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:29.2%;background:#66ccff;"></div>
+        </div>
+        <span class="bar-value">16.02 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Pipe</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:45.1%;background:#b088f9;"></div>
+        </div>
+        <span class="bar-value">24.78 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">TCP</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:78.6%;background:#ff5c8a;"></div>
+        </div>
+        <span class="bar-value">43.20 µs</span>
+      </div>
+    </div>
+    <h3 class="chart-label">1 KB payload</h3>
+    <div class="bar-chart">
+      <div class="bar-row">
+        <span class="bar-label">Aether</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:83.8%;background:#00ffd1;"></div>
+        </div>
+        <span class="bar-value">46.08 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">UDS</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:30.0%;background:#66ccff;"></div>
+        </div>
+        <span class="bar-value">16.46 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Pipe</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:48.1%;background:#b088f9;"></div>
+        </div>
+        <span class="bar-value">26.45 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">TCP</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:78.9%;background:#ff5c8a;"></div>
+        </div>
+        <span class="bar-value">43.37 µs</span>
+      </div>
+    </div>
+    <h3 class="chart-label">16 KB payload</h3>
+    <div class="bar-chart">
+      <div class="bar-row">
+        <span class="bar-label">Aether</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:100.0%;background:#00ffd1;"></div>
+        </div>
+        <span class="bar-value">54.96 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">UDS</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:36.6%;background:#66ccff;"></div>
+        </div>
+        <span class="bar-value">20.12 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Pipe</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:63.0%;background:#b088f9;"></div>
+        </div>
+        <span class="bar-value">34.64 µs</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">TCP</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:89.0%;background:#ff5c8a;"></div>
+        </div>
+        <span class="bar-value">48.90 µs</span>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Transport</th><th>64 B</th><th>1 KB</th><th>16 KB</th></tr>
+      </thead>
+      <tbody>
+        <tr><td style="color:#00ffd1">Aether</td><td>45.60 µs</td><td>46.08 µs</td><td>54.96 µs</td></tr>
+        <tr><td style="color:#66ccff">UDS</td><td>16.02 µs</td><td>16.46 µs</td><td>20.12 µs</td></tr>
+        <tr><td style="color:#b088f9">Pipe</td><td>24.78 µs</td><td>26.45 µs</td><td>34.64 µs</td></tr>
+        <tr><td style="color:#ff5c8a">TCP</td><td>43.20 µs</td><td>43.37 µs</td><td>48.90 µs</td></tr>
+      </tbody>
+    </table>
+
+    <div class="section-divider"></div>
+
+    <h2>Feature Comparison</h2>
+    <p class="muted" style="margin-bottom:18px;">Aether provides a complete IPC framework with typed APIs, code generation, and shared-memory performance — features that raw socket/pipe mechanisms lack.</p>
+    <table class="feat-table">
+      <thead>
+        <tr><th>Feature</th><th style="color:#00ffd1">Aether</th><th style="color:#66ccff">UDS</th><th style="color:#b088f9">Pipe</th><th style="color:#ff5c8a">TCP</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Typed RPC (request/response)</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>IDL code generation</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Async notifications</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Shared-memory transport</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Zero kernel-copy data plane</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Automatic serialization</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Multi-client support</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td></tr>
+        <tr><td>Cross-platform (Linux/macOS/Win)</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td></tr>
+        <tr><td>Bidirectional communication</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td></tr>
+        <tr><td>No framing needed</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Connection management</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td></tr>
+        <tr><td>Sequence correlation</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Lock-free data plane</td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td></tr>
+        <tr><td>Kernel-mediated transport</td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td></tr>
+        <tr><td>Network-capable</td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-no">✗</span></td><td style="text-align:center"><span class="feat-yes">✓</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="section-divider"></div>
 
     <h2>Raw Data</h2>
     <div class="muted">
