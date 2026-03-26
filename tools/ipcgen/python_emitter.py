@@ -27,7 +27,7 @@ PY_STRUCT_FMT = {
     "int64":   "q",
     "float32": "f",
     "float64": "d",
-    "bool":    "?",
+    "bool":    "B",
 }
 
 # IDL type → wire size in bytes.
@@ -181,13 +181,20 @@ def _emit_field_unpack(w, field: StructField, idl: IdlFile,
     elif field.type_name in PY_STRUCT_FMT:
         fmt = PY_STRUCT_FMT[field.type_name]
         sz = PY_TYPE_SIZE[field.type_name]
+        is_bool = field.type_name == "bool"
         if field.array_size is not None:
             w(f"{indent}{var_prefix}{fname} = []")
             w(f"{indent}for _ in range({field.array_size}):")
-            w(f"{indent}    {var_prefix}{fname}.append(struct.unpack_from(\"<{fmt}\", data, offset)[0])")
+            if is_bool:
+                w(f"{indent}    {var_prefix}{fname}.append(bool(struct.unpack_from(\"<{fmt}\", data, offset)[0]))")
+            else:
+                w(f"{indent}    {var_prefix}{fname}.append(struct.unpack_from(\"<{fmt}\", data, offset)[0])")
             w(f"{indent}    offset += {sz}")
         else:
-            w(f"{indent}{var_prefix}{fname} = struct.unpack_from(\"<{fmt}\", data, offset)[0]")
+            if is_bool:
+                w(f"{indent}{var_prefix}{fname} = bool(struct.unpack_from(\"<{fmt}\", data, offset)[0])")
+            else:
+                w(f"{indent}{var_prefix}{fname} = struct.unpack_from(\"<{fmt}\", data, offset)[0]")
             w(f"{indent}offset += {sz}")
     elif _is_enum(field.type_name, idl):
         if field.array_size is not None:
@@ -251,13 +258,20 @@ def _emit_param_unpack(w, p: Param, idl: IdlFile, data_var: str = "resp",
     elif p.type_name in PY_STRUCT_FMT:
         fmt = PY_STRUCT_FMT[p.type_name]
         sz = PY_TYPE_SIZE[p.type_name]
+        is_bool = p.type_name == "bool"
         if p.array_size is not None:
             w(f"{indent}{p.name} = []")
             w(f"{indent}for _ in range({p.array_size}):")
-            w(f"{indent}    {p.name}.append(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0])")
+            if is_bool:
+                w(f"{indent}    {p.name}.append(bool(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0]))")
+            else:
+                w(f"{indent}    {p.name}.append(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0])")
             w(f"{indent}    offset += {sz}")
         else:
-            w(f"{indent}{p.name} = struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0]")
+            if is_bool:
+                w(f"{indent}{p.name} = bool(struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0])")
+            else:
+                w(f"{indent}{p.name} = struct.unpack_from(\"<{fmt}\", {data_var}, offset)[0]")
             w(f"{indent}offset += {sz}")
     elif _is_enum(p.type_name, idl):
         if p.array_size is not None:
@@ -425,6 +439,8 @@ def emit_python_client(idl: IdlFile) -> str:
     for n in idl.notifications:
         snake = _snake_case(n.name)
         w(f"        self._on_{snake}: Optional[Callable] = None")
+    if idl.notifications:
+        w("        self._client.set_notification_handler(self._dispatch_notification)")
 
     # ── Methods ──
     for m in idl.methods:
@@ -505,6 +521,8 @@ def emit_python_client(idl: IdlFile) -> str:
     # ── Notification dispatch ──
     w("")
     w("    def _dispatch_notification(self, service_id: int, message_id: int, payload: bytes):")
+    w("        if service_id != SERVICE_ID:")
+    w("            return")
 
     if idl.notifications:
         for i, n in enumerate(idl.notifications):

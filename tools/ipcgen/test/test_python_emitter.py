@@ -212,6 +212,16 @@ class TestPythonNotificationGeneration:
         assert "_dispatch_notification" in code
         assert "self._on_device_connected(" in code
 
+    def test_notification_handler_wired_in_init(self):
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        assert "self._client.set_notification_handler(self._dispatch_notification)" in code
+
+    def test_dispatch_checks_service_id(self):
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        assert "if service_id != SERVICE_ID:" in code
+
     def test_notification_with_enum_param(self):
         idl = parse(TYPED_IDL)
         code = emit_python_client(idl)
@@ -279,7 +289,9 @@ class TestPythonAllTypes:
     def test_bool_type(self):
         idl = parse(ALL_TYPES_IDL)
         code = emit_python_client(idl)
-        assert '"<?"' in code   # bool
+        # bool uses "B" (uint8) for wire compat with C++, wrapped with bool() on unpack
+        assert 'struct.pack("<B", flag)' in code
+        assert 'bool(struct.unpack_from("<B"' in code
 
 
 class TestPythonEndToEnd:
