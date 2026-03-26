@@ -522,10 +522,11 @@ def emit_python_client(idl: IdlFile) -> str:
         w("")
         w(f"    def {snake}({', '.join(sig_parts)}) -> tuple[{', '.join(ret_parts)}]:")
 
-        # Build docstring
+        # Build docstring — use "rc" for the IPC return code so it cannot
+        # be confused with an [out] param that happens to be named "status".
         out_names = [_safe_param(p.name, _RESERVED_METHOD_LOCALS) for p in out_params]
-        w(f'        """Returns (status, {", ".join(out_names)})."""' if out_names
-          else f'        """Returns (status,)."""')
+        w(f'        """Returns (rc, {", ".join(out_names)})."""' if out_names
+          else f'        """Returns (rc,)."""')
 
         # Marshal [in] params
         if in_params:
@@ -579,13 +580,12 @@ def emit_python_client(idl: IdlFile) -> str:
         w(f'        """Register handler for {n.name} notifications."""')
         w(f"        self._on_{snake} = handler")
 
-    # -- Notification dispatch --
-    w("")
-    w("    def _dispatch_notification(self, _service_id: int, _message_id: int, _payload: bytes):")
-    w("        if _service_id != SERVICE_ID:")
-    w("            return")
-
+    # -- Notification dispatch (only when the IDL declares notifications) --
     if idl.notifications:
+        w("")
+        w("    def _dispatch_notification(self, _service_id: int, _message_id: int, _payload: bytes):")
+        w("        if _service_id != SERVICE_ID:")
+        w("            return")
         for i, n in enumerate(idl.notifications):
             snake = _snake_case(n.name)
             const = f"self.NOTIFY_{snake.upper()}"
@@ -602,8 +602,6 @@ def emit_python_client(idl: IdlFile) -> str:
                 w(f"                self._on_{snake}({args})")
             else:
                 w(f"            self._on_{snake}()")
-    else:
-        w("        pass")
 
     w("")
 

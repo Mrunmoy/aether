@@ -169,7 +169,7 @@ class TestPythonMethodGeneration:
     def test_method_with_out_params(self):
         idl = parse(DEVICE_MONITOR_IDL)
         code = emit_python_client(idl)
-        assert "Returns (status, count)" in code
+        assert "Returns (rc, count)" in code
         # Internal vars are now prefixed with underscore
         assert 'struct.unpack_from("<I", _resp, _offset)' in code
 
@@ -249,6 +249,41 @@ class TestPythonNotificationGeneration:
         idl = parse(DEVICE_MONITOR_IDL)
         code = emit_python_client(idl)
         assert "_dispatch_notification(self, _service_id: int, _message_id: int, _payload: bytes)" in code
+
+
+class TestDocstringAmbiguity:
+    """Ensure the return-code label in docstrings never collides with out-params."""
+
+    def test_out_param_named_status(self):
+        """GetDeviceStatus has [out] uint32 status — docstring must not say 'status' twice."""
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        # The error-code slot must be 'rc', not 'status'
+        assert 'Returns (rc, status)' in code
+
+    def test_plain_out_param(self):
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        assert 'Returns (rc, count)' in code
+
+
+class TestNoNotificationDispatch:
+    """When an IDL has no notifications block, _dispatch_notification must not be emitted."""
+
+    def test_no_dispatch_without_notifications(self):
+        idl = parse(ALL_TYPES_IDL)
+        code = emit_python_client(idl)
+        assert "_dispatch_notification" not in code
+
+    def test_dispatch_present_with_notifications(self):
+        idl = parse(DEVICE_MONITOR_IDL)
+        code = emit_python_client(idl)
+        assert "_dispatch_notification" in code
+
+    def test_no_notification_handler_without_notifications(self):
+        idl = parse(ALL_TYPES_IDL)
+        code = emit_python_client(idl)
+        assert "set_notification_handler" not in code
 
 
 class TestPythonStringHandling:
