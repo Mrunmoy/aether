@@ -134,7 +134,7 @@ Manages the client side of a connection:
 
 ### 5.3 RunLoop integration
 
-Both `ServiceBase` and `ClientBase` accept an optional `ms::RunLoop*`.
+Both `ServiceBase` and `ClientBase` accept an optional `vortex::RunLoop*`.
 When provided:
 
 - No internal threads are created
@@ -253,5 +253,30 @@ codes through the `call()` return value.
 - Same-machine IPC (shared memory, native endian)
 - Fixed-size ring buffers (256KB per direction, compile-time configured)
 - No encryption or authentication (trusted local environment)
-- Windows currently supports threaded mode only; `RunLoop` integration is not implemented there yet
+- Windows RunLoop integration is in progress (Phase 5 — requires IOCP rewrite in Vortex)
 - Single service per name (one listener per service endpoint)
+
+## 12. C API
+
+`aether_ipc.h` provides a stable C interface with opaque handles (`AetherService*`,
+`AetherClient*`). This is the only installed public header and the foundation for
+language bindings (Python ctypes, future FFI wrappers).
+
+The C API mirrors the C++ classes:
+- `aether_service_create()` / `aether_service_destroy()` — service lifecycle
+- `aether_client_create()` / `aether_client_connect()` / `aether_client_call()` — client RPC
+- `aether_client_set_notification_callback()` — notification dispatch
+
+All C API functions return `int` error codes (0 = success, negative = error).
+Implementation lives in `src/CApi.cpp`.
+
+## 13. Transport abstraction
+
+`ITransport.h` defines an abstract transport interface for non-SHM transports
+(serial, USB). `TransportClientBase` provides a client implementation that uses
+the same wire protocol (24-byte frame header + payload) over any byte stream,
+without shared memory or Unix domain sockets.
+
+This enables desktop ↔ device communication where the device runs aether-lite
+(C99 MCU dispatch) over a serial link, and the desktop runs a TransportClientBase
+with a serial backend.
