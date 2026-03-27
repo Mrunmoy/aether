@@ -1,0 +1,175 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "http://localhost:3000",
+  "elements": [
+    {
+      "id": "title", "type": "text", "x": 60, "y": 20, "width": 800, "height": 35,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a0", "roundness": null,
+      "seed": 1001, "version": 1, "versionNonce": 1002, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Platform Abstraction — Three Implementations",
+      "originalText": "Platform Abstraction — Three Implementations",
+      "autoResize": true, "fontSize": 24, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "api_box", "type": "rectangle", "x": 40, "y": 80, "width": 840, "height": 100,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#dbe4ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a1",
+      "roundness": {"type": 3}, "seed": 2001, "version": 1, "versionNonce": 2002,
+      "isDeleted": false, "boundElements": [{"id": "t_api", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_api", "type": "text", "x": 45, "y": 88, "width": 830, "height": 85,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a1a", "roundness": null,
+      "seed": 2003, "version": 1, "versionNonce": 2004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Platform.h  —  namespace aether::ipc::platform\n\nserverSocket(name)    acceptClient(fd)      connectToServer(name)    closeFd(fd)\ncreateSharedMemory(size)    sendFd(sock, fd, data)    recvFd(sock, &fd, buf)\nsendSignal(fd)    recvSignal(fd)    shutdownConnection(fd)    getPeerUid(fd)",
+      "originalText": "Platform.h  —  namespace aether::ipc::platform\n\nserverSocket(name)    acceptClient(fd)      connectToServer(name)    closeFd(fd)\ncreateSharedMemory(size)    sendFd(sock, fd, data)    recvFd(sock, &fd, buf)\nsendSignal(fd)    recvSignal(fd)    shutdownConnection(fd)    getPeerUid(fd)",
+      "autoResize": true, "fontSize": 13, "fontFamily": 3, "textAlign": "center",
+      "verticalAlign": "middle", "containerId": "api_box", "lineHeight": 1.25
+    },
+
+    {
+      "id": "col_linux", "type": "rectangle", "x": 40, "y": 210, "width": 270, "height": 400,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#edf2ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 40, "groupIds": [], "frameId": null, "index": "a2",
+      "roundness": {"type": 3}, "seed": 3001, "version": 1, "versionNonce": 3002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false
+    },
+    {
+      "id": "l_linux", "type": "text", "x": 55, "y": 218, "width": 200, "height": 20,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 80, "groupIds": [], "frameId": null, "index": "a2a", "roundness": null,
+      "seed": 3003, "version": 1, "versionNonce": 3004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "PlatformLinux.cpp",
+      "originalText": "PlatformLinux.cpp",
+      "autoResize": true, "fontSize": 14, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "id": "linux_detail", "type": "rectangle", "x": 55, "y": 248, "width": 240, "height": 340,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#bac8ff",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a3",
+      "roundness": {"type": 3}, "seed": 4001, "version": 1, "versionNonce": 4002,
+      "isDeleted": false, "boundElements": [{"id": "t_linux", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_linux", "type": "text", "x": 60, "y": 256, "width": 230, "height": 325,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a3a", "roundness": null,
+      "seed": 4003, "version": 1, "versionNonce": 4004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Sockets:\n  AF_UNIX SOCK_SEQPACKET\n  Abstract namespace \\0aether_*\n  MSG_NOSIGNAL on send()\n\nShared Memory:\n  memfd_create()\n  mmap(MAP_SHARED)\n  Zero-filled by kernel\n\nFD Passing:\n  sendmsg() + SCM_RIGHTS\n  recvmsg() + CMSG\n\nSignaling:\n  send(fd, 1 byte)\n  recv(fd, 1 byte)\n\nPeer Auth:\n  SO_PEERCRED → uid\n  geteuid() comparison",
+      "originalText": "Sockets:\n  AF_UNIX SOCK_SEQPACKET\n  Abstract namespace \\0aether_*\n  MSG_NOSIGNAL on send()\n\nShared Memory:\n  memfd_create()\n  mmap(MAP_SHARED)\n  Zero-filled by kernel\n\nFD Passing:\n  sendmsg() + SCM_RIGHTS\n  recvmsg() + CMSG\n\nSignaling:\n  send(fd, 1 byte)\n  recv(fd, 1 byte)\n\nPeer Auth:\n  SO_PEERCRED → uid\n  geteuid() comparison",
+      "autoResize": true, "fontSize": 12, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "linux_detail", "lineHeight": 1.25
+    },
+
+    {
+      "id": "col_mac", "type": "rectangle", "x": 325, "y": 210, "width": 270, "height": 400,
+      "angle": 0, "strokeColor": "#2f9e44", "backgroundColor": "#ebfbee",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 40, "groupIds": [], "frameId": null, "index": "a4",
+      "roundness": {"type": 3}, "seed": 5001, "version": 1, "versionNonce": 5002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false
+    },
+    {
+      "id": "l_mac", "type": "text", "x": 340, "y": 218, "width": 200, "height": 20,
+      "angle": 0, "strokeColor": "#2f9e44", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 80, "groupIds": [], "frameId": null, "index": "a4a", "roundness": null,
+      "seed": 5003, "version": 1, "versionNonce": 5004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "PlatformMac.cpp",
+      "originalText": "PlatformMac.cpp",
+      "autoResize": true, "fontSize": 14, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "id": "mac_detail", "type": "rectangle", "x": 340, "y": 248, "width": 240, "height": 340,
+      "angle": 0, "strokeColor": "#2f9e44", "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a5",
+      "roundness": {"type": 3}, "seed": 6001, "version": 1, "versionNonce": 6002,
+      "isDeleted": false, "boundElements": [{"id": "t_mac", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_mac", "type": "text", "x": 345, "y": 256, "width": 230, "height": 325,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a5a", "roundness": null,
+      "seed": 6003, "version": 1, "versionNonce": 6004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Sockets:\n  AF_UNIX SOCK_STREAM\n  Pathname /tmp/aether_*\n  SO_NOSIGPIPE on socket\n\nShared Memory:\n  shm_open() + ftruncate()\n  mmap(MAP_SHARED)\n  Explicit zero-fill\n\nFD Passing:\n  sendmsg() + SCM_RIGHTS\n  recvmsg() + CMSG\n  (same as Linux)\n\nSignaling:\n  send(fd, 1 byte)\n  recv(fd, 1 byte)\n\nPeer Auth:\n  LOCAL_PEERPID → pid\n  getpwuid() for uid",
+      "originalText": "Sockets:\n  AF_UNIX SOCK_STREAM\n  Pathname /tmp/aether_*\n  SO_NOSIGPIPE on socket\n\nShared Memory:\n  shm_open() + ftruncate()\n  mmap(MAP_SHARED)\n  Explicit zero-fill\n\nFD Passing:\n  sendmsg() + SCM_RIGHTS\n  recvmsg() + CMSG\n  (same as Linux)\n\nSignaling:\n  send(fd, 1 byte)\n  recv(fd, 1 byte)\n\nPeer Auth:\n  LOCAL_PEERPID → pid\n  getpwuid() for uid",
+      "autoResize": true, "fontSize": 12, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "mac_detail", "lineHeight": 1.25
+    },
+
+    {
+      "id": "col_win", "type": "rectangle", "x": 610, "y": 210, "width": 270, "height": 400,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#f8f0fc",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 40, "groupIds": [], "frameId": null, "index": "a6",
+      "roundness": {"type": 3}, "seed": 7001, "version": 1, "versionNonce": 7002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false
+    },
+    {
+      "id": "l_win", "type": "text", "x": 625, "y": 218, "width": 200, "height": 20,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 80, "groupIds": [], "frameId": null, "index": "a6a", "roundness": null,
+      "seed": 7003, "version": 1, "versionNonce": 7004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "PlatformWindows.cpp",
+      "originalText": "PlatformWindows.cpp",
+      "autoResize": true, "fontSize": 14, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+    {
+      "id": "win_detail", "type": "rectangle", "x": 625, "y": 248, "width": 240, "height": 340,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#e5dbff",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a7",
+      "roundness": {"type": 3}, "seed": 8001, "version": 1, "versionNonce": 8002,
+      "isDeleted": false, "boundElements": [{"id": "t_win", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_win", "type": "text", "x": 630, "y": 256, "width": 230, "height": 325,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a7a", "roundness": null,
+      "seed": 8003, "version": 1, "versionNonce": 8004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Sockets (Named Pipes):\n  CreateNamedPipe()\n  \\\\.\\pipe\\aether_*\n  FILE_FLAG_OVERLAPPED\n\nShared Memory:\n  CreateFileMapping()\n  MapViewOfFile()\n  Zero-filled by kernel\n\nHandle Passing:\n  DuplicateHandle()\n  Send handle value as data\n  (no SCM_RIGHTS equiv)\n\nSignaling:\n  WriteFile(pipe, 1 byte)\n  ReadFile(pipe, 1 byte)\n\nPeer Auth:\n  GetNamedPipeClientProcessId()\n  OpenProcessToken() → uid",
+      "originalText": "Sockets (Named Pipes):\n  CreateNamedPipe()\n  \\\\.\\pipe\\aether_*\n  FILE_FLAG_OVERLAPPED\n\nShared Memory:\n  CreateFileMapping()\n  MapViewOfFile()\n  Zero-filled by kernel\n\nHandle Passing:\n  DuplicateHandle()\n  Send handle value as data\n  (no SCM_RIGHTS equiv)\n\nSignaling:\n  WriteFile(pipe, 1 byte)\n  ReadFile(pipe, 1 byte)\n\nPeer Auth:\n  GetNamedPipeClientProcessId()\n  OpenProcessToken() → uid",
+      "autoResize": true, "fontSize": 12, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "win_detail", "lineHeight": 1.25
+    }
+  ],
+  "appState": {
+    "gridSize": 20, "gridStep": 5, "gridModeEnabled": true,
+    "viewBackgroundColor": "#ffffff"
+  },
+  "files": {}
+}

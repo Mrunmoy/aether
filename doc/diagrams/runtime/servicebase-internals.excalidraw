@@ -1,0 +1,318 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "http://localhost:3000",
+  "elements": [
+    {
+      "id": "title", "type": "text", "x": 60, "y": 20, "width": 800, "height": 35,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a0", "roundness": null,
+      "seed": 1001, "version": 1, "versionNonce": 1002, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "ServiceBase — Internal Architecture",
+      "originalText": "ServiceBase — Internal Architecture",
+      "autoResize": true, "fontSize": 24, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "band_threaded", "type": "rectangle", "x": 40, "y": 70, "width": 440, "height": 600,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#edf2ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 30, "groupIds": [], "frameId": null, "index": "a1",
+      "roundness": { "type": 3 }, "seed": 2001, "version": 1, "versionNonce": 2002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false
+    },
+    {
+      "id": "label_threaded", "type": "text", "x": 55, "y": 78, "width": 300, "height": 20,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 80, "groupIds": [], "frameId": null, "index": "a1a", "roundness": null,
+      "seed": 2003, "version": 1, "versionNonce": 2004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Thread-per-client Mode (default)",
+      "originalText": "Thread-per-client Mode (default)",
+      "autoResize": true, "fontSize": 14, "fontFamily": 2, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "band_runloop", "type": "rectangle", "x": 520, "y": 70, "width": 380, "height": 600,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#f8f0fc",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 30, "groupIds": [], "frameId": null, "index": "a2",
+      "roundness": { "type": 3 }, "seed": 3001, "version": 1, "versionNonce": 3002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false
+    },
+    {
+      "id": "label_runloop", "type": "text", "x": 535, "y": 78, "width": 300, "height": 20,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 80, "groupIds": [], "frameId": null, "index": "a2a", "roundness": null,
+      "seed": 3003, "version": 1, "versionNonce": 3004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "RunLoop Mode (Vortex)",
+      "originalText": "RunLoop Mode (Vortex)",
+      "autoResize": true, "fontSize": 14, "fontFamily": 2, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "accept_thread", "type": "rectangle", "x": 60, "y": 120, "width": 200, "height": 60,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#bac8ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a3",
+      "roundness": { "type": 3 }, "seed": 4001, "version": 1, "versionNonce": 4002,
+      "isDeleted": false, "boundElements": [{"id": "text_accept", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_accept", "type": "text", "x": 65, "y": 130, "width": 190, "height": 40,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a3a", "roundness": null,
+      "seed": 4003, "version": 1, "versionNonce": 4004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Accept Thread\nplatform::acceptClient()",
+      "originalText": "Accept Thread\nplatform::acceptClient()",
+      "autoResize": true, "fontSize": 13, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "middle", "containerId": "accept_thread", "lineHeight": 1.25
+    },
+
+    {
+      "id": "arrow_accept_to_conn", "type": "arrow", "x": 160, "y": 180, "width": 0, "height": 50,
+      "angle": 0, "strokeColor": "#495057", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 70, "groupIds": [], "frameId": null, "index": "a3b",
+      "roundness": { "type": 2 }, "seed": 4005, "version": 1, "versionNonce": 4006,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false,
+      "points": [[0,0],[0,50]], "lastCommittedPoint": null,
+      "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow", "elbowed": false
+    },
+    {
+      "id": "label_new_client", "type": "text", "x": 170, "y": 195, "width": 120, "height": 18,
+      "angle": 0, "strokeColor": "#495057", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 60, "groupIds": [], "frameId": null, "index": "a3c", "roundness": null,
+      "seed": 4007, "version": 1, "versionNonce": 4008, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "new connection",
+      "originalText": "new connection",
+      "autoResize": true, "fontSize": 11, "fontFamily": 2, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "client_conn_box", "type": "rectangle", "x": 60, "y": 240, "width": 400, "height": 260,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#dbe4ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a4",
+      "roundness": { "type": 3 }, "seed": 5001, "version": 1, "versionNonce": 5002,
+      "isDeleted": false, "boundElements": [{"id": "text_clientconn", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_clientconn", "type": "text", "x": 65, "y": 250, "width": 390, "height": 240,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a4a", "roundness": null,
+      "seed": 5003, "version": 1, "versionNonce": 5004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "ClientConn  (one per connected client)\n\n┌─ Connection ──────────────────────────┐\n│  socketFd    (UDS / named pipe)       │\n│  shmFd       (shared memory region)   │\n│  txRing      (server → client, 256K)  │\n│  rxRing      (client → server, 256K)  │\n└───────────────────────────────────────┘\n\n  receiverThread   (reads rxRing)\n  sendMutex        (serializes txRing writes)\n  handlerMutex     (guards RunLoop dispatch)\n  dead flag        (atomic, marks for reaping)\n\n⚠ txRing is SPSC — sendMutex MUST be held\n  for sendResponse() AND sendNotify()",
+      "originalText": "ClientConn  (one per connected client)\n\n┌─ Connection ──────────────────────────┐\n│  socketFd    (UDS / named pipe)       │\n│  shmFd       (shared memory region)   │\n│  txRing      (server → client, 256K)  │\n│  rxRing      (client → server, 256K)  │\n└───────────────────────────────────────┘\n\n  receiverThread   (reads rxRing)\n  sendMutex        (serializes txRing writes)\n  handlerMutex     (guards RunLoop dispatch)\n  dead flag        (atomic, marks for reaping)\n\n⚠ txRing is SPSC — sendMutex MUST be held\n  for sendResponse() AND sendNotify()",
+      "autoResize": true, "fontSize": 12, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "client_conn_box", "lineHeight": 1.25
+    },
+
+    {
+      "id": "dispatch_box", "type": "rectangle", "x": 60, "y": 520, "width": 400, "height": 120,
+      "angle": 0, "strokeColor": "#2f9e44", "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a5",
+      "roundness": { "type": 3 }, "seed": 6001, "version": 1, "versionNonce": 6002,
+      "isDeleted": false, "boundElements": [{"id": "text_dispatch", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_dispatch", "type": "text", "x": 65, "y": 530, "width": 390, "height": 100,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a5a", "roundness": null,
+      "seed": 6003, "version": 1, "versionNonce": 6004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Dispatch Chain (threaded mode)\n\nreceiverLoop()\n  → recvSignal()           // block until wakeup\n  → readFrame(rxRing)      // read request\n  → onRequest(serviceId, messageId, payload)\n    → handleFoo(args)      // virtual, user implements\n  → sendResponse(txRing)   // write response (holds sendMutex)\n  → sendSignal()           // wake client",
+      "originalText": "Dispatch Chain (threaded mode)\n\nreceiverLoop()\n  → recvSignal()           // block until wakeup\n  → readFrame(rxRing)      // read request\n  → onRequest(serviceId, messageId, payload)\n    → handleFoo(args)      // virtual, user implements\n  → sendResponse(txRing)   // write response (holds sendMutex)\n  → sendSignal()           // wake client",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "dispatch_box", "lineHeight": 1.25
+    },
+
+    {
+      "id": "rl_loop", "type": "rectangle", "x": 540, "y": 120, "width": 340, "height": 80,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#e5dbff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a6",
+      "roundness": { "type": 3 }, "seed": 7001, "version": 1, "versionNonce": 7002,
+      "isDeleted": false, "boundElements": [{"id": "text_rl_loop", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_rl_loop", "type": "text", "x": 545, "y": 130, "width": 330, "height": 60,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a6a", "roundness": null,
+      "seed": 7003, "version": 1, "versionNonce": 7004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "RunLoop (single thread)\naddSource(listenFd) → onAcceptReady()\naddSource(clientFd) → onClientReady()",
+      "originalText": "RunLoop (single thread)\naddSource(listenFd) → onAcceptReady()\naddSource(clientFd) → onClientReady()",
+      "autoResize": true, "fontSize": 13, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "middle", "containerId": "rl_loop", "lineHeight": 1.25
+    },
+
+    {
+      "id": "rl_accept", "type": "rectangle", "x": 540, "y": 230, "width": 340, "height": 60,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#f3d9fa",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a7",
+      "roundness": { "type": 3 }, "seed": 8001, "version": 1, "versionNonce": 8002,
+      "isDeleted": false, "boundElements": [{"id": "text_rl_accept", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_rl_accept", "type": "text", "x": 545, "y": 240, "width": 330, "height": 40,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a7a", "roundness": null,
+      "seed": 8003, "version": 1, "versionNonce": 8004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "onAcceptReady()\naccept → handshake → addSource(newClientFd)",
+      "originalText": "onAcceptReady()\naccept → handshake → addSource(newClientFd)",
+      "autoResize": true, "fontSize": 13, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "middle", "containerId": "rl_accept", "lineHeight": 1.25
+    },
+
+    {
+      "id": "rl_client", "type": "rectangle", "x": 540, "y": 320, "width": 340, "height": 80,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#f3d9fa",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a8",
+      "roundness": { "type": 3 }, "seed": 9001, "version": 1, "versionNonce": 9002,
+      "isDeleted": false, "boundElements": [{"id": "text_rl_client", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_rl_client", "type": "text", "x": 545, "y": 330, "width": 330, "height": 60,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a8a", "roundness": null,
+      "seed": 9003, "version": 1, "versionNonce": 9004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "onClientReady(clientConn)\nreadFrame() → onRequest() → handleFoo()\nsendResponse() (holds sendMutex + handlerMutex)",
+      "originalText": "onClientReady(clientConn)\nreadFrame() → onRequest() → handleFoo()\nsendResponse() (holds sendMutex + handlerMutex)",
+      "autoResize": true, "fontSize": 12, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "middle", "containerId": "rl_client", "lineHeight": 1.25
+    },
+
+    {
+      "id": "rl_notify", "type": "rectangle", "x": 540, "y": 430, "width": 340, "height": 80,
+      "angle": 0, "strokeColor": "#e67700", "backgroundColor": "#fff3bf",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a9",
+      "roundness": { "type": 3 }, "seed": 10001, "version": 1, "versionNonce": 10002,
+      "isDeleted": false, "boundElements": [{"id": "text_rl_notify", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_rl_notify", "type": "text", "x": 545, "y": 440, "width": 330, "height": 60,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a9a", "roundness": null,
+      "seed": 10003, "version": 1, "versionNonce": 10004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "sendNotify() — broadcast to all clients\nfor each client:\n  lock sendMutex → writeFrame(txRing) → sendSignal()",
+      "originalText": "sendNotify() — broadcast to all clients\nfor each client:\n  lock sendMutex → writeFrame(txRing) → sendSignal()",
+      "autoResize": true, "fontSize": 12, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "middle", "containerId": "rl_notify", "lineHeight": 1.25
+    },
+
+    {
+      "id": "rl_stop", "type": "rectangle", "x": 540, "y": 540, "width": 340, "height": 100,
+      "angle": 0, "strokeColor": "#c92a2a", "backgroundColor": "#ffe3e3",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "aA",
+      "roundness": { "type": 3 }, "seed": 11001, "version": 1, "versionNonce": 11002,
+      "isDeleted": false, "boundElements": [{"id": "text_rl_stop", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "text_rl_stop", "type": "text", "x": 545, "y": 550, "width": 330, "height": 80,
+      "angle": 0, "strokeColor": "#c92a2a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "aAa", "roundness": null,
+      "seed": 11003, "version": 1, "versionNonce": 11004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "stop() — shutdown sequence\n1. m_running = false\n2. removeSource(listenFd)\n3. for each client: removeSource(fd) → close()\n4. loop.stop() or join threads",
+      "originalText": "stop() — shutdown sequence\n1. m_running = false\n2. removeSource(listenFd)\n3. for each client: removeSource(fd) → close()\n4. loop.stop() or join threads",
+      "autoResize": true, "fontSize": 12, "fontFamily": 2, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "rl_stop", "lineHeight": 1.25
+    },
+
+    {
+      "id": "arrow_rl_1", "type": "arrow", "x": 710, "y": 200, "width": 0, "height": 30,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 60, "groupIds": [], "frameId": null, "index": "aB",
+      "roundness": { "type": 2 }, "seed": 12001, "version": 1, "versionNonce": 12002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false,
+      "points": [[0,0],[0,30]], "lastCommittedPoint": null,
+      "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow", "elbowed": false
+    },
+    {
+      "id": "arrow_rl_2", "type": "arrow", "x": 710, "y": 290, "width": 0, "height": 30,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 60, "groupIds": [], "frameId": null, "index": "aC",
+      "roundness": { "type": 2 }, "seed": 13001, "version": 1, "versionNonce": 13002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false,
+      "points": [[0,0],[0,30]], "lastCommittedPoint": null,
+      "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow", "elbowed": false
+    },
+    {
+      "id": "arrow_rl_3", "type": "arrow", "x": 710, "y": 400, "width": 0, "height": 30,
+      "angle": 0, "strokeColor": "#e67700", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "dashed", "roughness": 0,
+      "opacity": 60, "groupIds": [], "frameId": null, "index": "aD",
+      "roundness": { "type": 2 }, "seed": 14001, "version": 1, "versionNonce": 14002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false,
+      "points": [[0,0],[0,30]], "lastCommittedPoint": null,
+      "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow", "elbowed": false
+    },
+    {
+      "id": "arrow_rl_4", "type": "arrow", "x": 710, "y": 510, "width": 0, "height": 30,
+      "angle": 0, "strokeColor": "#c92a2a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 60, "groupIds": [], "frameId": null, "index": "aE",
+      "roundness": { "type": 2 }, "seed": 15001, "version": 1, "versionNonce": 15002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false,
+      "points": [[0,0],[0,30]], "lastCommittedPoint": null,
+      "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow", "elbowed": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20, "gridStep": 5, "gridModeEnabled": true,
+    "viewBackgroundColor": "#ffffff"
+  },
+  "files": {}
+}
