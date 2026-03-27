@@ -74,14 +74,23 @@ namespace aether::ipc
     // ── Handshake Functions ─────────────────────────────────────────
     // Internal — used by Service layer, not by user code.
 
+    // Default socket timeout for the handshake (blocking accept loop).
+    inline constexpr uint32_t kDefaultHandshakeTimeoutMs = 5000;
+
     // Server side: accept one client connection and perform handshake.
     // listenFd: listening socket from platform::serverSocket().
+    // timeoutMs: socket timeout for the handshake.
+    //   RunLoop callers should pass a shorter value to avoid blocking
+    //   the event loop on a slow or malicious peer.
     // Returns valid Connection on success, invalid (socketFd == kInvalidHandle) on failure.
-    Connection acceptConnection(platform::Handle listenFd);
+    Connection acceptConnection(platform::Handle listenFd,
+                                uint32_t timeoutMs = kDefaultHandshakeTimeoutMs);
 
     // Client side: connect to server and perform handshake.
     // name: service name (same name passed to platform::serverSocket).
+    // timeoutMs: socket timeout for the handshake.
     // Returns valid Connection on success, invalid on failure.
-    Connection connectToServer(const char *name);
+    Connection connectToServer(const char *name,
+                               uint32_t timeoutMs = kDefaultHandshakeTimeoutMs);
 
 } // namespace aether::ipc

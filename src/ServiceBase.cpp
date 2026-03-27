@@ -4,6 +4,10 @@
 #include <algorithm>
 namespace aether::ipc
 {
+    // Shorter handshake timeout for RunLoop accept path to avoid blocking
+    // event dispatch for up to 5 s (the default) on a slow/hung peer.
+    // NOTE: on Linux this only constrains SO_SNDTIMEO, not SO_RCVTIMEO.
+    static constexpr uint32_t kRunLoopHandshakeTimeoutMs = 500;
 
     // ── Constructor / Destructor ─────────────────────────────────────
 
@@ -234,7 +238,7 @@ namespace aether::ipc
 
     void ServiceBase::onAcceptReady()
     {
-        Connection conn = acceptConnection(m_listenFd);
+        Connection conn = acceptConnection(m_listenFd, kRunLoopHandshakeTimeoutMs);
         if (!conn.valid())
         {
             return;

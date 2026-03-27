@@ -291,6 +291,12 @@ namespace aether::ipc::platform
         if (!connected)
         {
             DWORD err = GetLastError();
+
+            // ERROR_PIPE_CONNECTED means the client connected between
+            // CreateNamedPipe and ConnectNamedPipe.  The pipe is already
+            // usable — skip the wait and return immediately.  A future
+            // async accept path (beginAsyncAccept) must handle this case
+            // identically: treat it as synchronous completion.
             if (err == ERROR_PIPE_CONNECTED)
             {
                 CloseHandle(ov.hEvent);

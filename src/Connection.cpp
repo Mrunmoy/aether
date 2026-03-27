@@ -40,7 +40,6 @@ namespace aether::ipc
     //  Server: rx = Ring 0, tx = Ring 1
 
     static constexpr uint32_t kShmSize = 2 * sizeof(IpcRing);
-    static constexpr uint32_t kSocketTimeoutMs = 5000;
 
     static std::string makeSharedMemoryName(const char *serviceName)
     {
@@ -77,7 +76,7 @@ namespace aether::ipc
 
     // ── Client Handshake ────────────────────────────────────────────
 
-    Connection connectToServer(const char *name)
+    Connection connectToServer(const char *name, uint32_t timeoutMs)
     {
         Connection conn;
 
@@ -89,7 +88,7 @@ namespace aether::ipc
         }
 
         // 2. Set socket timeouts.
-        if (platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs) != 0)
+        if (platform::setSocketTimeouts(conn.socketFd, timeoutMs) != 0)
         {
             conn.close();
             return conn;
@@ -149,7 +148,7 @@ namespace aether::ipc
 
     // ── Server Handshake ────────────────────────────────────────────
 
-    Connection acceptConnection(platform::Handle listenFd)
+    Connection acceptConnection(platform::Handle listenFd, uint32_t timeoutMs)
     {
         Connection conn;
 
@@ -161,7 +160,7 @@ namespace aether::ipc
         }
 
         // 2. Set socket timeouts.
-        if (platform::setSocketTimeouts(conn.socketFd, kSocketTimeoutMs) != 0)
+        if (platform::setSocketTimeouts(conn.socketFd, timeoutMs) != 0)
         {
             conn.close();
             return conn;
