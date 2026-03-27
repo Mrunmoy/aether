@@ -22,7 +22,7 @@ architecture, see [aether-hld.md](aether-hld.md).
 ### 2.2 IpcRing
 
 ```cpp
-using IpcRing = ms::spsc::ByteRingBuffer<kRingSize>;
+using IpcRing = ouroboros::spsc::ByteRingBuffer<kRingSize>;
 ```
 
 Lock-free SPSC byte ring buffer from the ouroboros library. One
@@ -411,13 +411,13 @@ defaults. Move-assignment calls `close()` on the destination first.
 
 ### 6.1 Constructor
 
-**Signature:** `explicit ServiceBase(const char *serviceName, ms::RunLoop *loop = nullptr)`
+**Signature:** `explicit ServiceBase(const char *serviceName, vortex::RunLoop *loop = nullptr)`
 **Description:** Create a service base with the given name.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
 | `serviceName` | `const char *` | in | Logical service name used to derive the platform-local endpoint address. |
-| `loop` | `ms::RunLoop *` | in | Optional RunLoop. `nullptr` = threaded mode (internal threads). Non-null = RunLoop mode (zero internal threads). |
+| `loop` | `vortex::RunLoop *` | in | Optional RunLoop. `nullptr` = threaded mode (internal threads). Non-null = RunLoop mode (zero internal threads). |
 
 ### 6.2 start()
 
@@ -513,13 +513,13 @@ defaults. Move-assignment calls `close()` on the destination first.
 
 ### 7.1 Constructor
 
-**Signature:** `explicit ClientBase(const char *serviceName, ms::RunLoop *loop = nullptr)`
+**Signature:** `explicit ClientBase(const char *serviceName, vortex::RunLoop *loop = nullptr)`
 **Description:** Create a client base targeting the given service name.
 
 | Parameter | Type | Direction | Description |
 |-----------|------|-----------|-------------|
 | `serviceName` | `const char *` | in | Name of the service to connect to. |
-| `loop` | `ms::RunLoop *` | in | Optional RunLoop. `nullptr` = threaded mode. Non-null = RunLoop mode. |
+| `loop` | `vortex::RunLoop *` | in | Optional RunLoop. `nullptr` = threaded mode. Non-null = RunLoop mode. |
 
 ### 7.2 connect()
 
@@ -1022,8 +1022,15 @@ lives long enough even if the map entry is erased during cleanup.
 | `inc/FrameIO.h` | Frame read/write functions (mostly inline) |
 | `inc/ServiceBase.h` | Server-side service base class |
 | `inc/ClientBase.h` | Client-side RPC base class |
+| `inc/ITransport.h` | Abstract transport interface for non-SHM transports |
+| `inc/TransportClientBase.h` | Client base for serial/USB transports |
+| `inc/aether_ipc.h` | Stable C API with opaque handles (installed header) |
 | `src/PlatformLinux.cpp` | Linux implementation of platform functions |
+| `src/PlatformMac.cpp` | macOS implementation (kqueue, pathname sockets, shm_open) |
+| `src/PlatformWindows.cpp` | Windows implementation (named pipes, CreateFileMapping) |
 | `src/Connection.cpp` | Handshake implementation and `Connection::close()` |
 | `src/FrameIO.cpp` | `readFrameAlloc()` implementation |
 | `src/ServiceBase.cpp` | Service lifecycle, threading, dispatch, notifications |
 | `src/ClientBase.cpp` | Client connect, sync RPC, receiver loop |
+| `src/TransportClientBase.cpp` | Serial/USB transport client implementation |
+| `src/CApi.cpp` | C API implementation wrapping C++ classes |
