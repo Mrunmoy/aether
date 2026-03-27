@@ -673,6 +673,43 @@ TEST(ClientBaseTest, RunLoop_BothOnSameRunLoop)
     svc.stop();
 }
 
+TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRLConn2");
+
+    ClientBase client(SVC_NAME, &loop);
+    ASSERT_TRUE(client.connect());
+    EXPECT_FALSE(client.connect());
+    EXPECT_TRUE(client.isConnected());
+
+    RunLoopGuard guard(loop);
+    client.disconnect();
+    svc.stop();
+}
+
+#else
+
+TEST(ClientBaseTest, RunLoopModeNotSupportedOnWindows)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ms::RunLoop loop;
+    loop.init("CliRLUnsupported");
+
+    ClientBase client(SVC_NAME, &loop);
+    EXPECT_FALSE(client.connect());
+    EXPECT_FALSE(client.isConnected());
+
+    svc.stop();
+}
+
+#endif
+
 // ═════════════════════════════════════════════════════════════════════
 // Concurrent calls from the same client (tests m_sendMutex)
 // ═════════════════════════════════════════════════════════════════════
@@ -771,43 +808,6 @@ TEST(ClientBaseTest, ReconnectAfterServerDisconnect)
         svc2.stop();
     }
 }
-
-TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
-{
-    EchoService svc(SVC_NAME);
-    ASSERT_TRUE(svc.start());
-
-    ms::RunLoop loop;
-    loop.init("CliRLConn2");
-
-    ClientBase client(SVC_NAME, &loop);
-    ASSERT_TRUE(client.connect());
-    EXPECT_FALSE(client.connect());
-    EXPECT_TRUE(client.isConnected());
-
-    RunLoopGuard guard(loop);
-    client.disconnect();
-    svc.stop();
-}
-
-#else
-
-TEST(ClientBaseTest, RunLoopModeNotSupportedOnWindows)
-{
-    EchoService svc(SVC_NAME);
-    ASSERT_TRUE(svc.start());
-
-    ms::RunLoop loop;
-    loop.init("CliRLUnsupported");
-
-    ClientBase client(SVC_NAME, &loop);
-    EXPECT_FALSE(client.connect());
-    EXPECT_FALSE(client.isConnected());
-
-    svc.stop();
-}
-
-#endif
 
 // ═════════════════════════════════════════════════════════════════════
 // Notification sequence numbers increase monotonically (aux field)
