@@ -27,7 +27,8 @@ desktop-to-device links where latency and footprint matter.
 
 ## 2. The Big Picture
 
-![Architecture](diagrams/overview/aether-architecture.png)
+<!-- TODO: export diagrams/overview/aether-architecture.excalidraw to PNG -->
+<!-- ![Architecture](diagrams/overview/aether-architecture.png) -->
 
 The architecture diagram shows the five runtime layers stacked bottom to top:
 Platform, Connection, FrameIO, ServiceBase/ClientBase, and Generated Code. The
@@ -141,10 +142,10 @@ it to `onNotification()`.
 ![Wire Format](diagrams/framing/wire-format.png)
 
 The wire format diagram shows the 24-byte `FrameHeader` layout. The header
-contains a protocol version byte, flags byte (request, response, or
+contains a 2-byte protocol version, 2-byte flags field (request, response, or
 notification), 4-byte service ID, 4-byte message ID, 4-byte sequence number,
-4-byte payload length, 4-byte auxiliary field (used for status codes in
-responses), and 2 reserved bytes.
+4-byte payload length, and 4-byte auxiliary field (used for status codes in
+responses).
 
 All fields use native endian because Aether is designed for same-machine IPC
 and same-architecture serial links. There is no byte-swapping overhead. Frames
@@ -214,7 +215,8 @@ implementing the Platform interface -- everything above it works unchanged.
 
 ## 10. RunLoop Integration
 
-![RunLoop Integration](diagrams/runtime/runloop-integration.png)
+<!-- TODO: export diagrams/runtime/runloop-integration.excalidraw to PNG -->
+<!-- ![RunLoop Integration](diagrams/runtime/runloop-integration.png) -->
 
 The RunLoop integration diagram shows how ServiceBase and ClientBase wire into
 the Vortex event loop. When a `vortex::RunLoop*` is passed to the constructor,

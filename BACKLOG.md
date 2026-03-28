@@ -40,6 +40,39 @@ Local tracking doc. Do NOT commit.
 | 17 | Unify SerialTransport across examples | `examples/` | **DONE** — PR #32 shared `examples/SerialTransport.h` |
 | 18 | No handshake in serial examples | `examples/` | **DONE** — PR #33 handshake protocol + negotiated maxPayload |
 
+## Phase 5 — RunLoop / Windows Integration
+
+### P0 — Critical (all done)
+
+| # | Issue | Status |
+|---|-------|--------|
+| B1 | WFMO slot budget overflow (sources+timers > 63) | **DONE** — Vortex PR #9, Aether PR #48 |
+| B6 | CreatePipe "waitable" claim (pipe-based tests fail on Win32) | **DONE** — Vortex PR #9 (GTEST_SKIP) |
+| B7 | find_package(Threads) guard breaks MSVC linking | **FALSE POSITIVE** — no change needed |
+
+### P1 — Hardening (all done)
+
+| # | Issue | Status |
+|---|-------|--------|
+| D1 | Handshake blocks RunLoop thread for 5s | **DONE** — Aether PR #50 (`timeoutMs` param, 500ms for RunLoop) |
+| D4 | onError dead code on WFMO backend (undocumented) | **DONE** — Vortex PR #10 (docs in RunLoop.h + backend_win32.cpp) |
+| D7 | ERROR_PIPE_CONNECTED race undocumented | **DONE** — Aether PR #50 (clarifying comment) |
+| D9 | 4 tests trapped in `#if !defined(_WIN32)` guard | **DONE** — Aether PR #50 (moved outside guard) |
+| D10 | WFMO starvation of high-index sources | **DONE** — Vortex PR #10 (round-robin sweep mitigation) |
+
+### Deferred to IOCP rewrite (Phase 5c)
+
+| # | Issue | Blocked on |
+|---|-------|-----------|
+| D2 | teardown handlerMutex race | IOCP rewrite |
+| D3/D6 | m_listenFd token vs handle | IOCP rewrite |
+| D5 | GQCSEx batch dequeue | IOCP rewrite |
+| D8 | context map locking | IOCP rewrite |
+| B2 | Retired context early-free (use-after-free) | IOCP rewrite |
+| B3 | CancelIoEx failure leaks (context leaks) | IOCP rewrite |
+| B4 | Missing ResetEvent (100% CPU busy loop) | Overlapped I/O rewrite |
+| B5 | Re-arm before dispatch (contradicts removeSource safety) | IOCP rewrite |
+
 ## Done (reference)
 
 - PR #4: Robustness hardening (MSG_NOSIGNAL, send mutex, socket timeouts, move semantics, version checks, CI)
@@ -69,3 +102,8 @@ Local tracking doc. Do NOT commit.
 - PR #32: Unify SerialTransport across examples
 - PR #33: Serial transport handshake protocol
 - PR #34: Vortex upgrade + error/hangup callbacks
+- PR #48: Vortex submodule update (P0 WFMO fix)
+- PR #49: Design docs + dev journal (Phase 5 P0)
+- PR #50: Handshake timeout + pipe docs + trapped tests (Phase 5 P1)
+- PR #51: Vortex submodule update (P1 starvation sweep)
+- PR #52: Phase 5 P1 development journal

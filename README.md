@@ -224,6 +224,9 @@ See [`examples/echo/`](examples/echo/) for a source-build codegen example.
 | [ipcgen-lld.md](doc/ipcgen-lld.md) | Code generator module APIs and code generation |
 | [aether-vision.md](doc/aether-vision.md) | Vision, platform requirements, language roles |
 | [architecture-guide.md](doc/architecture-guide.md) | Architecture walkthrough and design rationale |
+| [phase5-runloop-plan.md](doc/phase5-runloop-plan.md) | Vortex RunLoop completion review and implementation plan |
+| [dev-journal-phase5-p0.md](doc/dev-journal-phase5-p0.md) | Phase 5 P0 bug-fix development journal |
+| [dev-journal-phase5-p1.md](doc/dev-journal-phase5-p1.md) | Phase 5 P1 hardening development journal |
 
 ## License
 
