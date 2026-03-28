@@ -525,8 +525,6 @@ TEST(ClientBaseTest, NotifySkipsDeadClient)
 // RunLoop-mode tests
 // ═══════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 // Helper: run loop in background, auto-stop on scope exit.
 struct RunLoopGuard
 {
@@ -690,25 +688,6 @@ TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
     client.disconnect();
     svc.stop();
 }
-
-#else
-
-TEST(ClientBaseTest, RunLoopModeNotSupportedOnWindows)
-{
-    EchoService svc(SVC_NAME);
-    ASSERT_TRUE(svc.start());
-
-    ms::RunLoop loop;
-    loop.init("CliRLUnsupported");
-
-    ClientBase client(SVC_NAME, &loop);
-    EXPECT_FALSE(client.connect());
-    EXPECT_FALSE(client.isConnected());
-
-    svc.stop();
-}
-
-#endif
 
 // ═════════════════════════════════════════════════════════════════════
 // Concurrent calls from the same client (tests m_sendMutex)

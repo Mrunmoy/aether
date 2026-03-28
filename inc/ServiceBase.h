@@ -76,6 +76,10 @@ namespace aether::ipc
             std::mutex handlerMutex; // guards RunLoop handler execution
             std::mutex sendMutex;    // serializes all server→client txRing writes (SPSC)
             std::atomic<bool> dead{false}; // set when client disconnects
+#if defined(_WIN32)
+            platform::Handle signalSourceHandle = platform::kInvalidHandle;
+            ~ClientConn();
+#endif
         };
 
         void acceptLoop(platform::Handle listenFd);
@@ -107,6 +111,10 @@ namespace aether::ipc
 
         std::mutex m_clientsMutex;
         std::vector<std::shared_ptr<ClientConn>> m_clients;
+
+#if defined(_WIN32)
+        platform::Handle m_acceptSourceHandle = platform::kInvalidHandle;
+#endif
     };
 
 } // namespace aether::ipc

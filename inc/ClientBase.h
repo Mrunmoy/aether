@@ -92,6 +92,10 @@ namespace aether::ipc
         std::mutex m_handlerMutex; // guards RunLoop handler execution
         std::mutex m_sendMutex;   // serializes txRing writes (SPSC invariant)
 
+#if defined(_WIN32)
+        platform::Handle m_signalSourceHandle = platform::kInvalidHandle;
+#endif
+
     protected:
         std::atomic<uint32_t> m_nextSeq{1};
         std::mutex m_pendingMutex;
