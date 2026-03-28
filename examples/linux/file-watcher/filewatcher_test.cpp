@@ -288,7 +288,7 @@ protected:
         if (!m_tmpDir.empty())
         {
             std::string cmd = "rm -rf " + m_tmpDir;
-            (void)system(cmd.c_str());
+            [[maybe_unused]] auto rc = system(cmd.c_str());
         }
     }
 
@@ -320,7 +320,7 @@ protected:
         int fd = open(path.c_str(), O_WRONLY | O_APPEND);
         if (fd >= 0)
         {
-            (void)write(fd, "x", 1);
+            [[maybe_unused]] auto n = write(fd, "x", 1);
             close(fd);
         }
     }
@@ -339,7 +339,7 @@ protected:
         for (auto &d : m_extraDirs)
         {
             std::string cmd = "rm -rf " + d;
-            (void)system(cmd.c_str());
+            [[maybe_unused]] auto rc = system(cmd.c_str());
         }
     }
 };
