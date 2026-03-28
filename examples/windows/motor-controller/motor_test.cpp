@@ -252,6 +252,25 @@ private:
                 m_position = static_cast<int32_t>(std::round(posFloat));
             }
 
+            // Crossover detection: on platforms with coarse timer resolution
+            // (e.g. Windows ~15ms), a single tick can overshoot the target.
+            if (m_moveToActive)
+            {
+                bool crossed =
+                    (m_targetVelocity >= 0.0f && m_position >= m_targetPosition) ||
+                    (m_targetVelocity < 0.0f && m_position <= m_targetPosition);
+                if (crossed)
+                {
+                    m_position = m_targetPosition;
+                    m_velocity = 0.0f;
+                    m_moveToActive = false;
+                    m_state = Idle;
+                    notifyMotionComplete(m_position);
+                    stallMs = 0;
+                    continue;
+                }
+            }
+
             // Limit switch checks
             if (m_position <= kPositionMin)
             {
