@@ -29,4 +29,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_subdirectory(linux)
 endif()
 
+add_subdirectory(windows/can-bus-ecu)
+
 add_subdirectory(windows)
