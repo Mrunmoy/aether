@@ -60,18 +60,18 @@ Local tracking doc. Do NOT commit.
 | D9 | 4 tests trapped in `#if !defined(_WIN32)` guard | **DONE** — Aether PR #50 (moved outside guard) |
 | D10 | WFMO starvation of high-index sources | **DONE** — Vortex PR #10 (round-robin sweep mitigation) |
 
-### Deferred to IOCP rewrite (Phase 5c)
+### Phase 5c: IOCP Backend (all done)
 
-| # | Issue | Blocked on |
-|---|-------|-----------|
-| D2 | teardown handlerMutex race | IOCP rewrite |
-| D3/D6 | m_listenFd token vs handle | IOCP rewrite |
-| D5 | GQCSEx batch dequeue | IOCP rewrite |
-| D8 | context map locking | IOCP rewrite |
-| B2 | Retired context early-free (use-after-free) | IOCP rewrite |
-| B3 | CancelIoEx failure leaks (context leaks) | IOCP rewrite |
-| B4 | Missing ResetEvent (100% CPU busy loop) | Overlapped I/O rewrite |
-| B5 | Re-arm before dispatch (contradicts removeSource safety) | IOCP rewrite |
+| # | Issue | Status |
+|---|-------|--------|
+| D2 | teardown handlerMutex race | **DONE** — Vortex PR #15 (unified zombie pattern) |
+| D3/D6 | m_listenFd token vs handle | **DONE** — Vortex PR #15 (IOCP uses native handles) |
+| D5 | GQCSEx batch dequeue | **DONE** — Vortex PR #15 (32-entry batch) |
+| D8 | context map locking | **DONE** — Vortex PR #15 (lock held across Register) |
+| B2 | Retired context early-free (use-after-free) | **DONE** — Vortex PR #15 (two-phase zombie retirement) |
+| B3 | CancelIoEx failure leaks (context leaks) | **DONE** — Vortex PR #15 (zombie cleanup in Phase 1 + Phase 4) |
+| B4 | Missing ResetEvent (100% CPU busy loop) | **DONE** — Vortex PR #15 (IOCP replaces event-based polling) |
+| B5 | Re-arm before dispatch (contradicts removeSource safety) | **DONE** — Vortex PR #15 (re-arm after dispatch with identity check) |
 
 ## Done (reference)
 
@@ -107,3 +107,7 @@ Local tracking doc. Do NOT commit.
 - PR #50: Handshake timeout + pipe docs + trapped tests (Phase 5 P1)
 - PR #51: Vortex submodule update (P1 starvation sweep)
 - PR #52: Phase 5 P1 development journal
+- PR #53: Architecture diagrams and README (Aether docs)
+- PR #57: Vortex submodule update (behavioral contract tests)
+- PR #58: Vortex submodule update (stress + concurrency tests)
+- PR #59: Vortex submodule update (IOCP backend)
