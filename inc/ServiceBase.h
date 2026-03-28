@@ -114,6 +114,7 @@ namespace aether::ipc
 
 #if defined(_WIN32)
         platform::Handle m_acceptSourceHandle = platform::kInvalidHandle;
+        std::mutex m_acceptHandlerMutex;
 #endif
     };
 

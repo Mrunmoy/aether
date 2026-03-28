@@ -99,15 +99,22 @@ namespace aether::ipc
         {
             // Remove listen source.
 #if defined(_WIN32)
-            if (platform::isValidHandle(m_acceptSourceHandle))
             {
-                m_loop->removeSource(m_acceptSourceHandle);
-                platform::cancelAccept(m_listenFd);
-                CloseHandle(reinterpret_cast<HANDLE>(m_acceptSourceHandle));
-                m_acceptSourceHandle = platform::kInvalidHandle;
+                // Serialize with in-flight onAcceptReady before touching m_listenFd.
+                std::lock_guard<std::mutex> hlock(m_acceptHandlerMutex);
+
+                if (platform::isValidHandle(m_acceptSourceHandle))
+                {
+                    m_loop->removeSource(m_acceptSourceHandle);
+                    platform::cancelAccept(m_listenFd);
+                    // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+                    HANDLE h = reinterpret_cast<HANDLE>(m_acceptSourceHandle);
+                    m_loop->executeOnRunLoop([h] { CloseHandle(h); });
+                    m_acceptSourceHandle = platform::kInvalidHandle;
+                }
+                platform::closeFd(m_listenFd);
+                m_listenFd = platform::kInvalidHandle;
             }
-            platform::closeFd(m_listenFd);
-            m_listenFd = platform::kInvalidHandle;
 #else
             if (platform::isValidHandle(m_listenFd))
             {
@@ -138,7 +145,9 @@ namespace aether::ipc
                 {
                     m_loop->removeSource(c->signalSourceHandle);
                     platform::cancelRecvSignal(c->conn.socketFd);
-                    CloseHandle(reinterpret_cast<HANDLE>(c->signalSourceHandle));
+                    // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+                    HANDLE sh = reinterpret_cast<HANDLE>(c->signalSourceHandle);
+                    m_loop->executeOnRunLoop([sh] { CloseHandle(sh); });
                     c->signalSourceHandle = platform::kInvalidHandle;
                 }
 #else
@@ -290,6 +299,9 @@ namespace aether::ipc
 
     void ServiceBase::onAcceptReady()
     {
+#if defined(_WIN32)
+        std::lock_guard<std::mutex> hlock(m_acceptHandlerMutex);
+#endif
         if (!m_running.load(std::memory_order_acquire))
         {
             return;

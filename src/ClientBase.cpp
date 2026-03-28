@@ -86,7 +86,9 @@ namespace aether::ipc
 #if defined(_WIN32)
                 m_loop->removeSource(m_signalSourceHandle);
                 platform::cancelRecvSignal(m_conn.socketFd);
-                CloseHandle(reinterpret_cast<HANDLE>(m_signalSourceHandle));
+                // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+                HANDLE h = reinterpret_cast<HANDLE>(m_signalSourceHandle);
+                m_loop->executeOnRunLoop([h] { CloseHandle(h); });
                 m_signalSourceHandle = platform::kInvalidHandle;
 #else
                 m_loop->removeSource(m_conn.socketFd);
@@ -321,6 +323,10 @@ namespace aether::ipc
 #if defined(_WIN32)
             m_loop->removeSource(m_signalSourceHandle);
             platform::cancelRecvSignal(m_conn.socketFd);
+            // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+            HANDLE errH = reinterpret_cast<HANDLE>(m_signalSourceHandle);
+            m_loop->executeOnRunLoop([errH] { CloseHandle(errH); });
+            m_signalSourceHandle = platform::kInvalidHandle;
 #else
             m_loop->removeSource(m_conn.socketFd);
 #endif
