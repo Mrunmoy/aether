@@ -103,7 +103,8 @@ namespace aether::ipc
             {
                 m_loop->removeSource(m_acceptSourceHandle);
                 platform::cancelAccept(m_listenFd);
-                // Event handle closed in destructor (after RunLoop cleanup).
+                CloseHandle(reinterpret_cast<HANDLE>(m_acceptSourceHandle));
+                m_acceptSourceHandle = platform::kInvalidHandle;
             }
             platform::closeFd(m_listenFd);
             m_listenFd = platform::kInvalidHandle;
@@ -137,7 +138,8 @@ namespace aether::ipc
                 {
                     m_loop->removeSource(c->signalSourceHandle);
                     platform::cancelRecvSignal(c->conn.socketFd);
-                    // Event handle closed in ~ClientConn.
+                    CloseHandle(reinterpret_cast<HANDLE>(c->signalSourceHandle));
+                    c->signalSourceHandle = platform::kInvalidHandle;
                 }
 #else
                 if (platform::isValidHandle(c->conn.socketFd))
@@ -288,6 +290,11 @@ namespace aether::ipc
 
     void ServiceBase::onAcceptReady()
     {
+        if (!m_running.load(std::memory_order_acquire))
+        {
+            return;
+        }
+
         Connection conn = acceptConnection(m_listenFd, kRunLoopHandshakeTimeoutMs);
         if (!conn.valid())
         {

@@ -16,10 +16,12 @@ using namespace aether::ipc;
 
 static void settle()
 {
+#if defined(_WIN32)
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#endif
 }
-
-// ── Stub service that speaks the DeviceMonitor protocol ─────────────
 // This manually implements the server-side marshal/unmarshal so we can
 // test the generated client without linking the generated server code.
 

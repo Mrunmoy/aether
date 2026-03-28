@@ -100,7 +100,11 @@ static int sendAndRecv(Connection &conn, uint32_t messageId, uint32_t seq,
 // Small delay to let async operations (accept, thread spawn) settle.
 static void settle()
 {
+#if defined(_WIN32)
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#endif
 }
 
 // ═════════════════════════════════════════════════════════════════════

@@ -213,6 +213,10 @@ namespace aether::ipc::platform
             bool pendingRead = false;
         };
 
+        // Lock ordering: g_asyncAcceptMutex, g_asyncSignalMutex → g_socketTimeoutMutex.
+        // Never acquire g_asyncAcceptMutex or g_asyncSignalMutex while holding
+        // g_socketTimeoutMutex.
+
         std::mutex g_asyncAcceptMutex;
         std::unordered_map<Handle, AsyncAcceptState *> g_asyncAccepts;
 

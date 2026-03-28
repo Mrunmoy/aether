@@ -86,7 +86,8 @@ namespace aether::ipc
 #if defined(_WIN32)
                 m_loop->removeSource(m_signalSourceHandle);
                 platform::cancelRecvSignal(m_conn.socketFd);
-                // Event handle closed in destructor.
+                CloseHandle(reinterpret_cast<HANDLE>(m_signalSourceHandle));
+                m_signalSourceHandle = platform::kInvalidHandle;
 #else
                 m_loop->removeSource(m_conn.socketFd);
 #endif
