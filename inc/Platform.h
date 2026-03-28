@@ -71,6 +71,31 @@ namespace aether::ipc::platform
     // Returns 0 on success, -1 on failure.
     int recvSignal(Handle sockFd);
 
+#if defined(_WIN32)
+    // ── Async I/O for RunLoop Integration (Windows only) ─────────────
+
+    // Start an asynchronous accept on a listener.
+    // Creates a pipe instance and begins overlapped ConnectNamedPipe.
+    // Returns an event handle suitable for RunLoop::addSource,
+    // or kInvalidHandle on failure.  The event handle is caller-owned
+    // and must be closed (via CloseHandle) after RunLoop::removeSource
+    // has fully processed the removal.
+    Handle beginAccept(Handle listenFd);
+
+    // Cancel and clean up an async accept started by beginAccept.
+    // Does NOT close the returned event handle — caller is responsible.
+    void cancelAccept(Handle listenFd);
+
+    // Start an asynchronous 1-byte signal read on a connection pipe.
+    // Returns an event handle suitable for RunLoop::addSource,
+    // or kInvalidHandle on failure.  Caller owns the event handle.
+    Handle beginRecvSignal(Handle sockFd);
+
+    // Cancel and clean up an async signal started by beginRecvSignal.
+    // Does NOT close the returned event handle — caller is responsible.
+    void cancelRecvSignal(Handle sockFd);
+#endif
+
     // Set a timeout on socket send operations (SO_SNDTIMEO only).
     // Returns 0 on success, -1 on failure.
     int setSocketTimeouts(Handle sockFd, uint32_t timeoutMs);

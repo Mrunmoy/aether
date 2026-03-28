@@ -117,7 +117,11 @@ protected:
 // Small delay to let async operations settle.
 static void settle()
 {
+#if defined(_WIN32)
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#endif
 }
 
 static FrameHeader makeResponse(uint32_t messageId, uint32_t seq, uint32_t payloadBytes,
@@ -525,8 +529,6 @@ TEST(ClientBaseTest, NotifySkipsDeadClient)
 // RunLoop-mode tests
 // ═══════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 // Helper: run loop in background, auto-stop on scope exit.
 struct RunLoopGuard
 {
@@ -690,25 +692,6 @@ TEST(ClientBaseTest, RunLoop_ConnectTwiceFails)
     client.disconnect();
     svc.stop();
 }
-
-#else
-
-TEST(ClientBaseTest, RunLoopModeNotSupportedOnWindows)
-{
-    EchoService svc(SVC_NAME);
-    ASSERT_TRUE(svc.start());
-
-    ms::RunLoop loop;
-    loop.init("CliRLUnsupported");
-
-    ClientBase client(SVC_NAME, &loop);
-    EXPECT_FALSE(client.connect());
-    EXPECT_FALSE(client.isConnected());
-
-    svc.stop();
-}
-
-#endif
 
 // ═════════════════════════════════════════════════════════════════════
 // Concurrent calls from the same client (tests m_sendMutex)

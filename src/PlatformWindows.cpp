@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <new>
 #include <string>
 #include <unordered_map>
 
@@ -192,6 +193,196 @@ namespace aether::ipc::platform
             *out = it->second;
             return true;
         }
+
+        // ── Async Accept / Signal State (RunLoop integration) ───────────
+
+        struct AsyncAcceptState
+        {
+            HANDLE eventHandle = nullptr;
+            HANDLE currentPipe = INVALID_HANDLE_VALUE;
+            OVERLAPPED ov{};
+            uint64_t serviceHash = 0;
+            bool pendingConnect = false;
+        };
+
+        struct AsyncSignalState
+        {
+            HANDLE eventHandle = nullptr;
+            OVERLAPPED ov{};
+            uint8_t buf = 0;
+            bool pendingRead = false;
+        };
+
+        // Lock ordering: g_asyncAcceptMutex, g_asyncSignalMutex → g_socketTimeoutMutex.
+        // Never acquire g_asyncAcceptMutex or g_asyncSignalMutex while holding
+        // g_socketTimeoutMutex.
+
+        std::mutex g_asyncAcceptMutex;
+        std::unordered_map<Handle, AsyncAcceptState *> g_asyncAccepts;
+
+        std::mutex g_asyncSignalMutex;
+        std::unordered_map<Handle, AsyncSignalState *> g_asyncSignals;
+
+        HANDLE createPipeInstance(uint64_t serviceHash)
+        {
+            std::string path = pipeName(serviceHash);
+            return CreateNamedPipeA(path.c_str(),
+                                    PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+                                    PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                                    PIPE_UNLIMITED_INSTANCES, 4096, 4096, 0, nullptr);
+        }
+
+        bool armAccept(AsyncAcceptState *state)
+        {
+            ResetEvent(state->eventHandle);
+            state->pendingConnect = false;
+
+            std::memset(&state->ov, 0, sizeof(state->ov));
+            state->ov.hEvent = state->eventHandle;
+
+            BOOL connected = ConnectNamedPipe(state->currentPipe, &state->ov);
+            if (connected)
+            {
+                SetEvent(state->eventHandle);
+                return true;
+            }
+
+            DWORD err = GetLastError();
+            if (err == ERROR_PIPE_CONNECTED)
+            {
+                SetEvent(state->eventHandle);
+                return true;
+            }
+            if (err == ERROR_IO_PENDING)
+            {
+                state->pendingConnect = true;
+                return true;
+            }
+            return false;
+        }
+
+        bool armRecvSignal(AsyncSignalState *state, HANDLE pipe)
+        {
+            ResetEvent(state->eventHandle);
+            state->pendingRead = false;
+            state->buf = 0;
+
+            std::memset(&state->ov, 0, sizeof(state->ov));
+            state->ov.hEvent = state->eventHandle;
+
+            DWORD bytesRead = 0;
+            BOOL ok = ReadFile(pipe, &state->buf, 1, &bytesRead, &state->ov);
+            if (ok)
+            {
+                if (bytesRead == 0)
+                {
+                    return false;
+                }
+                SetEvent(state->eventHandle);
+                return true;
+            }
+
+            DWORD err = GetLastError();
+            if (err == ERROR_IO_PENDING)
+            {
+                state->pendingRead = true;
+                return true;
+            }
+            return false;
+        }
+
+        Handle completeAcceptLocked(AsyncAcceptState *state)
+        {
+            if (state->pendingConnect)
+            {
+                DWORD ignored = 0;
+                if (!GetOverlappedResult(state->currentPipe, &state->ov,
+                                         &ignored, FALSE))
+                {
+                    // Accept failed — try to re-arm.
+                    CloseHandle(state->currentPipe);
+                    state->currentPipe = createPipeInstance(state->serviceHash);
+                    if (state->currentPipe != INVALID_HANDLE_VALUE)
+                    {
+                        if (!armAccept(state))
+                        {
+                            CloseHandle(state->currentPipe);
+                            state->currentPipe = INVALID_HANDLE_VALUE;
+                            ResetEvent(state->eventHandle);
+                        }
+                    }
+                    else
+                    {
+                        ResetEvent(state->eventHandle);
+                    }
+                    return kInvalidHandle;
+                }
+            }
+
+            Handle result = reinterpret_cast<Handle>(state->currentPipe);
+
+            // Create new pipe instance and re-arm for next accept.
+            state->currentPipe = createPipeInstance(state->serviceHash);
+            if (state->currentPipe != INVALID_HANDLE_VALUE)
+            {
+                if (!armAccept(state))
+                {
+                    CloseHandle(state->currentPipe);
+                    state->currentPipe = INVALID_HANDLE_VALUE;
+                    ResetEvent(state->eventHandle);
+                }
+            }
+            else
+            {
+                ResetEvent(state->eventHandle);
+            }
+
+            return result;
+        }
+
+        int completeRecvSignalLocked(Handle sockFd, AsyncSignalState *state)
+        {
+            HANDLE pipe = reinterpret_cast<HANDLE>(sockFd);
+
+            if (state->pendingRead)
+            {
+                DWORD bytesRead = 0;
+                if (!GetOverlappedResult(pipe, &state->ov, &bytesRead, FALSE))
+                {
+                    return -1;
+                }
+                if (bytesRead == 0)
+                {
+                    return -1;
+                }
+            }
+
+            // Drain residual signal bytes so we don't wake up extra times.
+            for (;;)
+            {
+                DWORD avail = 0;
+                if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &avail, nullptr)
+                    || avail == 0)
+                {
+                    break;
+                }
+                uint8_t drain[64];
+                DWORD toRead = (avail < sizeof(drain)) ? avail : sizeof(drain);
+                if (!readExact(sockFd, drain, toRead))
+                {
+                    break;
+                }
+            }
+
+            // Re-arm for next signal.
+            if (!armRecvSignal(state, pipe))
+            {
+                ResetEvent(state->eventHandle);
+                return -1;
+            }
+
+            return 0;
+        }
     } // namespace
 
     Handle serverSocket(const char *name)
@@ -263,6 +454,17 @@ namespace aether::ipc::platform
 
     Handle acceptClient(Handle listenFd)
     {
+        // Fast path: complete a pending async accept (RunLoop mode).
+        {
+            std::lock_guard<std::mutex> lock(g_asyncAcceptMutex);
+            auto it = g_asyncAccepts.find(listenFd);
+            if (it != g_asyncAccepts.end())
+            {
+                return completeAcceptLocked(it->second);
+            }
+        }
+
+        // Blocking accept path (threaded mode).
         ListenerEntry entry{};
         if (!lookupListener(listenFd, &entry))
         {
@@ -292,11 +494,6 @@ namespace aether::ipc::platform
         {
             DWORD err = GetLastError();
 
-            // ERROR_PIPE_CONNECTED means the client connected between
-            // CreateNamedPipe and ConnectNamedPipe.  The pipe is already
-            // usable — skip the wait and return immediately.  A future
-            // async accept path (beginAsyncAccept) must handle this case
-            // identically: treat it as synchronous completion.
             if (err == ERROR_PIPE_CONNECTED)
             {
                 CloseHandle(ov.hEvent);
@@ -417,6 +614,17 @@ namespace aether::ipc::platform
 
     int recvSignal(Handle sockFd)
     {
+        // Fast path: complete a pending async signal (RunLoop mode).
+        {
+            std::lock_guard<std::mutex> lock(g_asyncSignalMutex);
+            auto it = g_asyncSignals.find(sockFd);
+            if (it != g_asyncSignals.end())
+            {
+                return completeRecvSignalLocked(sockFd, it->second);
+            }
+        }
+
+        // Blocking path (threaded mode).
         uint8_t byte = 0;
         if (!readExact(sockFd, &byte, 1))
         {
@@ -442,6 +650,137 @@ namespace aether::ipc::platform
         }
 
         return 0;
+    }
+
+    // ── Async Accept / Signal (RunLoop integration) ──────────────────
+
+    Handle beginAccept(Handle listenFd)
+    {
+        ListenerEntry entry{};
+        if (!lookupListener(listenFd, &entry))
+        {
+            return kInvalidHandle;
+        }
+
+        auto *state = new (std::nothrow) AsyncAcceptState;
+        if (state == nullptr)
+        {
+            return kInvalidHandle;
+        }
+        state->serviceHash = entry.serviceHash;
+        state->eventHandle = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+        if (state->eventHandle == nullptr)
+        {
+            delete state;
+            return kInvalidHandle;
+        }
+
+        state->currentPipe = createPipeInstance(entry.serviceHash);
+        if (state->currentPipe == INVALID_HANDLE_VALUE)
+        {
+            CloseHandle(state->eventHandle);
+            delete state;
+            return kInvalidHandle;
+        }
+
+        if (!armAccept(state))
+        {
+            CloseHandle(state->currentPipe);
+            CloseHandle(state->eventHandle);
+            delete state;
+            return kInvalidHandle;
+        }
+
+        Handle eventAsHandle = reinterpret_cast<Handle>(state->eventHandle);
+        {
+            std::lock_guard<std::mutex> lock(g_asyncAcceptMutex);
+            g_asyncAccepts[listenFd] = state;
+        }
+        return eventAsHandle;
+    }
+
+    void cancelAccept(Handle listenFd)
+    {
+        AsyncAcceptState *state = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_asyncAcceptMutex);
+            auto it = g_asyncAccepts.find(listenFd);
+            if (it == g_asyncAccepts.end())
+            {
+                return;
+            }
+            state = it->second;
+            g_asyncAccepts.erase(it);
+        }
+
+        if (state->pendingConnect)
+        {
+            CancelIoEx(state->currentPipe, &state->ov);
+            DWORD ignored = 0;
+            GetOverlappedResult(state->currentPipe, &state->ov, &ignored, TRUE);
+        }
+        if (state->currentPipe != INVALID_HANDLE_VALUE)
+        {
+            CloseHandle(state->currentPipe);
+        }
+        // Event handle is NOT closed — caller owns it and must close it
+        // after RunLoop::removeSource has fully processed the removal.
+        delete state;
+    }
+
+    Handle beginRecvSignal(Handle sockFd)
+    {
+        auto *state = new (std::nothrow) AsyncSignalState;
+        if (state == nullptr)
+        {
+            return kInvalidHandle;
+        }
+        state->eventHandle = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+        if (state->eventHandle == nullptr)
+        {
+            delete state;
+            return kInvalidHandle;
+        }
+
+        HANDLE pipe = reinterpret_cast<HANDLE>(sockFd);
+        if (!armRecvSignal(state, pipe))
+        {
+            CloseHandle(state->eventHandle);
+            delete state;
+            return kInvalidHandle;
+        }
+
+        Handle eventAsHandle = reinterpret_cast<Handle>(state->eventHandle);
+        {
+            std::lock_guard<std::mutex> lock(g_asyncSignalMutex);
+            g_asyncSignals[sockFd] = state;
+        }
+        return eventAsHandle;
+    }
+
+    void cancelRecvSignal(Handle sockFd)
+    {
+        AsyncSignalState *state = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_asyncSignalMutex);
+            auto it = g_asyncSignals.find(sockFd);
+            if (it == g_asyncSignals.end())
+            {
+                return;
+            }
+            state = it->second;
+            g_asyncSignals.erase(it);
+        }
+
+        if (state->pendingRead)
+        {
+            CancelIoEx(reinterpret_cast<HANDLE>(sockFd), &state->ov);
+            DWORD ignored = 0;
+            GetOverlappedResult(reinterpret_cast<HANDLE>(sockFd), &state->ov,
+                                &ignored, TRUE);
+        }
+        // Event handle is NOT closed — caller owns it.
+        delete state;
     }
 
     // Named pipes do not expose SO_SNDTIMEO/SO_RCVTIMEO directly, so we emulate

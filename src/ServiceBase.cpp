@@ -2,6 +2,14 @@
 #include "Platform.h"
 
 #include <algorithm>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace aether::ipc
 {
     // Shorter handshake timeout for RunLoop accept path to avoid blocking
@@ -16,7 +24,28 @@ namespace aether::ipc
     {
     }
 
-    ServiceBase::~ServiceBase() { stop(); }
+    ServiceBase::~ServiceBase()
+    {
+        stop();
+#if defined(_WIN32)
+        if (m_acceptSourceHandle != platform::kInvalidHandle)
+        {
+            CloseHandle(reinterpret_cast<HANDLE>(m_acceptSourceHandle));
+            m_acceptSourceHandle = platform::kInvalidHandle;
+        }
+#endif
+    }
+
+#if defined(_WIN32)
+    ServiceBase::ClientConn::~ClientConn()
+    {
+        if (signalSourceHandle != platform::kInvalidHandle)
+        {
+            CloseHandle(reinterpret_cast<HANDLE>(signalSourceHandle));
+            signalSourceHandle = platform::kInvalidHandle;
+        }
+    }
+#endif
 
     // ── Lifecycle ────────────────────────────────────────────────────
 
@@ -26,15 +55,6 @@ namespace aether::ipc
         {
             return false; // already started
         }
-#if defined(_WIN32)
-        if (m_loop != nullptr)
-        {
-            // Windows transport currently supports the threaded accept/receiver
-            // model only. Reject RunLoop mode until the platform layer exposes
-            // a waitable readiness handle for named pipes.
-            return false;
-        }
-#endif
 
         m_listenFd = platform::serverSocket(m_serviceName.c_str());
         if (!platform::isValidHandle(m_listenFd))
@@ -46,7 +66,19 @@ namespace aether::ipc
 
         if (m_loop)
         {
+#if defined(_WIN32)
+            m_acceptSourceHandle = platform::beginAccept(m_listenFd);
+            if (!platform::isValidHandle(m_acceptSourceHandle))
+            {
+                m_running.store(false, std::memory_order_release);
+                platform::closeFd(m_listenFd);
+                m_listenFd = platform::kInvalidHandle;
+                return false;
+            }
+            m_loop->addSource(m_acceptSourceHandle, [this] { onAcceptReady(); });
+#else
             m_loop->addSource(m_listenFd, [this] { onAcceptReady(); });
+#endif
         }
         else
         {
@@ -63,16 +95,34 @@ namespace aether::ipc
             return;
         }
 
-#if !defined(_WIN32)
         if (m_loop)
         {
             // Remove listen source.
+#if defined(_WIN32)
+            {
+                // Serialize with in-flight onAcceptReady before touching m_listenFd.
+                std::lock_guard<std::mutex> hlock(m_acceptHandlerMutex);
+
+                if (platform::isValidHandle(m_acceptSourceHandle))
+                {
+                    m_loop->removeSource(m_acceptSourceHandle);
+                    platform::cancelAccept(m_listenFd);
+                    // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+                    HANDLE h = reinterpret_cast<HANDLE>(m_acceptSourceHandle);
+                    m_loop->executeOnRunLoop([h] { CloseHandle(h); });
+                    m_acceptSourceHandle = platform::kInvalidHandle;
+                }
+                platform::closeFd(m_listenFd);
+                m_listenFd = platform::kInvalidHandle;
+            }
+#else
             if (platform::isValidHandle(m_listenFd))
             {
                 m_loop->removeSource(m_listenFd);
                 platform::closeFd(m_listenFd);
                 m_listenFd = platform::kInvalidHandle;
             }
+#endif
 
             // Snapshot client list, then coordinate teardown per client while
             // holding handlerMutex so RunLoop callbacks cannot race shutdown.
@@ -90,10 +140,22 @@ namespace aether::ipc
             for (const auto &c : snapshot)
             {
                 std::lock_guard<std::mutex> hlock(c->handlerMutex);
+#if defined(_WIN32)
+                if (platform::isValidHandle(c->signalSourceHandle))
+                {
+                    m_loop->removeSource(c->signalSourceHandle);
+                    platform::cancelRecvSignal(c->conn.socketFd);
+                    // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+                    HANDLE sh = reinterpret_cast<HANDLE>(c->signalSourceHandle);
+                    m_loop->executeOnRunLoop([sh] { CloseHandle(sh); });
+                    c->signalSourceHandle = platform::kInvalidHandle;
+                }
+#else
                 if (platform::isValidHandle(c->conn.socketFd))
                 {
                     m_loop->removeSource(c->conn.socketFd);
                 }
+#endif
                 closeRunLoopClient(c.get());
             }
 
@@ -102,7 +164,6 @@ namespace aether::ipc
             m_clients.clear();
         }
         else
-#endif
         {
             // Phase 1: Unblock accept thread. shutdown() alone may not
             // reliably unblock accept4() on all socket types, so close the
@@ -238,6 +299,14 @@ namespace aether::ipc
 
     void ServiceBase::onAcceptReady()
     {
+#if defined(_WIN32)
+        std::lock_guard<std::mutex> hlock(m_acceptHandlerMutex);
+#endif
+        if (!m_running.load(std::memory_order_acquire))
+        {
+            return;
+        }
+
         Connection conn = acceptConnection(m_listenFd, kRunLoopHandshakeTimeoutMs);
         if (!conn.valid())
         {
@@ -270,9 +339,21 @@ namespace aether::ipc
             auto client = std::make_shared<ClientConn>();
             client->conn = std::move(conn);
 
+#if defined(_WIN32)
+            client->signalSourceHandle = platform::beginRecvSignal(client->conn.socketFd);
+            if (!platform::isValidHandle(client->signalSourceHandle))
+            {
+                client->conn.close();
+                return;
+            }
+            m_loop->addSource(client->signalSourceHandle,
+                              [this, client] { onClientReady(client); },
+                              [this, client] { removeClient(client); });
+#else
             m_loop->addSource(client->conn.socketFd,
                               [this, client] { onClientReady(client); },
                               [this, client] { removeClient(client); });
+#endif
 
             m_clients.push_back(std::move(client));
         }
@@ -355,7 +436,13 @@ namespace aether::ipc
             return;
 
         // Remove the RunLoop source first (while socketFd is still valid).
+#if defined(_WIN32)
+        m_loop->removeSource(client->signalSourceHandle);
+        platform::cancelRecvSignal(client->conn.socketFd);
+        // Event handle closed in ~ClientConn (deferred until RunLoop cleanup).
+#else
         m_loop->removeSource(client->conn.socketFd);
+#endif
 
         // Mark dead and close conn under sendMutex so we can't race with a concurrent
         // sendNotify that has passed the dead-flag check and is about to write to txRing.

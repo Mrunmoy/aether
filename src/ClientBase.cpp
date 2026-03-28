@@ -1,6 +1,13 @@
 #include "ClientBase.h"
 #include "Platform.h"
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace aether::ipc
 {
 
@@ -11,7 +18,17 @@ namespace aether::ipc
     {
     }
 
-    ClientBase::~ClientBase() { disconnect(); }
+    ClientBase::~ClientBase()
+    {
+        disconnect();
+#if defined(_WIN32)
+        if (m_signalSourceHandle != platform::kInvalidHandle)
+        {
+            CloseHandle(reinterpret_cast<HANDLE>(m_signalSourceHandle));
+            m_signalSourceHandle = platform::kInvalidHandle;
+        }
+#endif
+    }
 
     // ── Lifecycle ────────────────────────────────────────────────────
 
@@ -21,14 +38,6 @@ namespace aether::ipc
         {
             return false;
         }
-#if defined(_WIN32)
-        if (m_loop != nullptr)
-        {
-            // Windows transport currently supports the threaded mode only.
-            // Named-pipe readiness is not wired into the RunLoop backend yet.
-            return false;
-        }
-#endif
         if (!m_loop && m_receiverThread.joinable())
         {
             // Reconnect after a server-side disconnect leaves the old receiver
@@ -44,13 +53,22 @@ namespace aether::ipc
 
         m_running.store(true, std::memory_order_release);
 
-#if !defined(_WIN32)
         if (m_loop)
         {
+#if defined(_WIN32)
+            m_signalSourceHandle = platform::beginRecvSignal(m_conn.socketFd);
+            if (!platform::isValidHandle(m_signalSourceHandle))
+            {
+                m_running.store(false, std::memory_order_release);
+                m_conn.close();
+                return false;
+            }
+            m_loop->addSource(m_signalSourceHandle, [this] { onDataReady(); });
+#else
             m_loop->addSource(m_conn.socketFd, [this] { onDataReady(); });
+#endif
         }
         else
-#endif
         {
             m_receiverThread = std::thread([this] { receiverLoop(); });
         }
@@ -61,18 +79,25 @@ namespace aether::ipc
     {
         bool wasRunning = m_running.exchange(false);
 
-#if !defined(_WIN32)
         if (m_loop)
         {
             if (wasRunning)
             {
+#if defined(_WIN32)
+                m_loop->removeSource(m_signalSourceHandle);
+                platform::cancelRecvSignal(m_conn.socketFd);
+                // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+                HANDLE h = reinterpret_cast<HANDLE>(m_signalSourceHandle);
+                m_loop->executeOnRunLoop([h] { CloseHandle(h); });
+                m_signalSourceHandle = platform::kInvalidHandle;
+#else
                 m_loop->removeSource(m_conn.socketFd);
+#endif
             }
             // Wait for any in-flight handler to finish.
             std::lock_guard<std::mutex> hlock(m_handlerMutex);
         }
         else
-#endif
         {
             if (wasRunning && platform::isValidHandle(m_conn.socketFd))
             {
@@ -292,10 +317,19 @@ namespace aether::ipc
             return;
         }
 
-        // Drain the signal byte (epoll told us it's readable, won't block).
+        // Drain the signal byte (event told us it's readable, won't block).
         if (platform::recvSignal(m_conn.socketFd) != 0)
         {
+#if defined(_WIN32)
+            m_loop->removeSource(m_signalSourceHandle);
+            platform::cancelRecvSignal(m_conn.socketFd);
+            // Defer CloseHandle: IOCP backend retires the TP wait asynchronously.
+            HANDLE errH = reinterpret_cast<HANDLE>(m_signalSourceHandle);
+            m_loop->executeOnRunLoop([errH] { CloseHandle(errH); });
+            m_signalSourceHandle = platform::kInvalidHandle;
+#else
             m_loop->removeSource(m_conn.socketFd);
+#endif
             m_running.store(false, std::memory_order_release);
 
             // Fail pending calls.

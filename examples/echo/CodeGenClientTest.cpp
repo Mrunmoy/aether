@@ -16,10 +16,12 @@ using namespace aether::ipc;
 
 static void settle()
 {
+#if defined(_WIN32)
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#endif
 }
-
-// ── Stub service that speaks the DeviceMonitor protocol ─────────────
 // This manually implements the server-side marshal/unmarshal so we can
 // test the generated client without linking the generated server code.
 
@@ -250,8 +252,6 @@ TEST(CodeGenClientTest, DeviceDisconnectedNotification)
 // RunLoop mode — typed client call works
 // ═════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 TEST(CodeGenClientTest, RunLoop_TypedCall)
 {
     DeviceMonitorStub svc(SVC_NAME);
@@ -275,22 +275,3 @@ TEST(CodeGenClientTest, RunLoop_TypedCall)
     client.disconnect();
     svc.stop();
 }
-
-#else
-
-TEST(CodeGenClientTest, RunLoopModeNotSupportedOnWindows)
-{
-    DeviceMonitorStub svc(SVC_NAME);
-    ASSERT_TRUE(svc.start());
-
-    ms::RunLoop loop;
-    loop.init("CliRLUnsupported");
-
-    DeviceMonitor client(SVC_NAME, &loop);
-    EXPECT_FALSE(client.connect());
-    EXPECT_FALSE(client.isConnected());
-
-    svc.stop();
-}
-
-#endif

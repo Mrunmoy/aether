@@ -13,10 +13,12 @@ using namespace aether::ipc;
 
 static void settle()
 {
+#if defined(_WIN32)
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#endif
 }
-
-// ── Concrete service implementation ─────────────────────────────────
 
 class TestDeviceMonitor : public DeviceMonitor
 {
@@ -252,8 +254,6 @@ TEST(CodeGenServerTest, InvalidMethod)
 // RunLoop mode — generated server dispatch works
 // ═════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 TEST(CodeGenServerTest, RunLoop_Dispatch)
 {
     ms::RunLoop loop;
@@ -284,16 +284,3 @@ TEST(CodeGenServerTest, RunLoop_Dispatch)
     client.disconnect();
     svc.stop();
 }
-
-#else
-
-TEST(CodeGenServerTest, RunLoopModeNotSupportedOnWindows)
-{
-    ms::RunLoop loop;
-    loop.init("SrvRLUnsupported");
-
-    TestDeviceMonitor svc(SVC_NAME, &loop);
-    EXPECT_FALSE(svc.start());
-}
-
-#endif

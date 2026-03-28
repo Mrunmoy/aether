@@ -100,7 +100,11 @@ static int sendAndRecv(Connection &conn, uint32_t messageId, uint32_t seq,
 // Small delay to let async operations (accept, thread spawn) settle.
 static void settle()
 {
+#if defined(_WIN32)
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+#endif
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -378,8 +382,6 @@ TEST(ServiceBaseTest, ClientDisconnectDoesNotCrash)
 // RunLoop-mode tests
 // ═══════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 // Helper: run loop in background, auto-stop on scope exit.
 struct RunLoopGuard
 {
@@ -564,20 +566,6 @@ TEST(ServiceBaseTest, RunLoop_StopAfterClientMarkedDead)
     svc.stop();
     EXPECT_FALSE(svc.isRunning());
 }
-
-#else
-
-TEST(ServiceBaseTest, RunLoopModeNotSupportedOnWindows)
-{
-    ms::RunLoop loop;
-    loop.init("SvcRLUnsupported");
-
-    EchoService svc(SVC_NAME, &loop);
-    EXPECT_FALSE(svc.start());
-    EXPECT_FALSE(svc.isRunning());
-}
-
-#endif
 
 // ═════════════════════════════════════════════════════════════════════
 // Notify to abruptly dead client does not SIGPIPE/crash
@@ -904,8 +892,6 @@ TEST(ServiceBaseTest, MaxClientsAllowsReconnectAfterDisconnect)
 // RunLoop: MaxClients rejects excess connections
 // ═════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 // ═════════════════════════════════════════════════════════════════════
 // RunLoop: dead clients are reaped when a new client connects
 // ═════════════════════════════════════════════════════════════════════
@@ -1053,8 +1039,6 @@ TEST(ServiceBaseTest, RunLoop_MaxClientsRejectsExcess)
     client2.close();
     svc.stop();
 }
-
-#endif
 
 // ═════════════════════════════════════════════════════════════════════
 // Peer UID filter tests
