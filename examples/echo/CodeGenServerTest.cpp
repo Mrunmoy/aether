@@ -252,8 +252,6 @@ TEST(CodeGenServerTest, InvalidMethod)
 // RunLoop mode — generated server dispatch works
 // ═════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 TEST(CodeGenServerTest, RunLoop_Dispatch)
 {
     ms::RunLoop loop;
@@ -284,16 +282,3 @@ TEST(CodeGenServerTest, RunLoop_Dispatch)
     client.disconnect();
     svc.stop();
 }
-
-#else
-
-TEST(CodeGenServerTest, RunLoopModeNotSupportedOnWindows)
-{
-    ms::RunLoop loop;
-    loop.init("SrvRLUnsupported");
-
-    TestDeviceMonitor svc(SVC_NAME, &loop);
-    EXPECT_FALSE(svc.start());
-}
-
-#endif

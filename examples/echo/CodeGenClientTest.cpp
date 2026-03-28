@@ -250,8 +250,6 @@ TEST(CodeGenClientTest, DeviceDisconnectedNotification)
 // RunLoop mode — typed client call works
 // ═════════════════════════════════════════════════════════════════════
 
-#if !defined(_WIN32)
-
 TEST(CodeGenClientTest, RunLoop_TypedCall)
 {
     DeviceMonitorStub svc(SVC_NAME);
@@ -275,22 +273,3 @@ TEST(CodeGenClientTest, RunLoop_TypedCall)
     client.disconnect();
     svc.stop();
 }
-
-#else
-
-TEST(CodeGenClientTest, RunLoopModeNotSupportedOnWindows)
-{
-    DeviceMonitorStub svc(SVC_NAME);
-    ASSERT_TRUE(svc.start());
-
-    ms::RunLoop loop;
-    loop.init("CliRLUnsupported");
-
-    DeviceMonitor client(SVC_NAME, &loop);
-    EXPECT_FALSE(client.connect());
-    EXPECT_FALSE(client.isConnected());
-
-    svc.stop();
-}
-
-#endif
