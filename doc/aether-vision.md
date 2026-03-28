@@ -150,16 +150,12 @@ All transports use the same 24-byte frame header. Only the delivery mechanism ch
 ### RunLoop (Vortex)
 
 The Vortex project (`deps/vortex`) provides the RunLoop — an event loop built
-specifically for aether. It uses epoll on Linux, kqueue on macOS, and will use IOCP
+specifically for aether. It uses epoll on Linux, kqueue on macOS, and IOCP
 on Windows. RunLoop is the **primary dispatch model**: the server handles all clients
 on a single thread by waiting for I/O events.
 
-Thread-per-client mode exists as a **fallback** for platforms where RunLoop
-integration isn't complete yet.
-
-**Current gaps:**
-- Windows: named pipes need overlapped I/O to produce waitable handles for RunLoop.
-- Vortex Win32 backend uses WaitForMultipleObjects (63-handle limit, no pipe/socket support). Needs IOCP rewrite.
+Thread-per-client mode exists as a **fallback** for simple deployments or
+platforms where RunLoop integration isn't available.
 
 ### aether-lite
 
