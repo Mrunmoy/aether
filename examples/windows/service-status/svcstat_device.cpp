@@ -128,33 +128,37 @@ private:
                 break;
             }
 
-            std::lock_guard<std::mutex> lock(m_mutex);
-            std::uniform_int_distribution<size_t> dist(0, m_services.size() - 1);
-            size_t idx = dist(rng);
-            auto &s = m_services[idx];
-
-            ServiceState oldState = s.state;
-            if (s.state == Running)
-            {
-                s.state = Stopped;
-                s.pid = 0;
-            }
-            else
-            {
-                s.state = Running;
-                std::uniform_int_distribution<uint32_t> pidDist(500, 9999);
-                s.pid = pidDist(rng);
-            }
-
             ServiceInfo info{};
-            std::memcpy(info.serviceName, s.serviceName, sizeof(info.serviceName));
-            std::memcpy(info.displayName, s.displayName, sizeof(info.displayName));
-            info.state = s.state;
-            info.pid = s.pid;
+            ServiceState oldState;
 
-            std::printf("[sim] %s: %s → %s\n", s.serviceName,
-                        (oldState == Running) ? "Running" : "Stopped",
-                        (s.state == Running) ? "Running" : "Stopped");
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                std::uniform_int_distribution<size_t> dist(0, m_services.size() - 1);
+                size_t idx = dist(rng);
+                auto &s = m_services[idx];
+
+                oldState = s.state;
+                if (s.state == Running)
+                {
+                    s.state = Stopped;
+                    s.pid = 0;
+                }
+                else
+                {
+                    s.state = Running;
+                    std::uniform_int_distribution<uint32_t> pidDist(500, 9999);
+                    s.pid = pidDist(rng);
+                }
+
+                std::memcpy(info.serviceName, s.serviceName, sizeof(info.serviceName));
+                std::memcpy(info.displayName, s.displayName, sizeof(info.displayName));
+                info.state = s.state;
+                info.pid = s.pid;
+
+                std::printf("[sim] %s: %s → %s\n", s.serviceName,
+                            (oldState == Running) ? "Running" : "Stopped",
+                            (s.state == Running) ? "Running" : "Stopped");
+            }
 
             notifyServiceStateChanged(info, oldState);
         }

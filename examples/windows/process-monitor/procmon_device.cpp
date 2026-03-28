@@ -115,46 +115,59 @@ private:
             std::uniform_int_distribution<int> coinFlip(0, 1);
             bool doSpawn = coinFlip(rng);
 
-            std::lock_guard<std::mutex> lock(m_mutex);
+            ProcessInfo spawnedInfo{};
+            bool didSpawn = false;
+            uint32_t exitedPid = 0;
+            bool didExit = false;
 
-            // Always spawn if the list is very small.
-            if (doSpawn || m_processes.size() <= 2)
             {
-                ProcessInfo p{};
-                p.pid = nextPid++;
-                p.parentPid = 1;
-                std::snprintf(p.name, sizeof(p.name), "app_%04u.exe", p.pid);
-                std::uniform_int_distribution<uint32_t> threadDist(1, 16);
-                std::uniform_int_distribution<uint64_t> memDist(1ULL * 1024 * 1024,
-                                                                200ULL * 1024 * 1024);
-                p.threadCount = threadDist(rng);
-                p.memoryBytes = memDist(rng);
+                std::lock_guard<std::mutex> lock(m_mutex);
 
-                m_processes.push_back(p);
-                std::printf("[sim] Spawned PID %u: %s\n", p.pid, p.name);
-                notifyProcessStarted(p);
-            }
-            else
-            {
-                // Kill a random non-system process (PID > 1).
-                std::vector<size_t> killable;
-                for (size_t i = 0; i < m_processes.size(); ++i)
+                // Always spawn if the list is very small.
+                if (doSpawn || m_processes.size() <= 2)
                 {
-                    if (m_processes[i].pid > 1)
+                    ProcessInfo p{};
+                    p.pid = nextPid++;
+                    p.parentPid = 1;
+                    std::snprintf(p.name, sizeof(p.name), "app_%04u.exe", p.pid);
+                    std::uniform_int_distribution<uint32_t> threadDist(1, 16);
+                    std::uniform_int_distribution<uint64_t> memDist(1ULL * 1024 * 1024,
+                                                                    200ULL * 1024 * 1024);
+                    p.threadCount = threadDist(rng);
+                    p.memoryBytes = memDist(rng);
+
+                    m_processes.push_back(p);
+                    spawnedInfo = p;
+                    didSpawn = true;
+                    std::printf("[sim] Spawned PID %u: %s\n", p.pid, p.name);
+                }
+                else
+                {
+                    // Kill a random non-system process (PID > 1).
+                    std::vector<size_t> killable;
+                    for (size_t i = 0; i < m_processes.size(); ++i)
                     {
-                        killable.push_back(i);
+                        if (m_processes[i].pid > 1)
+                        {
+                            killable.push_back(i);
+                        }
+                    }
+                    if (!killable.empty())
+                    {
+                        std::uniform_int_distribution<size_t> pick(0, killable.size() - 1);
+                        size_t idx = killable[pick(rng)];
+                        exitedPid = m_processes[idx].pid;
+                        std::printf("[sim] Killed PID %u: %s\n", exitedPid, m_processes[idx].name);
+                        m_processes.erase(m_processes.begin() + static_cast<ptrdiff_t>(idx));
+                        didExit = true;
                     }
                 }
-                if (!killable.empty())
-                {
-                    std::uniform_int_distribution<size_t> pick(0, killable.size() - 1);
-                    size_t idx = killable[pick(rng)];
-                    uint32_t pid = m_processes[idx].pid;
-                    std::printf("[sim] Killed PID %u: %s\n", pid, m_processes[idx].name);
-                    m_processes.erase(m_processes.begin() + static_cast<ptrdiff_t>(idx));
-                    notifyProcessExited(pid, 0);
-                }
             }
+
+            if (didSpawn)
+                notifyProcessStarted(spawnedInfo);
+            if (didExit)
+                notifyProcessExited(exitedPid, 0);
         }
     }
 

@@ -153,144 +153,157 @@ private:
             float dt = std::chrono::duration<float>(now - lastTick).count();
             lastTick = now;
 
-            std::lock_guard<std::mutex> lock(m_mtx);
+            enum class Pending { None, MotionComplete, LimitHit, StallDetected };
+            Pending pending = Pending::None;
+            int32_t notifyPos = 0;
+            LimitSwitch notifyLimit = Lower;
+            float notifyVel = 0.0f;
 
-            if (m_state != Moving && m_state != Homing)
-                continue;
-
-            int32_t prevPosition = m_position;
-
-            // --- Velocity update (trapezoidal acceleration) ---
-            if (m_moveToActive)
             {
-                // Deceleration distance at current velocity
-                float decelDist = (m_velocity * m_velocity) / (2.0f * kAcceleration);
-                float remaining = static_cast<float>(m_targetPosition - m_position);
-                float absRemaining = std::fabs(remaining);
+                std::lock_guard<std::mutex> lock(m_mtx);
 
-                if (absRemaining <= 0.5f)
-                {
-                    // Arrived
-                    m_position = m_targetPosition;
-                    m_velocity = 0.0f;
-                    m_moveToActive = false;
-                    m_state = Idle;
-                    notifyMotionComplete(m_position);
+                if (m_state != Moving && m_state != Homing)
                     continue;
-                }
 
-                if (absRemaining <= decelDist)
+                int32_t prevPosition = m_position;
+
+                // --- Velocity update (trapezoidal acceleration) ---
+                if (m_moveToActive)
                 {
-                    // Decelerate
-                    float decel = kAcceleration * dt;
-                    if (m_velocity > 0.0f)
-                        m_velocity = std::max(0.0f, m_velocity - decel);
-                    else
-                        m_velocity = std::min(0.0f, m_velocity + decel);
+                    float decelDist = (m_velocity * m_velocity) / (2.0f * kAcceleration);
+                    float remaining = static_cast<float>(m_targetPosition - m_position);
+                    float absRemaining = std::fabs(remaining);
 
-                    // Snap to zero if very slow
-                    if (std::fabs(m_velocity) < 1.0f && absRemaining < 2.0f)
+                    if (absRemaining <= 0.5f)
                     {
                         m_position = m_targetPosition;
                         m_velocity = 0.0f;
                         m_moveToActive = false;
                         m_state = Idle;
-                        notifyMotionComplete(m_position);
-                        continue;
+                        pending = Pending::MotionComplete;
+                        notifyPos = m_position;
+                    }
+                    else if (absRemaining <= decelDist)
+                    {
+                        float decel = kAcceleration * dt;
+                        if (m_velocity > 0.0f)
+                            m_velocity = std::max(0.0f, m_velocity - decel);
+                        else
+                            m_velocity = std::min(0.0f, m_velocity + decel);
+
+                        if (std::fabs(m_velocity) < 1.0f && absRemaining < 2.0f)
+                        {
+                            m_position = m_targetPosition;
+                            m_velocity = 0.0f;
+                            m_moveToActive = false;
+                            m_state = Idle;
+                            pending = Pending::MotionComplete;
+                            notifyPos = m_position;
+                        }
+                    }
+                    else
+                    {
+                        float accel = kAcceleration * dt;
+                        if (m_velocity < m_targetVelocity)
+                            m_velocity = std::min(m_velocity + accel, m_targetVelocity);
+                        else if (m_velocity > m_targetVelocity)
+                            m_velocity = std::max(m_velocity - accel, m_targetVelocity);
                     }
                 }
                 else
                 {
-                    // Accelerate toward target velocity
                     float accel = kAcceleration * dt;
                     if (m_velocity < m_targetVelocity)
                         m_velocity = std::min(m_velocity + accel, m_targetVelocity);
                     else if (m_velocity > m_targetVelocity)
                         m_velocity = std::max(m_velocity - accel, m_targetVelocity);
                 }
-            }
-            else
-            {
-                // Jog or homing: ramp toward target velocity
-                float accel = kAcceleration * dt;
-                if (m_velocity < m_targetVelocity)
-                    m_velocity = std::min(m_velocity + accel, m_targetVelocity);
-                else if (m_velocity > m_targetVelocity)
-                    m_velocity = std::max(m_velocity - accel, m_targetVelocity);
-            }
 
-            // --- Position update ---
-            float posFloat = static_cast<float>(m_position) + m_velocity * dt;
-            m_position = static_cast<int32_t>(std::round(posFloat));
-
-            // --- Limit switch checks ---
-            if (m_position <= kPositionMin)
-            {
-                m_position = kPositionMin;
-                m_velocity = 0.0f;
-                m_targetVelocity = 0.0f;
-                m_moveToActive = false;
-                m_jogActive = false;
-
-                if (m_homing)
+                if (pending == Pending::None)
                 {
-                    // Home complete — set origin
-                    m_position = 0;
-                    m_homing = false;
-                    m_homed = true;
-                    m_state = Idle;
-                    notifyMotionComplete(m_position);
-                    continue;
-                }
+                    // --- Position update ---
+                    float posFloat = static_cast<float>(m_position) + m_velocity * dt;
+                    m_position = static_cast<int32_t>(std::round(posFloat));
 
-                m_state = Idle;
-                notifyLimitHit(Lower, m_position);
-                continue;
-            }
-
-            if (m_position >= kPositionMax)
-            {
-                m_position = kPositionMax;
-                m_velocity = 0.0f;
-                m_targetVelocity = 0.0f;
-                m_moveToActive = false;
-                m_jogActive = false;
-                m_homing = false;
-                m_state = Idle;
-                notifyLimitHit(Upper, m_position);
-                continue;
-            }
-
-            // --- Stall detection ---
-            if (std::fabs(m_velocity) > 1.0f && m_position == prevPosition)
-            {
-                if (!m_stallTimerActive)
-                {
-                    m_stallTimerActive = true;
-                    m_stallStart = std::chrono::steady_clock::now();
-                }
-                else
-                {
-                    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - m_stallStart);
-                    if (elapsed.count() >= kStallTimeoutMs)
+                    // --- Limit switch checks ---
+                    if (m_position <= kPositionMin)
                     {
-                        m_state = Fault;
-                        float savedVel = m_velocity;
+                        m_position = kPositionMin;
+                        m_velocity = 0.0f;
+                        m_targetVelocity = 0.0f;
+                        m_moveToActive = false;
+                        m_jogActive = false;
+
+                        if (m_homing)
+                        {
+                            m_position = 0;
+                            m_homing = false;
+                            m_homed = true;
+                            m_state = Idle;
+                            pending = Pending::MotionComplete;
+                            notifyPos = m_position;
+                        }
+                        else
+                        {
+                            m_state = Idle;
+                            pending = Pending::LimitHit;
+                            notifyLimit = Lower;
+                            notifyPos = m_position;
+                        }
+                    }
+                    else if (m_position >= kPositionMax)
+                    {
+                        m_position = kPositionMax;
                         m_velocity = 0.0f;
                         m_targetVelocity = 0.0f;
                         m_moveToActive = false;
                         m_jogActive = false;
                         m_homing = false;
+                        m_state = Idle;
+                        pending = Pending::LimitHit;
+                        notifyLimit = Upper;
+                        notifyPos = m_position;
+                    }
+                    // --- Stall detection ---
+                    else if (std::fabs(m_velocity) > 1.0f && m_position == prevPosition)
+                    {
+                        if (!m_stallTimerActive)
+                        {
+                            m_stallTimerActive = true;
+                            m_stallStart = std::chrono::steady_clock::now();
+                        }
+                        else
+                        {
+                            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - m_stallStart);
+                            if (elapsed.count() >= kStallTimeoutMs)
+                            {
+                                m_state = Fault;
+                                notifyVel = m_velocity;
+                                m_velocity = 0.0f;
+                                m_targetVelocity = 0.0f;
+                                m_moveToActive = false;
+                                m_jogActive = false;
+                                m_homing = false;
+                                m_stallTimerActive = false;
+                                pending = Pending::StallDetected;
+                                notifyPos = m_position;
+                            }
+                        }
+                    }
+                    else
+                    {
                         m_stallTimerActive = false;
-                        notifyStallDetected(m_position, savedVel);
-                        continue;
                     }
                 }
-            }
-            else
+            } // lock released
+
+            switch (pending)
             {
-                m_stallTimerActive = false;
+            case Pending::MotionComplete:  notifyMotionComplete(notifyPos); break;
+            case Pending::LimitHit:        notifyLimitHit(notifyLimit, notifyPos); break;
+            case Pending::StallDetected:   notifyStallDetected(notifyPos, notifyVel); break;
+            case Pending::None:            break;
             }
         }
     }

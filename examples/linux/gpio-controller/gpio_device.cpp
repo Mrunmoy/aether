@@ -40,47 +40,56 @@ public:
 
             int pin = pinDist(gen);
 
-            std::lock_guard<std::mutex> lock(m_mutex);
-            auto &ps = m_pins[pin];
-            if (ps.direction != Input)
-                continue;
-
-            PinLevel oldLevel = ps.level;
-            PinLevel newLevel = (oldLevel == Low) ? High : Low;
-            ps.level = newLevel;
-
-            const char *oldStr = (oldLevel == Low) ? "LOW" : "HIGH";
-            const char *newStr = (newLevel == Low) ? "LOW" : "HIGH";
-
             bool fire = false;
             EdgeTrigger reportEdge = None;
+            uint8_t reportPin = 0;
 
-            if (ps.edge == Both)
             {
-                fire = true;
-                reportEdge = (newLevel == High) ? Rising : Falling;
-            }
-            else if (ps.edge == Rising && newLevel == High)
-            {
-                fire = true;
-                reportEdge = Rising;
-            }
-            else if (ps.edge == Falling && newLevel == Low)
-            {
-                fire = true;
-                reportEdge = Falling;
+                std::lock_guard<std::mutex> lock(m_mutex);
+                auto &ps = m_pins[pin];
+                if (ps.direction != Input)
+                    continue;
+
+                PinLevel oldLevel = ps.level;
+                PinLevel newLevel = (oldLevel == Low) ? High : Low;
+                ps.level = newLevel;
+
+                const char *oldStr = (oldLevel == Low) ? "LOW" : "HIGH";
+                const char *newStr = (newLevel == Low) ? "LOW" : "HIGH";
+
+                if (ps.edge == Both)
+                {
+                    fire = true;
+                    reportEdge = (newLevel == High) ? Rising : Falling;
+                }
+                else if (ps.edge == Rising && newLevel == High)
+                {
+                    fire = true;
+                    reportEdge = Rising;
+                }
+                else if (ps.edge == Falling && newLevel == Low)
+                {
+                    fire = true;
+                    reportEdge = Falling;
+                }
+
+                reportPin = static_cast<uint8_t>(pin);
+
+                if (fire)
+                {
+                    const char *edgeStr = (reportEdge == Rising) ? "Rising" : "Falling";
+                    std::printf("[gpio] Pin %d: %s -> %s (interrupt: %s)\n",
+                                pin, oldStr, newStr, edgeStr);
+                }
+                else
+                {
+                    std::printf("[gpio] Pin %d: %s -> %s\n", pin, oldStr, newStr);
+                }
             }
 
             if (fire)
             {
-                const char *edgeStr = (reportEdge == Rising) ? "Rising" : "Falling";
-                std::printf("[gpio] Pin %d: %s -> %s (interrupt: %s)\n",
-                            pin, oldStr, newStr, edgeStr);
-                notifyPinInterrupt(static_cast<uint8_t>(pin), reportEdge);
-            }
-            else
-            {
-                std::printf("[gpio] Pin %d: %s -> %s\n", pin, oldStr, newStr);
+                notifyPinInterrupt(reportPin, reportEdge);
             }
         }
     }

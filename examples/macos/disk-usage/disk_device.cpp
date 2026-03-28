@@ -83,8 +83,10 @@ private:
                     uint64_t total, uint64_t used)
     {
         aether::ipc::VolumeInfo v{};
-        std::strncpy(v.mountPoint, mount, 256);
-        std::strncpy(v.filesystem, fs, 64);
+        std::strncpy(v.mountPoint, mount, sizeof(v.mountPoint) - 1);
+        v.mountPoint[sizeof(v.mountPoint) - 1] = '\0';
+        std::strncpy(v.filesystem, fs, sizeof(v.filesystem) - 1);
+        v.filesystem[sizeof(v.filesystem) - 1] = '\0';
         v.totalBytes = total;
         v.usedBytes = used;
         v.freeBytes = total - used;

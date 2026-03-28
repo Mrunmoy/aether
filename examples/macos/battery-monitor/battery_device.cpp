@@ -95,11 +95,8 @@ private:
                         m_powerSource = aether::ipc::AC;
                         m_status.timeToEmptyMin = 0;
                     }
-                    uint32_t remaining = static_cast<uint32_t>(m_status.chargePercent);
-                    m_status.timeToEmptyMin = remaining * (kDrainIntervalMs / 60000.0f > 0
-                                                              ? static_cast<uint32_t>(remaining * 2.0f / 60.0f)
-                                                              : remaining);
-                    m_status.timeToEmptyMin = static_cast<uint32_t>(m_status.chargePercent * 2.0f / 60.0f * 60.0f);
+                    m_status.timeToEmptyMin = static_cast<uint32_t>(
+                        m_status.chargePercent * (kDrainIntervalMs / 60000.0f));
                     m_status.timeToFullMin = 0;
                     break;
                 }

@@ -194,10 +194,10 @@ private:
                 // Slow fuel drain
                 if (m_fuel > 5.0f)
                     m_fuel -= 0.5f;
-            }
 
-            std::printf("[ecu] State: %-14s  RPM=%.0f  Speed=%.0f  Throttle=%.0f%%\n",
-                        stateName(state), m_rpm, m_speed, m_throttle);
+                std::printf("[ecu] State: %-14s  RPM=%.0f  Speed=%.0f  Throttle=%.0f%%\n",
+                            stateName(state), m_rpm, m_speed, m_throttle);
+            }
 
             // Occasionally inject a new DTC every 4 full cycles.
             if (cycleCount > 0 && cycleCount % 16 == 0)

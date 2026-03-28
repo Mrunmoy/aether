@@ -130,18 +130,19 @@ public:
         m_services.push_back(std::move(batSvc));
     }
 
-    void startSimulation(std::atomic<bool> &running)
+    void startSimulation()
     {
-        m_simThread = std::thread([this, &running]
+        m_simRunning.store(true);
+        m_simThread = std::thread([this]
         {
             std::mt19937 rng(42);
             std::uniform_int_distribution<int> hrDist(0, 40);
             int tick = 0;
 
-            while (running.load())
+            while (m_simRunning.load())
             {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
-                if (!running.load())
+                if (!m_simRunning.load())
                     break;
 
                 // Update heart rate every second
@@ -169,6 +170,7 @@ public:
 
     void stopSimulation()
     {
+        m_simRunning.store(false);
         if (m_simThread.joinable())
             m_simThread.join();
     }
@@ -274,6 +276,7 @@ private:
 
     std::mutex m_profileMutex;
     std::vector<ServiceState> m_services;
+    std::atomic<bool> m_simRunning{false};
     std::thread m_simThread;
 };
 
@@ -301,7 +304,7 @@ int main()
     std::printf("  [1] Heart Rate Service (0x180D) — 2 characteristics\n");
     std::printf("  [2] Battery Service    (0x180F) — 1 characteristic\n");
 
-    device.startSimulation(g_running);
+    device.startSimulation();
 
     while (g_running.load())
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
