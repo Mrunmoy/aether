@@ -1,0 +1,49 @@
+struct CpuUsage
+{
+    float32 user;
+    float32 system;
+    float32 idle;
+    float32 iowait;
+    float32 total;
+};
+
+struct MemoryInfo
+{
+    uint64 totalKb;
+    uint64 freeKb;
+    uint64 availableKb;
+    uint64 buffersKb;
+    uint64 cachedKb;
+    uint64 usedKb;
+    float32 usedPercent;
+};
+
+struct LoadAverage
+{
+    float32 avg1;
+    float32 avg5;
+    float32 avg15;
+    uint32  runningProcs;
+    uint32  totalProcs;
+};
+
+service SysMon
+{
+    [method=1]
+    int GetCpuUsage([out] CpuUsage usage);
+
+    [method=2]
+    int GetMemoryInfo([out] MemoryInfo info);
+
+    [method=3]
+    int GetLoadAverage([out] LoadAverage load);
+};
+
+notifications SysMon
+{
+    [notify=1]
+    void HighCpuAlert([in] float32 cpuPercent);
+
+    [notify=2]
+    void LowMemoryAlert([in] float32 usedPercent, [in] uint64 availableKb);
+};

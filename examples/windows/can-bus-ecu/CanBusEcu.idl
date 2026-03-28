@@ -1,0 +1,55 @@
+enum DtcSeverity
+{
+    Info     = 0,
+    Warning  = 1,
+    Critical = 2,
+};
+
+struct DtcEntry
+{
+    string[8]   code;
+    DtcSeverity severity;
+    string[64]  description;
+};
+
+struct VehicleInfo
+{
+    string[20] vin;
+    uint16     modelYear;
+    string[32] make;
+    string[32] model;
+};
+
+struct PidReading
+{
+    uint8   pid;
+    float32 value;
+    string[16] unit;
+};
+
+service CanBusEcu
+{
+    [method=1]
+    int ReadPid([in] uint8 pid, [out] PidReading reading);
+
+    [method=2]
+    int GetDtcCount([out] uint8 count);
+
+    [method=3]
+    int GetDtc([in] uint8 index, [out] DtcEntry dtc);
+
+    [method=4]
+    int ClearDtc([out] uint8 clearedCount);
+
+    [method=5]
+    int GetVehicleInfo([out] VehicleInfo info);
+};
+
+notifications CanBusEcu
+{
+    [notify=1]
+    void CheckEngine([in] DtcEntry dtc);
+
+    [notify=2]
+    void DtcCleared([in] uint8 clearedCount);
+};

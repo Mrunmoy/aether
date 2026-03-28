@@ -1,0 +1,36 @@
+enum ServiceState
+{
+    Stopped  = 1,
+    Starting = 2,
+    Stopping = 3,
+    Running  = 4,
+    Paused   = 7,
+    Unknown  = 0,
+};
+
+struct ServiceInfo
+{
+    string[64]   serviceName;
+    string[128]  displayName;
+    ServiceState state;
+    uint32       pid;
+};
+
+service ServiceStatus
+{
+    [method=1]
+    int GetServiceStatus([in] string[64] serviceName,
+                         [out] ServiceInfo info);
+
+    [method=2]
+    int GetServiceCount([out] uint32 count);
+
+    [method=3]
+    int GetServiceAt([in] uint32 index, [out] ServiceInfo info);
+};
+
+notifications ServiceStatus
+{
+    [notify=1]
+    void ServiceStateChanged([in] ServiceInfo info, [in] ServiceState oldState);
+};

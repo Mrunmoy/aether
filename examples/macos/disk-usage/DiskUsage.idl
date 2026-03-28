@@ -1,0 +1,28 @@
+struct VolumeInfo
+{
+    string[256] mountPoint;
+    string[64]  filesystem;
+    uint64      totalBytes;
+    uint64      freeBytes;
+    uint64      usedBytes;
+    float32     usedPercent;
+};
+
+service DiskUsage
+{
+    [method=1]
+    int GetDiskUsage([in] string[256] mountPoint, [out] VolumeInfo info);
+
+    [method=2]
+    int GetVolumeCount([out] uint32 count);
+
+    [method=3]
+    int GetVolumeAt([in] uint32 index, [out] VolumeInfo info);
+};
+
+notifications DiskUsage
+{
+    [notify=1]
+    void DiskSpaceLow([in] string[256] mountPoint, [in] float32 usedPercent,
+                      [in] uint64 freeBytes);
+};

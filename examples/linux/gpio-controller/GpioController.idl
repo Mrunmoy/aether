@@ -1,0 +1,49 @@
+enum PinDirection
+{
+    Input  = 0,
+    Output = 1,
+};
+
+enum PinLevel
+{
+    Low  = 0,
+    High = 1,
+};
+
+enum EdgeTrigger
+{
+    None    = 0,
+    Rising  = 1,
+    Falling = 2,
+    Both    = 3,
+};
+
+struct PinState
+{
+    uint8        pin;
+    PinDirection direction;
+    PinLevel     level;
+    EdgeTrigger  edge;
+};
+
+service GpioController
+{
+    [method=1]
+    int ConfigurePin([in] uint8 pin, [in] PinDirection direction,
+                     [in] EdgeTrigger edge);
+
+    [method=2]
+    int ReadPin([in] uint8 pin, [out] PinLevel level);
+
+    [method=3]
+    int WritePin([in] uint8 pin, [in] PinLevel level);
+
+    [method=4]
+    int ReadAllPins([out] PinState[16] pins);
+};
+
+notifications GpioController
+{
+    [notify=1]
+    void PinInterrupt([in] uint8 pin, [in] EdgeTrigger edge);
+};

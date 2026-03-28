@@ -1,0 +1,29 @@
+struct ProcessInfo
+{
+    uint32     pid;
+    uint32     parentPid;
+    string[64] name;
+    uint32     threadCount;
+    uint64     memoryBytes;
+};
+
+service ProcessMonitor
+{
+    [method=1]
+    int GetProcessCount([out] uint32 count);
+
+    [method=2]
+    int GetProcessInfo([in] uint32 pid, [out] ProcessInfo info);
+
+    [method=3]
+    int GetProcessAt([in] uint32 index, [out] ProcessInfo info);
+};
+
+notifications ProcessMonitor
+{
+    [notify=1]
+    void ProcessStarted([in] ProcessInfo info);
+
+    [notify=2]
+    void ProcessExited([in] uint32 pid, [in] uint32 exitCode);
+};

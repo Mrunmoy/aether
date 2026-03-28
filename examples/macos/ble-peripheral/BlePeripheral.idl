@@ -1,0 +1,52 @@
+struct BleUuid
+{
+    uint8[16] bytes;
+};
+
+struct BleCharacteristic
+{
+    BleUuid   uuid;
+    uint8[20] value;
+    uint8     valueLength;
+    uint8     properties;
+};
+
+struct BleService
+{
+    BleUuid uuid;
+    uint8   characteristicCount;
+};
+
+service BlePeripheral
+{
+    [method=1]
+    int GetServiceCount([out] uint8 count);
+
+    [method=2]
+    int GetService([in] uint8 index, [out] BleService svc);
+
+    [method=3]
+    int ReadCharacteristic([in] BleUuid serviceUuid,
+                           [in] BleUuid charUuid,
+                           [out] BleCharacteristic characteristic);
+
+    [method=4]
+    int WriteCharacteristic([in] BleUuid serviceUuid,
+                            [in] BleUuid charUuid,
+                            [in] uint8[20] value,
+                            [in] uint8 length);
+
+    [method=5]
+    int EnableNotifications([in] BleUuid serviceUuid,
+                            [in] BleUuid charUuid,
+                            [in] uint8 enable);
+};
+
+notifications BlePeripheral
+{
+    [notify=1]
+    void CharacteristicChanged([in] BleUuid serviceUuid,
+                               [in] BleUuid charUuid,
+                               [in] uint8[20] value,
+                               [in] uint8 length);
+};
