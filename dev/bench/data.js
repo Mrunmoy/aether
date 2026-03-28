@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774681029614,
+  "lastUpdate": 1774687069902,
   "repoUrl": "https://github.com/Mrunmoy/aether",
   "entries": {
     "Benchmark": [
@@ -8652,6 +8652,348 @@ window.BENCHMARK_DATA = {
             "value": 61.05366101695027,
             "unit": "us/iter",
             "extra": "iterations: 14632\ncpu: 45.12073011208306 us\nthreads: 1"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "Mrunmoy@users.noreply.github.com",
+            "name": "Mrunmoy Samal",
+            "username": "Mrunmoy"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a79513e84aa1e017b62730b3ff95289d8a62e030",
+          "message": "Add 12 platform-specific IPC examples (#64)\n\n* Add file-watcher example with inotify-backed server and tests\n\nLinux directory watcher using inotify that demonstrates IPC notifications.\nServer watches directories and broadcasts FileChanged events to clients.\nSeven integration tests cover watch/unwatch lifecycle, event notifications\nfor file creation/modification/deletion, and error handling.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* Add sysmon example with /proc-based CPU, memory, and load monitoring\n\nServer reads /proc/stat, /proc/meminfo, and /proc/loadavg to implement\nGetCpuUsage, GetMemoryInfo, and GetLoadAverage RPCs. A monitoring thread\nchecks thresholds every second and fires HighCpuAlert/LowMemoryAlert\nnotifications.\n\nClient queries all three methods in a formatted table and listens for\nthreshold notifications. Test suite covers all RPCs, both notification\ntypes, invalid method handling, and RunLoop dispatch mode (8 tests).\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* Add disk-usage example with simulated volumes\n\nImplement the disk-usage example under examples/macos/disk-usage/:\n\n- disk_device.cpp: Simulated server with 3 volumes (/, /home, /tmp).\n  Usage on / grows 1 GB every 3s; fires DiskSpaceLow when > 90%.\n- disk_client.cpp: Interactive CLI with list, check <mount>, quit\n  commands and bar-chart display. Prints notification alerts.\n- disk_test.cpp: 8 Google Test cases covering GetVolumeCount,\n  GetVolumeAt (valid/invalid), GetDiskUsage (known/unknown mount),\n  DiskSpaceLow notification, UsedPercent consistency, RunLoop dispatch.\n- CMakeLists.txt: Builds device, client, and test executables.\n- README.md: IDL overview, build/run instructions, sample output.\n\nAll volumes are simulated — no platform-specific APIs — so the example\ncompiles and runs on Linux, macOS, and Windows.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* Add audio-dsp example: simulated DSP effects processor\n\nImplement server (dsp_device), client CLI (dsp_dashboard), and 12 Google\nTest cases covering slot management, parameter updates, effect counting,\nsignal levels, invalid-slot errors, and ClipDetected/LevelUpdate\nnotifications.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* Add can-bus-ecu example: simulated ECU with OBD-II PIDs\n\nImplement ecu_device (server with state machine simulation),\necu_dashboard (interactive CLI client), and ecu_test (11 Google\nTest cases covering all RPC methods, notifications, and RunLoop\ndispatch). Cross-platform — compiles on Linux and Windows.\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* Add BLE Heart Rate Monitor peripheral example\n\nImplement simulated BLE HRM with GATT service model:\n- ble_device: server with Heart Rate (0x180D) and Battery (0x180F)\n  services, simulation thread for HR/battery updates\n- ble_dashboard: interactive CLI client with service discovery,\n  characteristic read, and notification subscription\n- ble_test: 9 Google Test cases covering service count, get/read/\n  write characteristics, notification enable/disable, error cases\n\nAll code is cross-platform (no macOS-specific APIs).\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* Add motor-controller example with simulated stepper motor\n\nImplements MotorController IPC service with trapezoidal motion profiles,\nlimit switch detection, stall monitoring, and homing sequence. Includes:\n\n- motor_device: simulated stepper motor server (10ms tick loop)\n- motor_dashboard: interactive CLI client with status display\n- motor_test: 10 Google Test cases covering all methods and notifications\n\nAll code is cross-platform (no Windows-specific APIs).\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\n\n* Fix CMake wiring and build warnings for platform examples\n\n- Consolidate platform subdirectory includes in examples/CMakeLists.txt\n- Guard Linux-only examples (sysmon, file-watcher) inside linux/CMakeLists.txt\n- Remove duplicate add_subdirectory entries from parallel agent commits\n- Fix -Werror=unused-result warnings in filewatcher_test.cpp\n\n* Address code review findings across platform examples\n\n- Fix dead code and wrong formula in battery_device timeToEmpty calc\n- Move notifyXxx calls outside mutex locks in motor, gpio, procmon, svcstat\n- Add can-bus-ecu to windows/CMakeLists.txt (was missing)\n- Replace fragile reference capture in ble_device with member m_simRunning\n- Add explicit null termination after strncpy in disk_device\n- Move ecu_device printf inside lock scope to avoid data race\n\n* Fix motor simulation crossover on coarse-timer platforms\n\nOn Windows (~15ms timer resolution) and macOS, a single simulation\ntick can overshoot the MoveTo target position. Add post-update\ncrossover detection in both the production device and test device\nto snap to target when position crosses or reaches the destination.\n\nFixes CI failures: MoveTo_ReachesTarget, MoveWithoutHome_Allowed\n\n---------\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>",
+          "timestamp": "2026-03-28T19:35:31+11:00",
+          "tree_id": "fb49bce97336071a6a4698567b8e6f643d46484e",
+          "url": "https://github.com/Mrunmoy/aether/commit/a79513e84aa1e017b62730b3ff95289d8a62e030"
+        },
+        "date": 1774687069600,
+        "tool": "googlecpp",
+        "benches": [
+          {
+            "name": "BM_WriteFrame/0",
+            "value": 63196.39841854545,
+            "unit": "ns/iter",
+            "extra": "iterations: 11129\ncpu: 63098.104322041516 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/64",
+            "value": 63214.23663642071,
+            "unit": "ns/iter",
+            "extra": "iterations: 11131\ncpu: 63117.352169616395 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/1024",
+            "value": 63149.29461067015,
+            "unit": "ns/iter",
+            "extra": "iterations: 11096\ncpu: 63044.1698810382 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/16384",
+            "value": 63570.65421152618,
+            "unit": "ns/iter",
+            "extra": "iterations: 11053\ncpu: 63451.60363702159 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/65536",
+            "value": 63940.732614456414,
+            "unit": "ns/iter",
+            "extra": "iterations: 10943\ncpu: 63903.403454262996 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/0",
+            "value": 2938.4472251396733,
+            "unit": "ns/iter",
+            "extra": "iterations: 238030\ncpu: 2937.9654077217156 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/64",
+            "value": 2972.707111340107,
+            "unit": "ns/iter",
+            "extra": "iterations: 223235\ncpu: 2972.0320559052097 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/1024",
+            "value": 3056.626867495646,
+            "unit": "ns/iter",
+            "extra": "iterations: 229117\ncpu: 3055.96533212289 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/16384",
+            "value": 4359.015018112453,
+            "unit": "ns/iter",
+            "extra": "iterations: 160939\ncpu: 4358.027146931442 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/65536",
+            "value": 7365.4043046150055,
+            "unit": "ns/iter",
+            "extra": "iterations: 95386\ncpu: 7363.882729121667 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/0",
+            "value": 2940.630635445776,
+            "unit": "ns/iter",
+            "extra": "iterations: 235740\ncpu: 2940.188924238565 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/64",
+            "value": 2970.6595806998293,
+            "unit": "ns/iter",
+            "extra": "iterations: 235583\ncpu: 2970.418604058868 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/1024",
+            "value": 3050.261502940539,
+            "unit": "ns/iter",
+            "extra": "iterations: 229550\ncpu: 3050.077660640381 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/16384",
+            "value": 4068.688040129589,
+            "unit": "ns/iter",
+            "extra": "iterations: 163271\ncpu: 4068.264633645901 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_PeekFrameHeader",
+            "value": 1.3531616941368554,
+            "unit": "ns/iter",
+            "extra": "iterations: 518374368\ncpu: 1.3530251364589068 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_MultiFramePipeline/64",
+            "value": 95.66339980863964,
+            "unit": "us/iter",
+            "extra": "iterations: 7316\ncpu: 95.65510196828859 us\nthreads: 1"
+          },
+          {
+            "name": "BM_MultiFramePipeline/1024",
+            "value": 19.013901107272172,
+            "unit": "us/iter",
+            "extra": "iterations: 36757\ncpu: 19.012437494898933 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/0",
+            "value": 45.95784795936239,
+            "unit": "us/iter",
+            "extra": "iterations: 51381\ncpu: 13.783825402386096 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/64",
+            "value": 46.38884906622347,
+            "unit": "us/iter",
+            "extra": "iterations: 52957\ncpu: 13.48309855165512 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/1024",
+            "value": 47.408216946690494,
+            "unit": "us/iter",
+            "extra": "iterations: 52317\ncpu: 14.405642945887536 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/16384",
+            "value": 56.06436253591328,
+            "unit": "us/iter",
+            "extra": "iterations: 47336\ncpu: 14.686403266013192 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallThroughput",
+            "value": 46.92327054166266,
+            "unit": "us/iter",
+            "extra": "iterations: 51785\ncpu: 14.136785845321972 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ConnectDisconnect",
+            "value": 493.8348203477123,
+            "unit": "us/iter",
+            "extra": "iterations: 1553\ncpu: 450.5747379265946 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/1",
+            "value": 47.19382816271611,
+            "unit": "us/iter",
+            "extra": "iterations: 50542\ncpu: 13.445760159867053 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/2",
+            "value": 94.11660143815517,
+            "unit": "us/iter",
+            "extra": "iterations: 22807\ncpu: 28.10958596045068 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/4",
+            "value": 193.14959432357327,
+            "unit": "us/iter",
+            "extra": "iterations: 11169\ncpu: 57.20940119974902 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/8",
+            "value": 385.9265428709054,
+            "unit": "us/iter",
+            "extra": "iterations: 6228\ncpu: 114.35380651894678 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/0",
+            "value": 1.2698968016111325,
+            "unit": "us/iter",
+            "extra": "iterations: 545212\ncpu: 1.2697321262187953 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/64",
+            "value": 1.2471674632059688,
+            "unit": "us/iter",
+            "extra": "iterations: 526444\ncpu: 1.2470777328642721 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/1024",
+            "value": 1.302811554148936,
+            "unit": "us/iter",
+            "extra": "iterations: 538404\ncpu: 1.3026642316921848 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/16384",
+            "value": 0.05201842778284045,
+            "unit": "us/iter",
+            "extra": "iterations: 38256420\ncpu: 0.0520128976260716 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/1",
+            "value": 1.2559913303697956,
+            "unit": "us/iter",
+            "extra": "iterations: 552042\ncpu: 1.2558797029936102 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/2",
+            "value": 3.5887256029075245,
+            "unit": "us/iter",
+            "extra": "iterations: 203887\ncpu: 3.5880552462883806 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/4",
+            "value": 10.50437173916068,
+            "unit": "us/iter",
+            "extra": "iterations: 72029\ncpu: 9.603095711449575 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/8",
+            "value": 30.334097840301222,
+            "unit": "us/iter",
+            "extra": "iterations: 25235\ncpu: 28.363429799881082 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/16",
+            "value": 65.44119182737214,
+            "unit": "us/iter",
+            "extra": "iterations: 11771\ncpu: 59.91296236513456 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyThroughput",
+            "value": 1.247397274412815,
+            "unit": "us/iter",
+            "extra": "iterations: 532876\ncpu: 1.2473626772457351 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/64",
+            "value": 46.80431936461855,
+            "unit": "us/iter",
+            "extra": "iterations: 53763\ncpu: 13.56577984859481 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/1024",
+            "value": 46.95859607187295,
+            "unit": "us/iter",
+            "extra": "iterations: 49031\ncpu: 13.779900940221454 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/16384",
+            "value": 57.59845232883233,
+            "unit": "us/iter",
+            "extra": "iterations: 46139\ncpu: 15.33790871063529 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/65536",
+            "value": 83.59285636789546,
+            "unit": "us/iter",
+            "extra": "iterations: 40555\ncpu: 17.558253680187498 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/64",
+            "value": 18.418607954545404,
+            "unit": "us/iter",
+            "extra": "iterations: 79552\ncpu: 9.120693584070784 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/1024",
+            "value": 17.950835837123073,
+            "unit": "us/iter",
+            "extra": "iterations: 75419\ncpu: 8.871130855619935 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/16384",
+            "value": 22.772000268614867,
+            "unit": "us/iter",
+            "extra": "iterations: 55842\ncpu: 13.399846567100031 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/65536",
+            "value": 40.09376636893832,
+            "unit": "us/iter",
+            "extra": "iterations: 27094\ncpu: 26.161960323318926 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/64",
+            "value": 26.72313988188221,
+            "unit": "us/iter",
+            "extra": "iterations: 60787\ncpu: 12.021317008571 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/1024",
+            "value": 28.011034768423634,
+            "unit": "us/iter",
+            "extra": "iterations: 62528\ncpu: 12.975052280578334 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/16384",
+            "value": 26.918485986381917,
+            "unit": "us/iter",
+            "extra": "iterations: 44207\ncpu: 14.141184224217879 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/65536",
+            "value": 58.33827543877888,
+            "unit": "us/iter",
+            "extra": "iterations: 19144\ncpu: 36.57556513790234 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/64",
+            "value": 47.057568641474596,
+            "unit": "us/iter",
+            "extra": "iterations: 25167\ncpu: 28.141137282949835 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/1024",
+            "value": 32.17252114865868,
+            "unit": "us/iter",
+            "extra": "iterations: 31515\ncpu: 22.292076852292407 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/16384",
+            "value": 52.70284549320392,
+            "unit": "us/iter",
+            "extra": "iterations: 23986\ncpu: 33.07601108980238 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/65536",
+            "value": 63.04778877197556,
+            "unit": "us/iter",
+            "extra": "iterations: 15301\ncpu: 46.442068230834764 us\nthreads: 1"
           }
         ]
       }
