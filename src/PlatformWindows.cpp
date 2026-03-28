@@ -93,6 +93,12 @@ namespace aether::ipc::platform
             if (waitRc != WAIT_OBJECT_0)
             {
                 CancelIoEx(file, ov);
+                // Must wait for the cancelled I/O to complete before returning,
+                // because callers pass stack-allocated OVERLAPPEDs. CancelIoEx
+                // is asynchronous — the kernel signals ov->hEvent when the
+                // cancellation finishes (with ERROR_OPERATION_ABORTED).
+                DWORD ignored = 0;
+                GetOverlappedResult(file, ov, &ignored, TRUE);
                 return false;
             }
             return GetOverlappedResult(file, ov, transferred, FALSE) != FALSE;
@@ -523,6 +529,10 @@ namespace aether::ipc::platform
             }
 
             CancelIoEx(pipe, &ov);
+            // Wait for cancellation to complete before the stack OVERLAPPED
+            // goes out of scope.
+            DWORD ignored = 0;
+            GetOverlappedResult(pipe, &ov, &ignored, TRUE);
             CloseHandle(ov.hEvent);
             CloseHandle(pipe);
             return kInvalidHandle;
@@ -600,13 +610,17 @@ namespace aether::ipc::platform
                 CloseHandle(ov.hEvent);
                 return 0;
             }
-            // Write completed with error (broken pipe, etc.)
-            CancelIoEx(reinterpret_cast<HANDLE>(sockFd), &ov);
+            // Write completed with error (broken pipe, etc.). The I/O is
+            // already finished, so no CancelIoEx needed.
             CloseHandle(ov.hEvent);
             return -1;
         }
 
         CancelIoEx(reinterpret_cast<HANDLE>(sockFd), &ov);
+        // Wait for cancellation so the stack OVERLAPPED is not accessed
+        // after this function returns.
+        DWORD ignored = 0;
+        GetOverlappedResult(reinterpret_cast<HANDLE>(sockFd), &ov, &ignored, TRUE);
         CloseHandle(ov.hEvent);
         // Signal already pending — coalesced, treat as success.
         return 0;
@@ -716,6 +730,10 @@ namespace aether::ipc::platform
         if (state->pendingConnect)
         {
             CancelIoEx(state->currentPipe, &state->ov);
+            // Wait for cancellation to complete before deleting state.
+            // CancelIoEx is asynchronous; GetOverlappedResult(TRUE) blocks
+            // until the kernel signals ERROR_OPERATION_ABORTED, which happens
+            // almost immediately for named pipe ConnectNamedPipe operations.
             DWORD ignored = 0;
             GetOverlappedResult(state->currentPipe, &state->ov, &ignored, TRUE);
         }
@@ -775,6 +793,10 @@ namespace aether::ipc::platform
         if (state->pendingRead)
         {
             CancelIoEx(reinterpret_cast<HANDLE>(sockFd), &state->ov);
+            // Wait for cancellation to complete before deleting state.
+            // CancelIoEx is asynchronous; GetOverlappedResult(TRUE) blocks
+            // until ERROR_OPERATION_ABORTED, which happens almost immediately
+            // for named pipe ReadFile operations.
             DWORD ignored = 0;
             GetOverlappedResult(reinterpret_cast<HANDLE>(sockFd), &state->ov,
                                 &ignored, TRUE);
