@@ -1,0 +1,291 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "http://localhost:3000",
+  "elements": [
+    {
+      "id": "title", "type": "text", "x": 60, "y": 20, "width": 700, "height": 35,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a0", "roundness": null,
+      "seed": 1001, "version": 1, "versionNonce": 1002, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Aether × Vortex — RunLoop Integration",
+      "originalText": "Aether × Vortex — RunLoop Integration",
+      "autoResize": true, "fontSize": 24, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "runloop_box", "type": "rectangle", "x": 220, "y": 80, "width": 400, "height": 60,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#e5dbff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a1",
+      "roundness": {"type": 3}, "seed": 2001, "version": 1, "versionNonce": 2002,
+      "isDeleted": false, "boundElements": [{"id": "t_rl", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_rl", "type": "text", "x": 225, "y": 88, "width": 390, "height": 45,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a1a", "roundness": null,
+      "seed": 2003, "version": 1, "versionNonce": 2004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "RunLoop (Vortex) — single thread\nepoll_wait / kevent / WaitForMultipleObjects",
+      "originalText": "RunLoop (Vortex) — single thread\nepoll_wait / kevent / WaitForMultipleObjects",
+      "autoResize": true, "fontSize": 14, "fontFamily": 2, "textAlign": "center",
+      "verticalAlign": "middle", "containerId": "runloop_box", "lineHeight": 1.25
+    },
+
+    {
+      "id": "svc_band", "type": "rectangle", "x": 40, "y": 180, "width": 380, "height": 440,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#edf2ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 30, "groupIds": [], "frameId": null, "index": "a2",
+      "roundness": {"type": 3}, "seed": 3001, "version": 1, "versionNonce": 3002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false
+    },
+    {
+      "id": "svc_label", "type": "text", "x": 55, "y": 188, "width": 200, "height": 20,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 80, "groupIds": [], "frameId": null, "index": "a2a", "roundness": null,
+      "seed": 3003, "version": 1, "versionNonce": 3004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "ServiceBase (server side)",
+      "originalText": "ServiceBase (server side)",
+      "autoResize": true, "fontSize": 14, "fontFamily": 2, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "svc_start", "type": "rectangle", "x": 60, "y": 220, "width": 340, "height": 60,
+      "angle": 0, "strokeColor": "#1971c2", "backgroundColor": "#bac8ff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a3",
+      "roundness": {"type": 3}, "seed": 4001, "version": 1, "versionNonce": 4002,
+      "isDeleted": false, "boundElements": [{"id": "t_start", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_start", "type": "text", "x": 65, "y": 228, "width": 330, "height": 45,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a3a", "roundness": null,
+      "seed": 4003, "version": 1, "versionNonce": 4004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "start()\nloop->addSource(listenFd, onAcceptReady)\n// no accept thread — RunLoop watches the socket",
+      "originalText": "start()\nloop->addSource(listenFd, onAcceptReady)\n// no accept thread — RunLoop watches the socket",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "svc_start", "lineHeight": 1.25
+    },
+
+    {
+      "id": "svc_accept", "type": "rectangle", "x": 60, "y": 300, "width": 340, "height": 80,
+      "angle": 0, "strokeColor": "#2f9e44", "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a4",
+      "roundness": {"type": 3}, "seed": 5001, "version": 1, "versionNonce": 5002,
+      "isDeleted": false, "boundElements": [{"id": "t_accept", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_accept", "type": "text", "x": 65, "y": 308, "width": 330, "height": 65,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a4a", "roundness": null,
+      "seed": 5003, "version": 1, "versionNonce": 5004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "onAcceptReady()  // RunLoop fires this\nacceptClient() → handshake → Connection\nloop->addSource(clientFd, onClientReady,\n                          onClientError)\n// no receiver thread per client!",
+      "originalText": "onAcceptReady()  // RunLoop fires this\nacceptClient() → handshake → Connection\nloop->addSource(clientFd, onClientReady,\n                          onClientError)\n// no receiver thread per client!",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "svc_accept", "lineHeight": 1.25
+    },
+
+    {
+      "id": "svc_ready", "type": "rectangle", "x": 60, "y": 400, "width": 340, "height": 80,
+      "angle": 0, "strokeColor": "#e67700", "backgroundColor": "#fff3bf",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a5",
+      "roundness": {"type": 3}, "seed": 6001, "version": 1, "versionNonce": 6002,
+      "isDeleted": false, "boundElements": [{"id": "t_ready", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_ready", "type": "text", "x": 65, "y": 408, "width": 330, "height": 65,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a5a", "roundness": null,
+      "seed": 6003, "version": 1, "versionNonce": 6004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "onClientReady(client)  // RunLoop fires this\nlock(handlerMutex)  // guards against stop()\nrecvSignal() → readFrame(rxRing)\nonRequest() → handleFoo()\nsendResponse(txRing) under sendMutex",
+      "originalText": "onClientReady(client)  // RunLoop fires this\nlock(handlerMutex)  // guards against stop()\nrecvSignal() → readFrame(rxRing)\nonRequest() → handleFoo()\nsendResponse(txRing) under sendMutex",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "svc_ready", "lineHeight": 1.25
+    },
+
+    {
+      "id": "svc_stop", "type": "rectangle", "x": 60, "y": 500, "width": 340, "height": 60,
+      "angle": 0, "strokeColor": "#c92a2a", "backgroundColor": "#ffe3e3",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a6",
+      "roundness": {"type": 3}, "seed": 7001, "version": 1, "versionNonce": 7002,
+      "isDeleted": false, "boundElements": [{"id": "t_stop", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_stop", "type": "text", "x": 65, "y": 508, "width": 330, "height": 45,
+      "angle": 0, "strokeColor": "#c92a2a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a6a", "roundness": null,
+      "seed": 7003, "version": 1, "versionNonce": 7004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "stop()\nremoveSource(listenFd)\nfor each client: removeSource(fd) → close()",
+      "originalText": "stop()\nremoveSource(listenFd)\nfor each client: removeSource(fd) → close()",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "svc_stop", "lineHeight": 1.25
+    },
+
+    {
+      "id": "cli_band", "type": "rectangle", "x": 460, "y": 180, "width": 380, "height": 440,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#f8f0fc",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 30, "groupIds": [], "frameId": null, "index": "a7",
+      "roundness": {"type": 3}, "seed": 8001, "version": 1, "versionNonce": 8002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false
+    },
+    {
+      "id": "cli_label", "type": "text", "x": 475, "y": 188, "width": 200, "height": 20,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 80, "groupIds": [], "frameId": null, "index": "a7a", "roundness": null,
+      "seed": 8003, "version": 1, "versionNonce": 8004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "ClientBase (client side)",
+      "originalText": "ClientBase (client side)",
+      "autoResize": true, "fontSize": 14, "fontFamily": 2, "textAlign": "left",
+      "verticalAlign": "top", "containerId": null, "lineHeight": 1.25
+    },
+
+    {
+      "id": "cli_connect", "type": "rectangle", "x": 480, "y": 220, "width": 340, "height": 60,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "#e5dbff",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a8",
+      "roundness": {"type": 3}, "seed": 9001, "version": 1, "versionNonce": 9002,
+      "isDeleted": false, "boundElements": [{"id": "t_connect", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_connect", "type": "text", "x": 485, "y": 228, "width": 330, "height": 45,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a8a", "roundness": null,
+      "seed": 9003, "version": 1, "versionNonce": 9004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "connect()\nconnectToServer() → handshake → Connection\nloop->addSource(socketFd, onDataReady)",
+      "originalText": "connect()\nconnectToServer() → handshake → Connection\nloop->addSource(socketFd, onDataReady)",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "cli_connect", "lineHeight": 1.25
+    },
+
+    {
+      "id": "cli_data", "type": "rectangle", "x": 480, "y": 300, "width": 340, "height": 100,
+      "angle": 0, "strokeColor": "#2f9e44", "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a9",
+      "roundness": {"type": 3}, "seed": 10001, "version": 1, "versionNonce": 10002,
+      "isDeleted": false, "boundElements": [{"id": "t_data", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_data", "type": "text", "x": 485, "y": 308, "width": 330, "height": 85,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "a9a", "roundness": null,
+      "seed": 10003, "version": 1, "versionNonce": 10004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "onDataReady()  // RunLoop fires this\nlock(handlerMutex)\nrecvSignal() → readFrame(rxRing)\n\nRESPONSE → match seq → wake caller via cv\nNOTIFY   → onNotification() → onBarNotify()\n\n// no receiver thread!",
+      "originalText": "onDataReady()  // RunLoop fires this\nlock(handlerMutex)\nrecvSignal() → readFrame(rxRing)\n\nRESPONSE → match seq → wake caller via cv\nNOTIFY   → onNotification() → onBarNotify()\n\n// no receiver thread!",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "cli_data", "lineHeight": 1.25
+    },
+
+    {
+      "id": "cli_call", "type": "rectangle", "x": 480, "y": 420, "width": 340, "height": 80,
+      "angle": 0, "strokeColor": "#e67700", "backgroundColor": "#fff3bf",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "aA",
+      "roundness": {"type": 3}, "seed": 11001, "version": 1, "versionNonce": 11002,
+      "isDeleted": false, "boundElements": [{"id": "t_call", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_call", "type": "text", "x": 485, "y": 428, "width": 330, "height": 65,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "aAa", "roundness": null,
+      "seed": 11003, "version": 1, "versionNonce": 11004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "call() — from ANY thread (not the RunLoop thread)\nwriteFrame(txRing) → sendSignal()\ncv.wait() — blocks caller until onDataReady()\n              delivers the matching response\n\n⚠ call() from RunLoop thread = DEADLOCK",
+      "originalText": "call() — from ANY thread (not the RunLoop thread)\nwriteFrame(txRing) → sendSignal()\ncv.wait() — blocks caller until onDataReady()\n              delivers the matching response\n\n⚠ call() from RunLoop thread = DEADLOCK",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "cli_call", "lineHeight": 1.25
+    },
+
+    {
+      "id": "comparison", "type": "rectangle", "x": 40, "y": 650, "width": 800, "height": 100,
+      "angle": 0, "strokeColor": "#495057", "backgroundColor": "#f8f9fa",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "aB",
+      "roundness": {"type": 3}, "seed": 12001, "version": 1, "versionNonce": 12002,
+      "isDeleted": false, "boundElements": [{"id": "t_comp", "type": "text"}],
+      "updated": 1774700000000, "link": null, "locked": false
+    },
+    {
+      "id": "t_comp", "type": "text", "x": 45, "y": 658, "width": 790, "height": 85,
+      "angle": 0, "strokeColor": "#1e1e1e", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 100, "groupIds": [], "frameId": null, "index": "aBa", "roundness": null,
+      "seed": 12003, "version": 1, "versionNonce": 12004, "isDeleted": false,
+      "boundElements": null, "updated": 1774700000000, "link": null, "locked": false,
+      "text": "Thread-per-client (default, loop=nullptr)         RunLoop mode (loop=&runLoop)\n─────────────────────────────────────────          ─────────────────────────────────────────\n1 accept thread + 1 receiver thread per client     0 extra threads — all on RunLoop thread\nSimple, works everywhere                           Efficient, scales to many clients\nBlocking recvSignal() per thread                   Event-driven: addSource() per client fd\nWindows: works today                               Windows: needs overlapped I/O (Phase 5)",
+      "originalText": "Thread-per-client (default, loop=nullptr)         RunLoop mode (loop=&runLoop)\n─────────────────────────────────────────          ─────────────────────────────────────────\n1 accept thread + 1 receiver thread per client     0 extra threads — all on RunLoop thread\nSimple, works everywhere                           Efficient, scales to many clients\nBlocking recvSignal() per thread                   Event-driven: addSource() per client fd\nWindows: works today                               Windows: needs overlapped I/O (Phase 5)",
+      "autoResize": true, "fontSize": 11, "fontFamily": 3, "textAlign": "left",
+      "verticalAlign": "middle", "containerId": "comparison", "lineHeight": 1.25
+    },
+
+    {
+      "id": "arrow_rl_svc", "type": "arrow", "x": 320, "y": 140, "width": -90, "height": 40,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 70, "groupIds": [], "frameId": null, "index": "aC",
+      "roundness": {"type": 2}, "seed": 13001, "version": 1, "versionNonce": 13002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false,
+      "points": [[0,0],[-90,40]], "lastCommittedPoint": null,
+      "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow", "elbowed": false
+    },
+    {
+      "id": "arrow_rl_cli", "type": "arrow", "x": 520, "y": 140, "width": 90, "height": 40,
+      "angle": 0, "strokeColor": "#862e9c", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid", "roughness": 0,
+      "opacity": 70, "groupIds": [], "frameId": null, "index": "aD",
+      "roundness": {"type": 2}, "seed": 14001, "version": 1, "versionNonce": 14002,
+      "isDeleted": false, "boundElements": null, "updated": 1774700000000,
+      "link": null, "locked": false,
+      "points": [[0,0],[90,40]], "lastCommittedPoint": null,
+      "startBinding": null, "endBinding": null,
+      "startArrowhead": null, "endArrowhead": "arrow", "elbowed": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20, "gridStep": 5, "gridModeEnabled": true,
+    "viewBackgroundColor": "#ffffff"
+  },
+  "files": {}
+}
