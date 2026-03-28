@@ -1,0 +1,31 @@
+enum FileEventType
+{
+    Created  = 1,
+    Modified = 2,
+    Deleted  = 3,
+};
+
+struct WatchEntry
+{
+    uint32        watchId;
+    string[256]   path;
+};
+
+service FileWatcher
+{
+    [method=1]
+    int WatchDirectory([in] string[256] path, [out] uint32 watchId);
+
+    [method=2]
+    int UnwatchDirectory([in] uint32 watchId);
+
+    [method=3]
+    int GetWatchCount([out] uint32 count);
+};
+
+notifications FileWatcher
+{
+    [notify=1]
+    void FileChanged([in] uint32 watchId, [in] FileEventType eventType,
+                     [in] string[256] filename);
+};

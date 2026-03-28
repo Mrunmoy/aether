@@ -1,0 +1,47 @@
+enum PowerSource
+{
+    Battery = 0,
+    AC      = 1,
+    UPS     = 2,
+    Unknown = 3,
+};
+
+enum ChargeState
+{
+    Charging     = 0,
+    Discharging  = 1,
+    Full         = 2,
+    NotCharging  = 3,
+};
+
+struct BatteryStatus
+{
+    ChargeState state;
+    float32     chargePercent;
+    uint32      timeToEmptyMin;
+    uint32      timeToFullMin;
+    float32     voltageV;
+    uint32      cycleCount;
+    float32     healthPercent;
+};
+
+service BatteryMonitor
+{
+    [method=1]
+    int GetBatteryStatus([out] BatteryStatus status);
+
+    [method=2]
+    int GetPowerSource([out] PowerSource source);
+
+    [method=3]
+    int GetBatteryHealth([out] float32 healthPercent, [out] uint32 cycleCount);
+};
+
+notifications BatteryMonitor
+{
+    [notify=1]
+    void BatteryLevelChanged([in] float32 chargePercent, [in] ChargeState state);
+
+    [notify=2]
+    void PowerSourceChanged([in] PowerSource source);
+};

@@ -73,6 +73,14 @@ Local tracking doc. Do NOT commit.
 | B4 | Missing ResetEvent (100% CPU busy loop) | **DONE** — Vortex PR #15 (IOCP replaces event-based polling) |
 | B5 | Re-arm before dispatch (contradicts removeSource safety) | **DONE** — Vortex PR #15 (re-arm after dispatch with identity check) |
 
+### Phase 5d: Windows RunLoop Integration (all done)
+
+| # | Issue | Status |
+|---|-------|--------|
+| F1 | Async accept/signal platform primitives | **DONE** — Aether PR #61 |
+| F2 | ServiceBase RunLoop wiring (accept + per-client signal) | **DONE** — Aether PR #61 |
+| F3 | ClientBase RunLoop wiring (signal) | **DONE** — Aether PR #61 |
+
 ## Done (reference)
 
 - PR #4: Robustness hardening (MSG_NOSIGNAL, send mutex, socket timeouts, move semantics, version checks, CI)
@@ -111,3 +119,7 @@ Local tracking doc. Do NOT commit.
 - PR #57: Vortex submodule update (behavioral contract tests)
 - PR #58: Vortex submodule update (stress + concurrency tests)
 - PR #59: Vortex submodule update (IOCP backend)
+- PR #60: Vortex + Ouroboros submodule update (IOCP default, Ouroboros CI)
+- PR #61: Windows RunLoop integration (async named pipe I/O)
+- PR #62: Fix stack OVERLAPPED use-after-cancel on Windows
+- PR #63: Bump Vortex submodule (WFMO retired) + update docs

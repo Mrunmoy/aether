@@ -17,6 +17,16 @@ if(NOT WIN32)
     add_subdirectory(serial-sensor)
 endif()
 
+if(NOT WIN32)
+    add_subdirectory(linux/gpio-controller)
+endif()
+
+if(NOT WIN32)
+    add_subdirectory(macos)
+endif()
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_subdirectory(linux)
 endif()
+
+add_subdirectory(windows)

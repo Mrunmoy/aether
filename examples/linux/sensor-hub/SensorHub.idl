@@ -1,0 +1,55 @@
+enum SampleRate
+{
+    Rate_1Hz   = 1,
+    Rate_10Hz  = 10,
+    Rate_50Hz  = 50,
+    Rate_100Hz = 100,
+};
+
+struct AccelData
+{
+    float32 x;
+    float32 y;
+    float32 z;
+};
+
+struct GyroData
+{
+    float32 x;
+    float32 y;
+    float32 z;
+};
+
+struct EnvironmentData
+{
+    float32 temperatureC;
+    float32 pressureHpa;
+    float32 humidityPercent;
+};
+
+service SensorHub
+{
+    [method=1]
+    int GetAccelerometer([out] AccelData accel);
+
+    [method=2]
+    int GetGyroscope([out] GyroData gyro);
+
+    [method=3]
+    int GetEnvironment([out] EnvironmentData env);
+
+    [method=4]
+    int SetSampleRate([in] SampleRate rate);
+
+    [method=5]
+    int Calibrate([out] uint8 success);
+};
+
+notifications SensorHub
+{
+    [notify=1]
+    void DataReady([in] AccelData accel, [in] GyroData gyro);
+
+    [notify=2]
+    void MotionDetected([in] float32 magnitude);
+};

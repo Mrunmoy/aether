@@ -1,0 +1,57 @@
+enum MotorState
+{
+    Idle     = 0,
+    Homing   = 1,
+    Moving   = 2,
+    Stopped  = 3,
+    Fault    = 4,
+};
+
+enum LimitSwitch
+{
+    None  = 0,
+    Lower = 1,
+    Upper = 2,
+};
+
+struct MotorStatus
+{
+    MotorState  state;
+    int32       position;
+    float32     velocity;
+    LimitSwitch activeLimits;
+    uint8       homed;
+};
+
+service MotorController
+{
+    [method=1]
+    int Home();
+
+    [method=2]
+    int MoveTo([in] int32 position, [in] float32 velocity);
+
+    [method=3]
+    int Jog([in] float32 velocity);
+
+    [method=4]
+    int Stop();
+
+    [method=5]
+    int GetStatus([out] MotorStatus status);
+
+    [method=6]
+    int GetPosition([out] int32 position);
+};
+
+notifications MotorController
+{
+    [notify=1]
+    void MotionComplete([in] int32 position);
+
+    [notify=2]
+    void LimitHit([in] LimitSwitch which, [in] int32 position);
+
+    [notify=3]
+    void StallDetected([in] int32 position, [in] float32 velocity);
+};
