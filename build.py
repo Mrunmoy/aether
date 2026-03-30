@@ -168,10 +168,14 @@ def package():
                 extract_dir = os.path.join(tmpdir, lib_name)
                 os.makedirs(extract_dir, exist_ok=True)
                 run(["ar", "x", lib], cwd=extract_dir)
-                objs.extend(globmod.glob(os.path.join(extract_dir, "*.o")))
+                for obj in sorted(globmod.glob(os.path.join(extract_dir, "*.o"))):
+                    obj_name = os.path.basename(obj)
+                    prefixed_obj = os.path.join(extract_dir, f"{lib_name}__{obj_name}")
+                    os.replace(obj, prefixed_obj)
+                    objs.append(prefixed_obj)
         fat_lib = os.path.join(staging, "lib", "libaether.a")
         if objs:
-            run(["ar", "rcs", fat_lib] + objs)
+            run(["ar", "rcs", fat_lib] + sorted(objs))
             run(["ranlib", fat_lib])
 
     # Clean out GTest/GMock artifacts that leaked from vendor/

@@ -52,7 +52,7 @@ against the full Aether source tree.
 Run `ipcgen` with the `c_api` backend:
 
 ```bash
-python3 tools/ipcgen/__main__.py examples/sdk-usage/TemperatureSensor.idl \
+python3 -m tools.ipcgen examples/sdk-usage/TemperatureSensor.idl \
     --outdir examples/sdk-usage/gen --backend c_api
 ```
 

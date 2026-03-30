@@ -47,7 +47,7 @@ That single IDL definition drives both the client and the server side.
 Regenerate the typed glue with:
 
 ```bash
-python3 tools/ipcgen/__main__.py examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
+python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
 ```
 
 This creates three kinds of files:
