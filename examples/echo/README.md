@@ -1,22 +1,93 @@
 # Echo Example: the default source-build path
 
-If you cloned the Aether repo and want the fastest way to understand the
-framework, start here.
+This is the recommended first example if you cloned the Aether source tree and
+want to understand the normal C++ workflow.
 
-This is the recommended newcomer stack:
+## What You'll Learn
 
-- C++
-- default `ipcgen` backend
-- source build against the in-tree `aether` target
-- typed generated classes on top of `ServiceBase` and `ClientBase`
+- how an IDL file defines an RPC contract
+- how `ipcgen` generates typed C++ client and server glue
+- what code you write versus what Aether generates
+- how a typed client and server talk through the shared-memory runtime
 
-## Run it
+## Prerequisites
 
-From the repo root:
+- Linux, macOS, or Windows
+- C++17 compiler, CMake, and Python 3
+- an Aether source checkout
+
+All commands below run from the repository root.
+
+## Files That Matter
+
+| File | Why it matters |
+|------|----------------|
+| [`DeviceMonitor.idl`](DeviceMonitor.idl) | Defines the RPC contract and shared types |
+| [`gen/DeviceMonitorTypes.h`](gen/DeviceMonitorTypes.h) | Shared generated enums and structs |
+| [`gen/server/DeviceMonitor.h`](gen/server/DeviceMonitor.h) | Generated typed server skeleton |
+| [`gen/client/DeviceMonitor.h`](gen/client/DeviceMonitor.h) | Generated typed client stub |
+| [`device_monitor_server.cpp`](device_monitor_server.cpp) | User-written server implementation |
+| [`device_monitor_client.cpp`](device_monitor_client.cpp) | User-written client implementation |
+| [`echo_server.cpp`](echo_server.cpp) | Low-level contrast example without code generation |
+| [`echo_client.cpp`](echo_client.cpp) | Low-level contrast example without code generation |
+
+## Step 1: Read the IDL
+
+[`DeviceMonitor.idl`](DeviceMonitor.idl) is the source of truth for the typed
+example. It declares:
+
+- two methods: `GetDeviceCount` and `GetDeviceInfo`
+- two notifications: `DeviceConnected` and `DeviceDisconnected`
+- shared types: `DeviceType` and `DeviceInfo`
+
+That single IDL definition drives both the client and the server side.
+
+## Step 2: Generate Code
+
+Regenerate the typed glue with:
+
+```bash
+python3 tools/ipcgen/__main__.py examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
+```
+
+This creates three kinds of files:
+
+- `gen/DeviceMonitorTypes.h`: shared structs and enums
+- `gen/server/*`: the typed server skeleton and dispatch logic
+- `gen/client/*`: the typed client stub and notification dispatch
+
+## Step 3: Review the User Code
+
+[`device_monitor_server.cpp`](device_monitor_server.cpp) only implements domain
+logic:
+
+- return a device count
+- return a specific device record
+- emit demo notifications
+
+[`device_monitor_client.cpp`](device_monitor_client.cpp) only:
+
+- connects to the service
+- calls typed methods
+- overrides typed notification callbacks
+
+Aether handles:
+
+- connection setup
+- shared-memory transport
+- request and response framing
+- request dispatch
+- notification delivery
+
+## Build
 
 ```bash
 python3 build.py -e
+```
 
+## Run
+
+```bash
 # Terminal 1
 ./build/examples/echo/device_monitor_server
 
@@ -24,7 +95,9 @@ python3 build.py -e
 ./build/examples/echo/device_monitor_client
 ```
 
-The stable client output looks like:
+## Expected Output
+
+Client output:
 
 ```text
 [client] device count: 2
@@ -34,7 +107,7 @@ The stable client output looks like:
 [client] disconnected.
 ```
 
-While the client is waiting, you should also see one or more notification lines:
+While the client waits, you should also see one or more notification lines:
 
 ```text
 [client] notification: connected -> USB Audio Interface
@@ -43,111 +116,23 @@ While the client is waiting, you should also see one or more notification lines:
 
 The notification order depends on when the client joins the server's demo cycle.
 
-## What this example teaches
+## What Just Happened
 
-The path is intentionally small:
+You wrote one IDL file, Aether generated typed C++ wrappers from it, and your
+client/server code only filled in the business logic. The server implementation
+never packs bytes manually, and the client never uses numeric message IDs. The
+runtime underneath `ServiceBase`, `ClientBase`, `Connection`, and `FrameIO`
+moves the framed messages through shared memory and dispatches them to the
+typed handlers.
 
-1. [`DeviceMonitor.idl`](DeviceMonitor.idl) defines the RPC contract.
-2. `ipcgen` turns that IDL into typed C++ glue in [`gen/`](gen/).
-3. [`device_monitor_server.cpp`](device_monitor_server.cpp) subclasses the generated server and implements business logic.
-4. [`device_monitor_client.cpp`](device_monitor_client.cpp) subclasses the generated client and overrides notification callbacks.
-5. The Aether runtime handles connection setup, shared-memory transport, framing, dispatch, and notification delivery.
+## What To Modify Next
 
-## What you write vs. what Aether writes
+- Add a new method to [`DeviceMonitor.idl`](DeviceMonitor.idl), regenerate, and
+  implement the new handler in [`device_monitor_server.cpp`](device_monitor_server.cpp).
+- Change the client to call that new method and print the result.
 
-| You write | Aether generates or provides |
-|-----------|------------------------------|
-| [`DeviceMonitor.idl`](DeviceMonitor.idl) | [`gen/DeviceMonitorTypes.h`](gen/DeviceMonitorTypes.h) |
-| [`device_monitor_server.cpp`](device_monitor_server.cpp) | [`gen/server/DeviceMonitor.h`](gen/server/DeviceMonitor.h), [`gen/server/DeviceMonitor.cpp`](gen/server/DeviceMonitor.cpp) |
-| [`device_monitor_client.cpp`](device_monitor_client.cpp) | [`gen/client/DeviceMonitor.h`](gen/client/DeviceMonitor.h), [`gen/client/DeviceMonitor.cpp`](gen/client/DeviceMonitor.cpp) |
-| `CMakeLists.txt` target wiring | core runtime in `ServiceBase`, `ClientBase`, `Connection`, and `FrameIO` |
+## Related Examples
 
-## The learning narrative
-
-### Step 1: read the IDL
-
-[`DeviceMonitor.idl`](DeviceMonitor.idl) is the source of truth. It declares:
-
-- two methods: `GetDeviceCount` and `GetDeviceInfo`
-- two notifications: `DeviceConnected` and `DeviceDisconnected`
-- shared types: `DeviceType` and `DeviceInfo`
-
-### Step 2: inspect what `ipcgen` produced
-
-The generated files in [`gen/`](gen/) show the split clearly:
-
-- `gen/server/` is the typed server skeleton
-- `gen/client/` is the typed client stub
-- `gen/DeviceMonitorTypes.h` is shared by both sides
-
-To regenerate them from the repo root:
-
-```bash
-python3 tools/ipcgen/__main__.py examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
-```
-
-### Step 3: inspect the user code
-
-[`device_monitor_server.cpp`](device_monitor_server.cpp) only implements domain logic:
-
-- return a device count
-- return a device record
-- trigger demo notifications
-
-[`device_monitor_client.cpp`](device_monitor_client.cpp) only:
-
-- connects
-- calls typed methods
-- overrides notification callbacks
-
-### Step 4: connect that to the runtime
-
-Under the hood:
-
-- `ServiceBase` accepts clients and dispatches typed handlers
-- `ClientBase` manages the connection and waits for typed responses
-- `Connection` and `FrameIO` move framed messages through shared memory
-
-That is the mental model for the default Aether path:
-
-`IDL -> generated types -> your handlers/callbacks -> runtime transport`
-
-## What codegen removes
-
-The generated classes remove the repetitive wire work:
-
-- the server side gives you pure virtual handlers such as `handleGetDeviceInfo(...)`
-- the client side gives you typed RPC methods such as `GetDeviceInfo(...)`
-- notifications become typed calls and callbacks instead of raw message IDs
-
-You never pack bytes by hand in this path. The generated code and runtime do that for you.
-
-## Low-level contrast
-
-The same directory also includes [`echo_server.cpp`](echo_server.cpp) and
-[`echo_client.cpp`](echo_client.cpp). Those use the low-level API directly:
-
-- raw `std::vector<uint8_t>` payloads
-- explicit numeric `serviceId` and `messageId`
-- manual payload layout agreement
-
-They are useful to understand the runtime, but they are not the recommended
-starting point for new users.
-
-## More patterns
-
-The previous long-form example material now lives in the
-[IDL Cookbook](../../doc/idl-cookbook.md). Read that after this example if you
-want additional IDL patterns, RunLoop notes, and higher-level integration sketches.
-
-## Why this is the recommended default
-
-This path has the smallest cognitive load for a first-time contributor:
-
-- one checked-in IDL
-- one generated type set
-- one typed server
-- one typed client
-- no SDK packaging setup
-- no custom transport setup
-- no manual serialization
+- [`../c-echo/`](../c-echo/) to see the same runtime used without code generation
+- [`../sdk-usage/`](../sdk-usage/) to see the packaged SDK workflow
+- [`../../doc/idl-cookbook.md`](../../doc/idl-cookbook.md) for additional IDL patterns
