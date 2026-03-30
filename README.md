@@ -40,12 +40,13 @@ Terminal 2:
 
 ## Verify
 
-You should see:
+You should see output similar to:
 
 ```text
 [client] device count: 2
 [client] device 0: USB Audio Interface (vendor=0x1234 product=0x0001)
 [client] device 1: BLE Sensor Tag (vendor=0x4321 product=0x0002)
+[client] waiting briefly for notifications...
 [client] notification: connected -> USB Audio Interface
 [client] notification: disconnected -> id=1
 [client] disconnected.
