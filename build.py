@@ -12,12 +12,14 @@ Usage:
 """
 
 import argparse
+import glob as globmod
 import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BUILD_DIR = os.path.join(ROOT, "build")
@@ -154,7 +156,6 @@ def package():
     run(["cmake", "--install", BUILD_DIR, "--prefix", staging], cwd=ROOT)
 
     # Create fat static archive (merge deps into libaether.a)
-    import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
         objs = []
         for lib in [
@@ -167,7 +168,6 @@ def package():
                 extract_dir = os.path.join(tmpdir, lib_name)
                 os.makedirs(extract_dir, exist_ok=True)
                 run(["ar", "x", lib], cwd=extract_dir)
-                import glob as globmod
                 objs.extend(globmod.glob(os.path.join(extract_dir, "*.o")))
         fat_lib = os.path.join(staging, "lib", "libaether.a")
         if objs:
