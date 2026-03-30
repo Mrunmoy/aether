@@ -86,6 +86,162 @@ jobs:
           export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
           python3 build.py -t
 
+  # ---------------------------------------------------------------------------
+  # Documentation validation — ensures README commands work on clean machines
+  # ---------------------------------------------------------------------------
+  docs-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    name: docs-validation
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Step 1: Validate Quick Start commands from README.md
+      - name: Validate Quick Start build command
+        run: |
+          echo "=== Testing: python3 build.py -e ==="
+          python3 build.py -e
+          echo "SUCCESS: Build completed"
+
+      # Step 2: Validate codegen command from README.md
+      - name: Validate codegen command works
+        run: |
+          echo "=== Testing: PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen ==="
+          PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/validate_codegen/
+          
+          # Verify expected files were generated
+          test -f /tmp/validate_codegen/DeviceMonitorTypes.h || (echo "FAIL: DeviceMonitorTypes.h not generated" && exit 1)
+          test -f /tmp/validate_codegen/server/DeviceMonitor.h || (echo "FAIL: server/DeviceMonitor.h not generated" && exit 1)
+          test -f /tmp/validate_codegen/server/DeviceMonitor.cpp || (echo "FAIL: server/DeviceMonitor.cpp not generated" && exit 1)
+          test -f /tmp/validate_codegen/client/DeviceMonitor.h || (echo "FAIL: client/DeviceMonitor.h not generated" && exit 1)
+          test -f /tmp/validate_codegen/client/DeviceMonitor.cpp || (echo "FAIL: client/DeviceMonitor.cpp not generated" && exit 1)
+          echo "SUCCESS: Codegen produced expected files"
+
+      # Step 3: Validate example READMEs have required sections
+      - name: Validate example README structure
+        run: |
+          echo "=== Checking example READMEs for required sections ==="
+          
+          # Check core examples that should have full READMEs
+          for readme in examples/echo/README.md examples/c-echo/README.md examples/sdk-usage/README.md; do
+            echo "Checking $readme..."
+            
+            # Check file exists
+            if [ ! -f "$readme" ]; then
+              echo "FAIL: $readme does not exist"
+              exit 1
+            fi
+            
+            # Check for required sections (flexible matching for variations like "## Step X — Build")
+            if ! grep -qE "^## (Prerequisites|.*Prerequisites)" "$readme"; then
+              echo "FAIL: $readme missing section: Prerequisites"
+              exit 1
+            fi
+            
+            if ! grep -qE "^## (Build|.*Build)" "$readme"; then
+              echo "FAIL: $readme missing section: Build"
+              exit 1
+            fi
+            
+            if ! grep -qE "^## (Run|.*Run)" "$readme"; then
+              echo "FAIL: $readme missing section: Run"
+              exit 1
+            fi
+            
+            if ! grep -qE "^## (Expected Output|.*Expected Output)" "$readme"; then
+              echo "FAIL: $readme missing section: Expected Output"
+              exit 1
+            fi
+            
+            echo "PASS: $readme has all required sections"
+          done
+          
+          echo "SUCCESS: All example READMEs have required structure"
+
+      # Step 4: Run echo example and verify expected output patterns
+      - name: Run echo example and verify output
+        timeout-minutes: 1
+        run: |
+          echo "=== Testing echo example produces expected output patterns ==="
+          
+          # Start echo_server in background
+          timeout 30 ./build/examples/echo/echo_server &
+          SERVER_PID=$!
+          
+          # Cleanup function
+          cleanup() {
+            kill $SERVER_PID 2>/dev/null || true
+            wait $SERVER_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          
+          sleep 0.5
+          
+          # Run echo_client and capture output
+          OUTPUT=$(./build/examples/echo/echo_client 2>&1)
+          echo "$OUTPUT"
+          
+          # Verify expected output patterns
+          if ! echo "$OUTPUT" | grep -q "Connected to echo service"; then
+            echo "FAIL: Missing 'Connected to echo service' in output"
+            exit 1
+          fi
+          
+          if ! echo "$OUTPUT" | grep -q 'sent: "Hello"'; then
+            echo "FAIL: Missing expected echo output pattern"
+            exit 1
+          fi
+          
+          if ! echo "$OUTPUT" | grep -q "Disconnected"; then
+            echo "FAIL: Missing 'Disconnected' in output"
+            exit 1
+          fi
+          
+          echo "SUCCESS: Echo example output matches expected patterns"
+
+      # Step 5: Run c-echo example and verify expected output patterns
+      - name: Run c-echo example and verify output
+        timeout-minutes: 1
+        run: |
+          echo "=== Testing c-echo example produces expected output patterns ==="
+          
+          # Start c_echo_server in background
+          timeout 30 ./build/examples/c-echo/c_echo_server &
+          SERVER_PID=$!
+          
+          # Cleanup function
+          cleanup() {
+            kill $SERVER_PID 2>/dev/null || true
+            wait $SERVER_PID 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          
+          sleep 0.5
+          
+          # Run c_echo_client and capture output
+          OUTPUT=$(./build/examples/c-echo/c_echo_client 2>&1)
+          echo "$OUTPUT"
+          
+          # Verify expected output patterns
+          if ! echo "$OUTPUT" | grep -q "connected to 'c_echo'"; then
+            echo "FAIL: Missing 'connected to c_echo' in output"
+            exit 1
+          fi
+          
+          if ! echo "$OUTPUT" | grep -q "sent 'Hello'"; then
+            echo "FAIL: Missing expected echo output pattern"
+            exit 1
+          fi
+          
+          echo "SUCCESS: C-echo example output matches expected patterns"
+
   linux-build:
     runs-on: ubuntu-latest
     strategy:
