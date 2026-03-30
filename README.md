@@ -4,172 +4,136 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-informational)
 
-**Shared-memory IPC framework with IDL code generation for C++, Python, and C99.**
+**Shared-memory IPC with IDL code generation for C++, Python, C API, and C99 firmware targets.**
 
-Aether moves data between processes through lock-free ring buffers in shared
-memory. You describe your service interface in an IDL file, and the code
-generator produces typed C++ server skeletons and client stubs. The same
-24-byte wire protocol also works over serial and USB for desktop-to-device
-communication with microcontrollers.
+Aether gives you a typed contract between processes on the same machine, and it
+reuses that same wire protocol for desktop-to-device links over serial or USB.
+The default path is simple: write IDL, generate C++ bindings, implement your
+handlers, and let the runtime take care of shared memory, framing, dispatch,
+and notifications.
 
-## Quick Start
+## Start Here
 
-**Prerequisites:** C++17 compiler (GCC 7+, Clang 5+, MSVC 2017+), CMake 3.14+,
-Python 3, Linux or macOS or Windows.
+If this is your first time in the repo, use the source-build C++ path and the
+typed `echo` example. That is the canonical newcomer flow.
+
+**Prerequisites:** C++17 compiler, CMake 3.14+, Python 3, and Linux or macOS
+or Windows.
 
 ```bash
 git clone --recursive https://github.com/Mrunmoy/aether.git
 cd aether
-python3 build.py -e        # build library + examples
+python3 build.py -e
 ```
 
-**Try it — run the echo example in two terminals:**
+Run the example in two terminals from the repository root:
 
-Terminal 1 (server):
+Terminal 1:
 ```bash
-build/examples/echo/echo_server
-```
-```
-Echo server running (Ctrl-C to stop)...
+./build/examples/echo/device_monitor_server
 ```
 
-Terminal 2 (client):
+Terminal 2:
 ```bash
-build/examples/echo/echo_client
-```
-```
-Connected to echo service.
-[client] sent: "Hello"  ->  received: "Hello"
-[client] sent: "World"  ->  received: "World"
-[client] sent: "aether works!"  ->  received: "aether works!"
-Disconnected.
+./build/examples/echo/device_monitor_client
 ```
 
-You just made two processes communicate through shared memory. The server
-echoed back everything the client sent, with data flowing through lock-free
-ring buffers mapped into both processes.
+## Verify
 
-## How It Works
+You should see:
 
-The echo example above uses the raw `ServiceBase`/`ClientBase` API. For real
-services, you describe the interface in IDL and let the code generator handle
-serialization and dispatch.
-
-### 1. Write the IDL
-
-```idl
-service DeviceMonitor
-{
-    [method=1] int GetDeviceCount([out] uint32 count);
-    [method=2] int GetDeviceInfo([in] uint32 deviceId, [out] DeviceInfo info);
-};
-
-notifications DeviceMonitor
-{
-    [notify=1] void DeviceConnected([in] DeviceInfo info);
-};
+```text
+[client] device count: 2
+[client] device 0: USB Audio Interface (vendor=0x1234 product=0x0001)
+[client] device 1: BLE Sensor Tag (vendor=0x4321 product=0x0002)
+[client] notification: connected -> USB Audio Interface
+[client] notification: disconnected -> id=1
+[client] disconnected.
 ```
 
-### 2. Generate code
+At that point you have already exercised:
+- IDL-defined types and methods
+- generated client and server glue
+- request/response RPC
+- notification delivery
+- the shared-memory runtime under the hood
 
-```bash
-PYTHONPATH=tools python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir gen/
-```
+## Understand
 
-This produces five files: `DeviceMonitorTypes.h`, `server/DeviceMonitor.h`,
-`server/DeviceMonitor.cpp`, `client/DeviceMonitor.h`, `client/DeviceMonitor.cpp`.
+The canonical example lives in [`examples/echo/`](examples/echo/). It walks
+through the full flow:
 
-### 3. Implement your service
+1. read [`DeviceMonitor.idl`](examples/echo/DeviceMonitor.idl)
+2. generate code with:
 
-**Server** — subclass the generated skeleton, implement the handlers:
+   ```bash
+   python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
+   ```
 
-```cpp
-class MyDeviceService : public aether::ipc::DeviceMonitor
-{
-protected:
-    int handleGetDeviceCount(uint32_t *count) override
-    {
-        *count = m_devices.size();
-        return IPC_SUCCESS;
-    }
+3. inspect the generated files in [`examples/echo/gen/`](examples/echo/gen/)
+4. compare them with the user-written files:
+   - [`examples/echo/device_monitor_server.cpp`](examples/echo/device_monitor_server.cpp)
+   - [`examples/echo/device_monitor_client.cpp`](examples/echo/device_monitor_client.cpp)
 
-    int handleGetDeviceInfo(uint32_t deviceId, DeviceInfo *info) override
-    {
-        if (deviceId >= m_devices.size())
-            return 1; // application-defined error
-        *info = m_devices[deviceId];
-        return IPC_SUCCESS;
-    }
-};
+If you want the short mental model before reading more code, start with
+[Aether in 5 Minutes](doc/AetherIn5Minutes.md).
 
-MyDeviceService service("device_monitor");
-service.start();
-```
+## Branch Out
 
-**Client** — call typed methods:
+Once the canonical path makes sense, use one of these next:
 
-```cpp
-aether::ipc::DeviceMonitor client("device_monitor");
-client.connect();
+| Goal | Start here |
+|------|------------|
+| See the raw runtime without code generation | [`examples/c-echo/`](examples/c-echo/) |
+| Consume a packaged SDK instead of building from source | [`examples/sdk-usage/`](examples/sdk-usage/) |
+| Understand custom transports | [`examples/serial-loopback/`](examples/serial-loopback/) |
+| Talk to an `aether-lite` device over serial | [`examples/serial-sensor/`](examples/serial-sensor/) |
+| Start from a firmware template | [`examples/mcu-firmware/`](examples/mcu-firmware/) |
+| Explore the full learning path | [Examples guide](examples/README.md) |
 
-uint32_t count = 0;
-client.GetDeviceCount(&count);
-client.disconnect();
-```
+Other integration paths are available, but they are intentionally not the first
+thing a newcomer has to choose between.
 
-The generated code handles serialization, dispatch, and RPC correlation.
-The [`examples/echo/`](examples/echo/) directory shows this workflow in full
-with build commands and tests.
-
-## Learn More
-
-| Document | What it covers |
-|----------|----------------|
-| [Aether in 5 Minutes](doc/AetherIn5Minutes.md) | Mental model: what's generated, what's runtime, what you write. Threading, errors, common pitfalls. |
-| [Examples guide](examples/README.md) | Which example to start with and how the examples are organized. |
-| [Architecture guide](doc/architecture-guide.md) | Visual walkthrough of the five runtime layers with diagrams. |
-
-## Other Integration Paths
-
-The quickstart above uses the default C++ codegen path. Other paths exist for
-specific scenarios:
-
-| Path | When to use | Start here |
-|------|-------------|------------|
-| **C API** | SDK distribution or non-C++ consumers | [`examples/sdk-usage/`](examples/sdk-usage/) |
-| **Python client** | Python GUI or script talking to a C++ server | `PYTHONPATH=tools python3 -m ipcgen --backend python` |
-| **aether-lite** | Bare-metal MCU (Cortex-M, AVR) with UART/USB | [`examples/mcu-firmware/`](examples/mcu-firmware/) |
-| **Serial transport** | Desktop-to-device over a byte stream | [`examples/serial-sensor/`](examples/serial-sensor/) |
-
-## Building
+## Build And Test
 
 ```bash
 python3 build.py              # build library
+python3 build.py -e           # build library + examples
 python3 build.py -t           # build + run all tests
 python3 build.py -c -t        # clean rebuild + full test pass
-python3 build.py -e           # build + examples
+```
 
-# CMake directly
+Direct CMake:
+
+```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_BUILD_EXAMPLES=ON
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
+```
 
-# Sanitizers
+Sanitizers:
+
+```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_SANITIZERS=address,undefined
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_SANITIZERS=thread
 ```
 
 ## Documentation
 
-| Document | Contents |
-|----------|----------|
-| [AetherIn5Minutes.md](doc/AetherIn5Minutes.md) | Mental model, threading, ownership, common failures, anti-patterns |
-| [aether-hld.md](doc/aether-hld.md) | High-level design — architecture and components |
-| [aether-lld.md](doc/aether-lld.md) | Low-level design — APIs, wire protocol, threading |
-| [ipcgen-hld.md](doc/ipcgen-hld.md) | Code generator — IDL grammar, backend architecture |
-| [ipcgen-lld.md](doc/ipcgen-lld.md) | Code generator — module APIs and code generation |
-| [architecture-guide.md](doc/architecture-guide.md) | Visual architecture walkthrough with diagrams |
-| [aether-vision.md](doc/aether-vision.md) | Project vision, platform requirements, language roles |
+Use the docs in this order:
+
+- [Documentation guide](doc/README.md)
+- [Aether in 5 Minutes](doc/AetherIn5Minutes.md)
+- [Examples guide](examples/README.md)
+- [Architecture guide](doc/architecture-guide.md)
+
+Deep references:
+
+- [High-level design](doc/aether-hld.md)
+- [Low-level design](doc/aether-lld.md)
+- [ipcgen high-level design](doc/ipcgen-hld.md)
+- [ipcgen low-level design](doc/ipcgen-lld.md)
+- [Project vision](doc/aether-vision.md)
 
 ## License
 

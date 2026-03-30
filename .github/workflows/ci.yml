@@ -62,8 +62,7 @@ jobs:
       - name: Validate ipcgen codegen workflow
         run: |
           echo "=== Testing ipcgen with DeviceMonitor.idl ==="
-          # ipcgen is an in-tree Python module (tools/ipcgen), not installed via pip
-          PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/quickstart_gen/
+          python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/quickstart_gen/
 
           echo "=== Checking generated files ==="
           test -f /tmp/quickstart_gen/DeviceMonitorTypes.h || (echo "Missing DeviceMonitorTypes.h" && exit 1)
@@ -113,8 +112,8 @@ jobs:
       # Step 2: Validate codegen command from README.md
       - name: Validate codegen command works
         run: |
-          echo "=== Testing: PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen ==="
-          PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/validate_codegen/
+          echo "=== Testing: python3 -m tools.ipcgen ==="
+          python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/validate_codegen/
           
           # Verify expected files were generated
           test -f /tmp/validate_codegen/DeviceMonitorTypes.h || (echo "FAIL: DeviceMonitorTypes.h not generated" && exit 1)
