@@ -11,7 +11,7 @@ Run a host-side C++ client against a simulated embedded device that speaks
 ## Prerequisites
 - Linux or macOS
 - build from the repository root
-- `aether_lite` enabled through `python3 build.py -e`
+- configure CMake with `-DAETHER_BUILD_LITE=ON` so the `aether_lite` target exists
 
 ## Files That Matter
 | File | Why it matters |
@@ -51,7 +51,8 @@ device handlers in `sensor_device.c` serialize the results manually.
 Run from the repository root:
 
 ```bash
-python3 build.py -e
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DAETHER_BUILD_EXAMPLES=ON -DAETHER_BUILD_LITE=ON
+cmake --build build -j"$(nproc)"
 ```
 
 ## Run

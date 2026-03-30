@@ -97,6 +97,13 @@ ctest --test-dir build --output-on-failure -R ecu_tests
 - add another PID or DTC severity to the IDL and regenerate
 - change the dashboard to keep a persistent list of active trouble codes
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R ecu_tests
+```
+
 ## Related Examples
 - [`motor-controller/`](../motor-controller/) for another control-heavy device dashboard
 - [`process-monitor/`](../process-monitor/) for a monitoring-oriented dashboard in the same section

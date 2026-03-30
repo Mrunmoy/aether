@@ -86,6 +86,13 @@ ctest --test-dir build --output-on-failure -R svcstat_tests
 - add start/stop control methods to move from pure monitoring to service control
 - add filtering in the client for only one watched service
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R svcstat_tests
+```
+
 ## Related Examples
 - [`process-monitor/`](../process-monitor/) for another lifecycle-monitor example
 - [`../../linux/file-watcher/`](../../linux/file-watcher/) for a notification-oriented service driven by real host events

@@ -94,6 +94,13 @@ ctest --test-dir build --output-on-failure -R sysmon_tests
 - adjust the CPU or memory thresholds in the device and trigger alerts deliberately
 - add another `/proc`-backed metric such as disk I/O or network throughput
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R sysmon_tests
+```
+
 ## Related Examples
 - [`../file-watcher/`](../file-watcher/) for another Linux-specific service
 - [`../sensor-hub/`](../sensor-hub/) for a simulated monitoring-style service with notifications

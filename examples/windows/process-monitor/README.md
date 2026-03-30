@@ -87,6 +87,13 @@ ctest --test-dir build --output-on-failure -R procmon_tests
 - add a method for filtering by process name
 - keep a rolling event log in the client instead of printing notifications inline
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R procmon_tests
+```
+
 ## Related Examples
 - [`service-status/`](../service-status/) for another lifecycle-monitor example
 - [`../../linux/sysmon/`](../../linux/sysmon/) for a monitoring service backed by real host data

@@ -101,6 +101,13 @@ The suite covers slot management, parameter updates, effect counting, signal lev
 - add another effect parameter or another notification such as bypass-state change
 - make the dashboard cache the current chain and redraw it on every notification
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R dsp_tests
+```
+
 ## Related Examples
 - [`../ble-peripheral/`](../ble-peripheral/) for another stateful device with notifications
 - [`../../exhaust-analyzer/`](../../exhaust-analyzer/) for a fuller app-style example with a GUI

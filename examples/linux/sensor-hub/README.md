@@ -93,6 +93,13 @@ ctest --test-dir build --output-on-failure -R sensor_tests
 - add another sensor reading such as magnetometer data
 - change the motion threshold and watch how notification frequency changes
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R sensor_tests
+```
+
 ## Related Examples
 - [`../gpio-controller/`](../gpio-controller/) for another device-style dashboard example
 - [`../sysmon/`](../sysmon/) for a monitoring-oriented service with alerts

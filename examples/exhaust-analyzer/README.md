@@ -3,6 +3,16 @@
 Build a richer desktop-style app: a generated IPC service, a simulation server,
 and a Qt dashboard client with live notifications.
 
+## Screenshots
+
+Disconnected:
+
+![Client offline](img/client-offline.png)
+
+Measuring:
+
+![Client measuring](img/client-measuring.png)
+
 ## What You'll Learn
 - how Aether-generated bindings scale beyond the small echo examples
 - how a GUI client consumes notifications and marshals them onto the UI thread

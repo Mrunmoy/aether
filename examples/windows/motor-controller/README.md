@@ -100,6 +100,13 @@ ctest --test-dir build --output-on-failure -R motor_tests
 - add another command such as setting acceleration or jerk
 - teach the dashboard to subscribe and print a motion timeline
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R motor_tests
+```
+
 ## Related Examples
 - [`can-bus-ecu/`](../can-bus-ecu/) for another control-heavy dashboard
 - [`../../linux/gpio-controller/`](../../linux/gpio-controller/) for a simpler device-control example

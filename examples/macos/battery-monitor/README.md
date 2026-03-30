@@ -85,6 +85,13 @@ The suite covers all three RPC methods, both notification types, and RunLoop-bas
 - add a low-battery threshold method so clients can configure alert policy
 - extend the client to log a full event history instead of printing one line at a time
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R battery_tests
+```
+
 ## Related Examples
 - [`../disk-usage/`](../disk-usage/) for another monitor-style service
 - [`../../linux/sysmon/`](../../linux/sysmon/) for a Linux-backed real monitor rather than a simulation

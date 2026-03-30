@@ -95,6 +95,13 @@ The suite covers pin configuration, read/write, error handling, interrupt notifi
 - add another pin capability such as pull-up configuration
 - emit interrupt timestamps and surface them in the dashboard
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R gpio_tests
+```
+
 ## Related Examples
 - [`../sensor-hub/`](../sensor-hub/) for another simulated device/dashboard pair
 - [`../file-watcher/`](../file-watcher/) for a notification-heavy service driven by real OS events

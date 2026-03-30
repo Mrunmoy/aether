@@ -65,6 +65,7 @@ Run from the repository root:
 ./build/examples/linux/file-watcher/filewatcher_device
 
 # Terminal 2
+mkdir -p /tmp/aether-watch
 ./build/examples/linux/file-watcher/filewatcher_client /tmp/aether-watch
 ```
 
@@ -75,7 +76,7 @@ Server:
 
 ```text
 FileWatcher device running. Press Ctrl-C to stop.
-[device] WatchDirectory("/tmp/aether-watch") -> watchId=1
+[device] WatchDirectory("/tmp/aether-watch") → watchId=1
 ```
 
 Client:
@@ -102,6 +103,13 @@ ctest --test-dir build --output-on-failure -R filewatcher_tests
 ## What To Modify Next
 - add another notification for rename events
 - connect two clients at once and watch the same directory from both
+
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R filewatcher_tests
+```
 
 ## Related Examples
 - [`../sysmon/`](../sysmon/) for another Linux-specific service with live alerts

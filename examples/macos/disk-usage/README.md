@@ -56,12 +56,12 @@ Run from the repository root:
 ./build/examples/macos/disk-usage/disk_client
 ```
 
-### Client Commands
+### Dashboard Commands
 
 | Command | Description |
 |---------|-------------|
 | `list` | Show all volumes with usage summary |
-| `check <mount>` | Query a specific mount point (e.g. `check /`) |
+| `check <mount>` | Query a specific mount point (for example `check /`) |
 | `quit` | Disconnect and exit |
 
 ## Expected Output
@@ -70,7 +70,7 @@ Client session:
 ```text
 > list
 Mount        Filesystem   Total      Used
-/            ext4         500 GB     350 GB
+/            apfs         500 GB     350 GB
 > check /
 ```
 
@@ -92,6 +92,13 @@ ctest --test-dir build --output-on-failure -R disk_tests
 ## What To Modify Next
 - add another threshold tier such as a warning before the critical notification
 - point the service at real host filesystem data instead of the built-in simulation
+
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R disk_tests
+```
 
 ## Related Examples
 - [`../battery-monitor/`](../battery-monitor/) for another monitor-style service

@@ -99,6 +99,13 @@ The suite verifies service discovery, characteristic read/write, notification en
 - add another characteristic and expose it through the dashboard
 - add client-side pretty-printing for UUIDs instead of index-based navigation
 
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R ble_tests
+```
+
 ## Related Examples
 - [`../audio-dsp/`](../audio-dsp/) for another stateful dashboard-style service
 - [`../../echo/`](../../echo/) for the simpler generated client/server path
