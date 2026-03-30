@@ -1,199 +1,157 @@
-# Using the Aether SDK — Full Workflow
+# SDK Usage Example: generated wrappers against a packaged SDK
 
-This example shows the complete workflow for building a C++ IPC application
-with the Aether SDK release artifact:
+This example shows how to consume Aether as a packaged SDK instead of building
+the runtime from source in your project.
 
-1. **Define** your service in an IDL file
-2. **Generate** typed C++ wrapper classes with `ipcgen --backend c_api`
-3. **Implement** your server handlers and client logic by subclassing
-4. **Build** against the SDK tarball (only `aether_ipc.h` + `libaether.a` needed)
+## What You'll Learn
+
+- when to use `ipcgen --backend c_api`
+- how generated wrappers depend only on `aether_ipc.h`
+- how to build a client and server against an extracted SDK tarball
+- how the SDK path differs from the in-tree source-build path
 
 ## Prerequisites
 
-- Aether SDK tarball (from [GitHub Releases](https://github.com/Mrunmoy/ms-ipc/releases))
-- `ipcgen` (from the [source repository](https://github.com/Mrunmoy/ms-ipc), under `tools/ipcgen/`)
-- C++17 compiler, CMake 3.14+, Python 3
+- Linux or another platform with a matching Aether SDK tarball
+- C++17 compiler, CMake, and Python 3
+- an extracted Aether SDK tarball
+- a source checkout if you want to run `ipcgen` locally
 
-## Step 1 — Write the IDL
-
-Define your service interface in [`TemperatureSensor.idl`](TemperatureSensor.idl):
-
-```idl
-service TemperatureSensor
-{
-    [method=1]
-    int GetTemperature([out] float32 celsius);
-
-    [method=2]
-    int SetThreshold([in] float32 high, [in] float32 low);
-};
-
-notifications TemperatureSensor
-{
-    [notify=1]
-    void OverTemperature([in] float32 celsius);
-};
-```
-
-## Step 2 — Generate code
-
-Run `ipcgen` with the `--backend c_api` flag. This generates C++ classes that
-use the stable C API (`aether_ipc.h`) internally — no source-tree headers needed.
+If you are starting from this repository, produce the SDK tarball first:
 
 ```bash
-# From the Aether source checkout:
-cd tools && python3 -m ipcgen /path/to/TemperatureSensor.idl \
-    --outdir /path/to/your-project/gen --backend c_api
+python3 build.py -p
 ```
 
-This produces four files:
+That creates an `aether-sdk-*.tar.gz` file in the repo root.
 
-| File | Purpose |
-|------|---------|
-| `gen/server/TemperatureSensor.h` | Server class with pure virtual handlers |
-| `gen/server/TemperatureSensor.cpp` | Request dispatch + notification senders |
-| `gen/client/TemperatureSensor.h` | Client class with typed RPC methods |
-| `gen/client/TemperatureSensor.cpp` | RPC marshaling + notification dispatch |
+## Files That Matter
 
-The generated code only `#include "aether_ipc.h"` — it works with just the
-SDK tarball, no internal headers required.
+| File | Why it matters |
+|------|----------------|
+| [`TemperatureSensor.idl`](TemperatureSensor.idl) | Defines the service contract |
+| [`gen/server/TemperatureSensor.h`](gen/server/TemperatureSensor.h) | Generated typed server wrapper for the C API backend |
+| [`gen/client/TemperatureSensor.h`](gen/client/TemperatureSensor.h) | Generated typed client wrapper for the C API backend |
+| [`temp_server.cpp`](temp_server.cpp) | User-written server implementation |
+| [`temp_client.cpp`](temp_client.cpp) | User-written client implementation |
+| [`CMakeLists.txt`](CMakeLists.txt) | Builds both binaries against the extracted SDK |
 
-## Step 3 — Implement your application
+## Step 1: Read the IDL
 
-### Server ([`temp_server.cpp`](temp_server.cpp))
+[`TemperatureSensor.idl`](TemperatureSensor.idl) defines:
 
-Subclass the generated server and implement the pure virtual handlers:
+- `GetTemperature`
+- `SetThreshold`
+- `OverTemperature`
 
-```cpp
-#include "server/TemperatureSensor.h"
+The contract is still expressed in IDL, even though this example does not link
+against the full Aether source tree.
 
-class TempSensorImpl : public aether::ipc::TemperatureSensor
-{
-public:
-    using TemperatureSensor::TemperatureSensor;
+## Step 2: Generate Code
 
-protected:
-    int handleGetTemperature(float *celsius) override
-    {
-        *celsius = m_currentTemp;
-        return AETHER_SUCCESS;
-    }
-
-    int handleSetThreshold(float high, float low) override
-    {
-        m_thresholdHigh = high;
-        m_thresholdLow = low;
-        if (m_currentTemp > m_thresholdHigh)
-            sendOverTemperature(m_currentTemp);
-        return AETHER_SUCCESS;
-    }
-
-private:
-    float m_currentTemp = 72.5f;
-    float m_thresholdHigh = 100.0f;
-    float m_thresholdLow = -40.0f;
-};
-```
-
-### Client ([`temp_client.cpp`](temp_client.cpp))
-
-Subclass the generated client and override notification callbacks:
-
-```cpp
-#include "client/TemperatureSensor.h"
-
-class TempClient : public aether::ipc::TemperatureSensor
-{
-public:
-    using TemperatureSensor::TemperatureSensor;
-
-protected:
-    void onOverTemperature(float celsius) override
-    {
-        std::printf("[client] ⚠ Over-temperature: %.1f°C!\n", celsius);
-    }
-};
-
-int main()
-{
-    TempClient client("temp_sensor");
-    client.connect();
-
-    float temp = 0;
-    client.GetTemperature(&temp);
-    client.SetThreshold(50.0f, -10.0f);
-}
-```
-
-No message IDs, no raw byte buffers, no manual serialization.
-
-## Step 4 — Build
+Run `ipcgen` with the `c_api` backend:
 
 ```bash
-# Extract the SDK
-tar xzf aether-sdk-*-linux-x86_64.tar.gz
-
-# Build the example
-cmake -B build -DAETHER_SDK=/path/to/aether-sdk-1.1.0-linux-x86_64
-cmake --build build
+python3 -m tools.ipcgen examples/sdk-usage/TemperatureSensor.idl \
+    --outdir examples/sdk-usage/gen --backend c_api
 ```
 
-## Step 5 — Run
+This generates wrappers that:
+
+- expose the same typed client and server API shape as the source-build path
+- use `aether_ipc.h` internally
+- do not require `ServiceBase` or `ClientBase` headers from the source tree
+
+Generated outputs:
+
+- `gen/server/TemperatureSensor.h`
+- `gen/server/TemperatureSensor.cpp`
+- `gen/client/TemperatureSensor.h`
+- `gen/client/TemperatureSensor.cpp`
+
+## Step 3: Review the User Code
+
+[`temp_server.cpp`](temp_server.cpp):
+
+- subclasses the generated server wrapper
+- implements `handleGetTemperature(...)`
+- implements `handleSetThreshold(...)`
+- triggers a typed notification when the threshold is crossed
+
+[`temp_client.cpp`](temp_client.cpp):
+
+- subclasses the generated client wrapper
+- overrides `onOverTemperature(...)`
+- connects and calls the typed methods
+
+Your code is still typed and high-level. The difference is that the generated
+wrappers delegate through the stable C API rather than the in-tree C++ runtime
+classes.
+
+## Build
+
+Extract the packaged SDK, then point CMake at the extracted directory.
+
+```bash
+tar xzf aether-sdk-*.tar.gz -C /tmp
+SDK_DIR="$(find /tmp -maxdepth 1 -type d -name 'aether-sdk-*' | head -n 1)"
+cmake -S examples/sdk-usage -B build/sdk-usage \
+    -DAETHER_SDK="$SDK_DIR"
+cmake --build build/sdk-usage
+```
+
+## Run
 
 ```bash
 # Terminal 1
-./build/temp_server
+./build/sdk-usage/temp_server
 
 # Terminal 2
-./build/temp_client
+./build/sdk-usage/temp_client
 ```
 
-Expected output:
+## Expected Output
 
-```
-# Server:
+Server output:
+
+```text
 [server] Temperature sensor running. Ctrl+C to stop.
 [server] GetTemperature → 72.5°C
 [server] SetThreshold(high=50.0, low=-10.0)
 [server] 72.5°C exceeds threshold — broadcasting
 [server] Stopped.
+```
 
-# Client:
+Client output:
+
+```text
 [client] Connected to temp_sensor
 [client] Current temperature: 72.5°C
-[client] Threshold set to [50.0, -10.0]°C
 [client] ⚠ Over-temperature: 72.5°C!
+[client] Threshold set to [50.0, -10.0]°C
 [client] Done.
 ```
 
-## Project structure
+The threshold log and notification may appear in either order depending on when
+the callback runs.
 
-```
-your-project/
-├── TemperatureSensor.idl          # Your service definition
-├── gen/                           # Generated by ipcgen (--backend c_api)
-│   ├── server/
-│   │   ├── TemperatureSensor.h
-│   │   └── TemperatureSensor.cpp
-│   └── client/
-│       ├── TemperatureSensor.h
-│       └── TemperatureSensor.cpp
-├── temp_server.cpp                # Your server implementation
-├── temp_client.cpp                # Your client implementation
-└── CMakeLists.txt
-```
+## What Just Happened
 
-## Why `--backend c_api`?
+You kept the IDL and typed generated API, but swapped the implementation layer
+underneath it. Instead of inheriting from the in-tree C++ runtime classes, the
+generated wrappers call the stable C API from the SDK artifact. That makes this
+path suitable for downstream consumers that do not vendor the full Aether
+source tree.
 
-The default `ipcgen` backend generates classes that inherit from
-`ServiceBase`/`ClientBase` — these require the full Aether source tree to
-compile. The `--backend c_api` flag generates standalone classes that only
-depend on `aether_ipc.h`, making them compatible with the pre-built SDK
-tarball.
+## What To Modify Next
 
-| | `--backend cpp` (default) | `--backend c_api` |
-|---|---|---|
-| **Requires** | Full source tree | SDK tarball only |
-| **Internals** | Inherits `ServiceBase`/`ClientBase` | Owns opaque `aether_service_t`/`aether_client_t` handles |
-| **User API** | Identical | Identical |
-| **Best for** | Building from source | SDK consumers |
+- Add another method to [`TemperatureSensor.idl`](TemperatureSensor.idl),
+  regenerate, and update both [`temp_server.cpp`](temp_server.cpp) and
+  [`temp_client.cpp`](temp_client.cpp).
+- Compare this path with [`../echo/`](../echo/) to decide whether your project
+  wants source-build flexibility or SDK distribution.
+
+## Related Examples
+
+- [`../echo/`](../echo/) for the default source-build path
+- [`../c-echo/`](../c-echo/) for the raw C API without code generation

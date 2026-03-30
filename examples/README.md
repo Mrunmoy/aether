@@ -1,83 +1,132 @@
 # Examples
 
-## Which example should I use?
+Use this directory as a learning path, not a flat catalog.
 
-Aether supports two integration paths (see the main
-[README](../README.md#integrating-aether-into-your-project) for details):
+If you are new to Aether, do not browse randomly. Start with one example,
+finish it, then move to the next layer of complexity.
 
-**Way 1 — SDK release** (you downloaded a pre-built `aether-sdk-*.tar.gz`):
+## Start Here
 
-→ Start with [`sdk-usage/`](sdk-usage/) — write an IDL, generate code with
-`ipcgen --backend c_api`, implement your server/client, build against the
-tarball. No source tree needed.
+### 1. Canonical source-build path
 
-**Way 2 — Git submodule** (you added aether as a submodule and build from source):
+Start with [`echo/`](echo/).
 
-→ Start with [`echo/`](echo/) — write an IDL, generate code with `ipcgen`
-(default backend), link against the `aether` CMake target.
+It is the default newcomer example because it shows the full Aether source-build
+workflow:
 
-If you are extending transports instead of using the shared-memory runtime:
+- define a service in IDL
+- generate typed C++ code with `ipcgen`
+- implement a server and a client
+- run both processes and observe RPC plus notification flow
 
-- Start with [`serial-loopback/`](serial-loopback/) for a minimal
-  `TransportClientBase` + `ITransport` example over PTY.
-- Then look at [`serial-sensor/`](serial-sensor/) for host ↔ `aether-lite`
-  interoperability over the same framing.
+### 2. Raw C API
 
-If you are targeting a microcontroller directly:
+Move to [`c-echo/`](c-echo/) next if you want to see the runtime without code
+generation.
 
-- Start with [`mcu-firmware/`](mcu-firmware/) for a bare-metal UART template
-  using `aether-lite`.
+It shows:
 
-## All examples
+- no IDL
+- no generated files
+- direct use of `aether_ipc.h`
+- explicit service and message IDs
 
-### Core examples
+### 3. SDK consumer path
 
-| Example | Integration path | What it shows |
-|---------|-----------------|---------------|
-| [`sdk-usage/`](sdk-usage/) | **Way 1 — SDK release** | IDL → `ipcgen --backend c_api` → C++ server/client built against the release tarball |
-| [`echo/`](echo/) | **Way 2 — Submodule** | IDL → `ipcgen` (default backend) → server/client using `ServiceBase`/`ClientBase` |
-| [`c-echo/`](c-echo/) | Either | Minimal C echo server + client using the raw C API directly, no code generation |
-| [`exhaust-analyzer/`](exhaust-analyzer/) | **Way 2 — Submodule** | Advanced example with Qt5 GUI, structs, enums, arrays, and notifications |
-| [`serial-loopback/`](serial-loopback/) | **Way 2 — Submodule** | Minimal custom `ITransport` over PTY, exercising `TransportClientBase` without hardware |
-| [`serial-sensor/`](serial-sensor/) | **Way 2 — Submodule** | Host C++ client talking to a simulated `aether-lite` sensor device over PTY |
-| [`mcu-firmware/`](mcu-firmware/) | Firmware template | Bare-metal UART integration pattern for `aether-lite` on MCU targets |
+Read [`sdk-usage/`](sdk-usage/) if your real project will consume a packaged
+SDK tarball instead of building Aether from source.
 
-### Platform-specific examples
+It shows:
 
-Each platform directory contains OS-level and simulated-embedded examples.
-Every example ships with its own IDL, generated code, server/device implementation,
-client/dashboard, Google Test suite, CMakeLists.txt, and README.
+- `ipcgen --backend c_api`
+- generated wrappers that only depend on `aether_ipc.h`
+- building against an extracted SDK tarball
 
-#### Linux (`linux/`)
+## Learning Path
 
-| Example | Type | What it shows |
-|---------|------|---------------|
-| [`linux/sysmon/`](linux/sysmon/) | OS-level | Real-time system monitor reading `/proc` (CPU, memory, disk, load average) with periodic notifications |
-| [`linux/file-watcher/`](linux/file-watcher/) | OS-level | `inotify`-based file system watcher with create/modify/delete notifications |
-| [`linux/gpio-controller/`](linux/gpio-controller/) | Simulated embedded | GPIO pin controller with digital read/write, interrupt simulation, and pin-change notifications |
-| [`linux/sensor-hub/`](linux/sensor-hub/) | Simulated embedded | Multi-sensor hub (temperature, humidity, pressure) with threshold-based alarm notifications |
+### Getting started
 
-> **Note:** `sysmon` and `file-watcher` use Linux-specific APIs and only build on Linux.
-> `gpio-controller` and `sensor-hub` are cross-platform (simulated devices).
+| Example | Use it when | What it teaches |
+|---------|-------------|-----------------|
+| [`echo/`](echo/) | You want the recommended first success | IDL, code generation, typed C++ client/server, runtime mental model |
+| [`c-echo/`](c-echo/) | You want the lowest-level host API | Raw C API, manual service/message IDs, no codegen |
+| [`sdk-usage/`](sdk-usage/) | You ship or consume a prebuilt SDK | `c_api` backend, SDK-only build, generated wrappers without the source tree |
 
-#### macOS (`macos/`)
+### Transports and embedded flow
 
-| Example | Type | What it shows |
-|---------|------|---------------|
-| [`macos/battery-monitor/`](macos/battery-monitor/) | Simulated | Battery monitor with charge/discharge simulation, threshold alerts, and state notifications |
-| [`macos/disk-usage/`](macos/disk-usage/) | Simulated | Disk usage monitor with per-volume stats, threshold warnings, and periodic scan notifications |
-| [`macos/ble-peripheral/`](macos/ble-peripheral/) | Simulated embedded | BLE peripheral simulator with GATT services, characteristic read/write, and connection notifications |
-| [`macos/audio-dsp/`](macos/audio-dsp/) | Simulated embedded | Audio DSP pipeline with configurable effects (EQ, compressor, reverb), level metering, and clipping detection |
+| Example | Use it when | What it teaches |
+|---------|-------------|-----------------|
+| [`serial-loopback/`](serial-loopback/) | You want to understand `ITransport` without hardware | PTY-backed transport, framing over a byte stream, `TransportClientBase` |
+| [`serial-sensor/`](serial-sensor/) | You want host-to-device communication | Host C++ client talking to a simulated `aether-lite` device over serial framing |
+| [`mcu-firmware/`](mcu-firmware/) | You need a firmware starting point | Bare-metal `aether-lite` integration pattern for UART-based devices |
 
-#### Windows (`windows/`)
+### Application-style examples
 
-| Example | Type | What it shows |
-|---------|------|---------------|
-| [`windows/service-status/`](windows/service-status/) | Simulated | Windows service status monitor with start/stop control, state-change notifications, and health checks |
-| [`windows/process-monitor/`](windows/process-monitor/) | Simulated | Process monitor with spawn/exit tracking, resource usage queries, and process-lifecycle notifications |
-| [`windows/can-bus-ecu/`](windows/can-bus-ecu/) | Simulated embedded | CAN bus ECU simulator with frame send/receive, DTC management, and bus-error notifications |
-| [`windows/motor-controller/`](windows/motor-controller/) | Simulated embedded | Stepper motor controller with homing, position moves, jog, limit switches, and stall detection |
+| Example | Use it when | What it teaches |
+|---------|-------------|-----------------|
+| [`exhaust-analyzer/`](exhaust-analyzer/) | You want a richer desktop app | Qt GUI, generated code in a larger application, structs/enums/notifications |
 
-> **Note:** All platform examples use simulated devices and build on all platforms
-> (Linux, macOS, Windows) — the directory names indicate the *theme*, not a build restriction
-> (except `sysmon` and `file-watcher` which require Linux).
+### Platform and domain examples
+
+These examples are best after you already understand `echo/`. They are useful
+for domain patterns, not for the first successful run.
+
+#### Linux
+
+| Example | What it shows |
+|---------|---------------|
+| [`linux/sysmon/`](linux/sysmon/) | Linux `/proc` monitoring with notifications |
+| [`linux/file-watcher/`](linux/file-watcher/) | `inotify`-based notifications for file changes |
+| [`linux/gpio-controller/`](linux/gpio-controller/) | Simulated GPIO control and pin-change notifications |
+| [`linux/sensor-hub/`](linux/sensor-hub/) | Simulated multi-sensor aggregation and alarm notifications |
+
+#### macOS
+
+| Example | What it shows |
+|---------|---------------|
+| [`macos/battery-monitor/`](macos/battery-monitor/) | Simulated battery monitoring and threshold notifications |
+| [`macos/disk-usage/`](macos/disk-usage/) | Simulated disk-usage reporting and scan notifications |
+| [`macos/ble-peripheral/`](macos/ble-peripheral/) | Simulated BLE service/characteristic interactions |
+| [`macos/audio-dsp/`](macos/audio-dsp/) | Simulated DSP control, metering, and fault notifications |
+
+#### Windows
+
+| Example | What it shows |
+|---------|---------------|
+| [`windows/service-status/`](windows/service-status/) | Simulated service control and state-change notifications |
+| [`windows/process-monitor/`](windows/process-monitor/) | Simulated process lifecycle and resource queries |
+| [`windows/can-bus-ecu/`](windows/can-bus-ecu/) | Simulated ECU RPC and bus-status notifications |
+| [`windows/motor-controller/`](windows/motor-controller/) | Simulated motor control, motion commands, and fault notifications |
+
+## README Contract
+
+Every example README should help a user answer the same questions in the same
+order:
+
+1. What is this example for?
+2. What will I learn?
+3. What files matter?
+4. What IDL exists, if any?
+5. What code is generated?
+6. What code do I write?
+7. How do I build it?
+8. How do I run it?
+9. What output should I expect?
+10. What should I try next?
+
+The standard format for new or rewritten examples lives in
+[`README_TEMPLATE.md`](README_TEMPLATE.md).
+
+## Picking The Right Example
+
+Use this rule of thumb:
+
+- Want the default path: [`echo/`](echo/)
+- Want the raw API: [`c-echo/`](c-echo/)
+- Want the SDK path: [`sdk-usage/`](sdk-usage/)
+- Want transport internals: [`serial-loopback/`](serial-loopback/)
+- Want host plus embedded flow: [`serial-sensor/`](serial-sensor/)
+- Want firmware: [`mcu-firmware/`](mcu-firmware/)
+- Want a richer application: [`exhaust-analyzer/`](exhaust-analyzer/)
+
+Everything else is best treated as domain-specific follow-on material.

@@ -12,12 +12,14 @@ Usage:
 """
 
 import argparse
+import glob as globmod
 import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BUILD_DIR = os.path.join(ROOT, "build")
@@ -154,20 +156,26 @@ def package():
     run(["cmake", "--install", BUILD_DIR, "--prefix", staging], cwd=ROOT)
 
     # Create fat static archive (merge deps into libaether.a)
-    import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
+        objs = []
         for lib in [
             os.path.join(BUILD_DIR, "libaether.a"),
             os.path.join(BUILD_DIR, "deps", "ouroboros", "libouroboros.a"),
             os.path.join(BUILD_DIR, "deps", "vortex", "libvortex.a"),
         ]:
             if os.path.isfile(lib):
-                run(["ar", "x", lib], cwd=tmpdir)
+                lib_name = os.path.splitext(os.path.basename(lib))[0]
+                extract_dir = os.path.join(tmpdir, lib_name)
+                os.makedirs(extract_dir, exist_ok=True)
+                run(["ar", "x", lib], cwd=extract_dir)
+                for obj in sorted(globmod.glob(os.path.join(extract_dir, "*.o"))):
+                    obj_name = os.path.basename(obj)
+                    prefixed_obj = os.path.join(extract_dir, f"{lib_name}__{obj_name}")
+                    os.replace(obj, prefixed_obj)
+                    objs.append(prefixed_obj)
         fat_lib = os.path.join(staging, "lib", "libaether.a")
-        import glob as globmod
-        objs = globmod.glob(os.path.join(tmpdir, "*.o"))
         if objs:
-            run(["ar", "rcs", fat_lib] + objs)
+            run(["ar", "rcs", fat_lib] + sorted(objs))
             run(["ranlib", fat_lib])
 
     # Clean out GTest/GMock artifacts that leaked from vendor/
