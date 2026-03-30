@@ -1101,3 +1101,44 @@ TEST(ClientBaseTest, SeqNumbersAreUnique)
     client.disconnect();
     svc.stop();
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// Regression: resolved response must survive disconnect cleanup
+// ═════════════════════════════════════════════════════════════════════
+
+TEST(ClientBaseTest, ResolvedResponseSurvivesDisconnect)
+{
+    // Verify that a call which receives a valid response before the server
+    // shuts down returns IPC_SUCCESS with the correct payload — not
+    // IPC_ERR_DISCONNECTED from the disconnect cleanup loop.
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    ClientBase client(SVC_NAME);
+    ASSERT_TRUE(client.connect());
+    settle();
+
+    // Successful RPC.
+    const std::vector<uint8_t> request = {0xDE, 0xAD};
+    std::vector<uint8_t> response;
+    int rc = client.call(1, 1, request, &response, 2000);
+    ASSERT_EQ(rc, IPC_SUCCESS);
+    ASSERT_EQ(response, request);
+
+    // Stop the server immediately after the call returns — the disconnect
+    // cleanup must not retroactively corrupt the result we already collected.
+    svc.stop();
+    settle();
+
+    // The client should now be disconnected (server went away).
+    // Make another call to confirm the connection is dead.
+    std::vector<uint8_t> response2;
+    int rc2 = client.call(1, 1, request, &response2, 200);
+    EXPECT_NE(rc2, IPC_SUCCESS);
+
+    // The first call's result must still be correct.
+    EXPECT_EQ(rc, IPC_SUCCESS);
+    EXPECT_EQ(response, request);
+
+    client.disconnect();
+}

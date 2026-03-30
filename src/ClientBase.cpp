@@ -119,6 +119,8 @@ namespace aether::ipc
             std::lock_guard<std::mutex> lock(m_pendingMutex);
             for (auto &[_, pending] : m_pending)
             {
+                if (pending->done)
+                    continue; // already resolved — call() will collect
                 pending->status = IPC_ERR_DISCONNECTED;
                 pending->done = true;
                 pending->cv.notify_one();
@@ -222,7 +224,9 @@ namespace aether::ipc
             }
         }
 
-        // Wait for response.
+        // Wait for response and collect result under the lock to avoid
+        // racing with disconnect cleanup in receiverLoop / disconnect / onDataReady.
+        int status;
         {
             std::unique_lock<std::mutex> lock(m_pendingMutex);
             if (!pending->cv.wait_for(lock, std::chrono::milliseconds(timeoutMs),
@@ -231,17 +235,12 @@ namespace aether::ipc
                 m_pending.erase(seq);
                 return IPC_ERR_TIMEOUT;
             }
-        }
 
-        // Collect result.
-        int status = pending->status;
-        if (response != nullptr)
-        {
-            *response = std::move(pending->response);
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(m_pendingMutex);
+            status = pending->status;
+            if (response != nullptr)
+            {
+                *response = std::move(pending->response);
+            }
             m_pending.erase(seq);
         }
 
@@ -299,6 +298,8 @@ namespace aether::ipc
         std::lock_guard<std::mutex> plock(m_pendingMutex);
         for (auto &[_, pending] : m_pending)
         {
+            if (pending->done)
+                continue; // already resolved — call() will collect
             pending->status = IPC_ERR_DISCONNECTED;
             pending->done = true;
             pending->cv.notify_one();
@@ -336,6 +337,8 @@ namespace aether::ipc
             std::lock_guard<std::mutex> plock(m_pendingMutex);
             for (auto &[_, pending] : m_pending)
             {
+                if (pending->done)
+                    continue; // already resolved — call() will collect
                 pending->status = IPC_ERR_DISCONNECTED;
                 pending->done = true;
                 pending->cv.notify_one();
