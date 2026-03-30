@@ -15,6 +15,9 @@ next question, then go deeper only when you need the detail.
 Use these if you want to clone the repo, run the recommended example, and
 confirm the framework works on your machine.
 
+Stop here if your immediate goal is only "prove this works on my machine."
+Everything below is for the next question after first success.
+
 ### 2. Mental model
 
 - [Aether in 5 Minutes](AetherIn5Minutes.md)
@@ -57,6 +60,13 @@ These are the deeper specifications for the runtime and generator internals.
 
 Read this if you want the product intent, platform goals, and language-role
 split across C++, Python, C API, and `aether-lite`.
+
+## Practical Notes
+
+- Generated files are checked into the repository for the documented examples.
+  You only need to rerun `ipcgen` after changing an `.idl` file.
+- If `python3` is not on your `PATH` on Windows, use `py -3` for the same
+  commands shown in the docs.
 
 ## Internal Project Notes
 

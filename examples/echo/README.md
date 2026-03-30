@@ -44,6 +44,9 @@ That single IDL definition drives both the client and the server side.
 
 ## Step 2: Generate Code
 
+For the first run, you can skip this step. The generated files are already
+checked in. Regenerate only after changing the IDL.
+
 Regenerate the typed glue with:
 
 ```bash

@@ -56,6 +56,9 @@ python3 -m tools.ipcgen examples/sdk-usage/TemperatureSensor.idl \
     --outdir examples/sdk-usage/gen --backend c_api
 ```
 
+The generated wrappers are already checked in. Rerun this command only after
+changing the IDL.
+
 This generates wrappers that:
 
 - expose the same typed client and server API shape as the source-build path

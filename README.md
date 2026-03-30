@@ -17,14 +17,18 @@ and notifications.
 If this is your first time in the repo, use the source-build C++ path and the
 typed `echo` example. That is the canonical newcomer flow.
 
-**Prerequisites:** C++17 compiler, CMake 3.14+, Python 3, and Linux or macOS
-or Windows.
+**Prerequisites:** C++17 compiler, CMake 3.14+, Python 3, and Linux, macOS,
+or Windows. If `python3` is not on your `PATH` on Windows, use `py -3`
+instead.
 
 ```bash
 git clone --recursive https://github.com/Mrunmoy/aether.git
 cd aether
 python3 build.py -e
 ```
+
+That is enough for the first success. You do not need to regenerate code or
+edit any files before running the example.
 
 Run the example in two terminals from the repository root:
 
@@ -65,7 +69,7 @@ The canonical example lives in [`examples/echo/`](examples/echo/). It walks
 through the full flow:
 
 1. read [`DeviceMonitor.idl`](examples/echo/DeviceMonitor.idl)
-2. generate code with:
+2. optionally regenerate code with:
 
    ```bash
    python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
@@ -76,8 +80,9 @@ through the full flow:
    - [`examples/echo/device_monitor_server.cpp`](examples/echo/device_monitor_server.cpp)
    - [`examples/echo/device_monitor_client.cpp`](examples/echo/device_monitor_client.cpp)
 
-If you want the short mental model before reading more code, start with
-[Aether in 5 Minutes](doc/AetherIn5Minutes.md).
+The generated files are already checked in, so regeneration is only needed
+after you change the IDL. If you want the short mental model before reading
+more code, start with [Aether in 5 Minutes](doc/AetherIn5Minutes.md).
 
 ## Branch Out
 
@@ -128,13 +133,8 @@ Use the docs in this order:
 - [Examples guide](examples/README.md)
 - [Architecture guide](doc/architecture-guide.md)
 
-Deep references:
-
-- [High-level design](doc/aether-hld.md)
-- [Low-level design](doc/aether-lld.md)
-- [ipcgen high-level design](doc/ipcgen-hld.md)
-- [ipcgen low-level design](doc/ipcgen-lld.md)
-- [Project vision](doc/aether-vision.md)
+For deeper design references, use the links from [doc/README.md](doc/README.md)
+rather than treating this page as a full index.
 
 ## License
 
