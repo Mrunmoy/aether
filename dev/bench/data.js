@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774687547397,
+  "lastUpdate": 1774845859944,
   "repoUrl": "https://github.com/Mrunmoy/aether",
   "entries": {
     "Benchmark": [
@@ -9336,6 +9336,348 @@ window.BENCHMARK_DATA = {
             "value": 64.0754271629116,
             "unit": "us/iter",
             "extra": "iterations: 15315\ncpu: 47.08749924910222 us\nthreads: 1"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "Mrunmoy@users.noreply.github.com",
+            "name": "Mrunmoy Samal",
+            "username": "Mrunmoy"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dd07c65104e11e4949a9cab4c76598c25941ff2e",
+          "message": "Merge pull request #68 from Mrunmoy/improve/canonical-example-path\n\nMake echo the canonical source-build example",
+          "timestamp": "2026-03-30T15:41:51+11:00",
+          "tree_id": "5c4250ea78483d0ce03a27f4af7f126867f0b923",
+          "url": "https://github.com/Mrunmoy/aether/commit/dd07c65104e11e4949a9cab4c76598c25941ff2e"
+        },
+        "date": 1774845859052,
+        "tool": "googlecpp",
+        "benches": [
+          {
+            "name": "BM_WriteFrame/0",
+            "value": 41147.59888810037,
+            "unit": "ns/iter",
+            "extra": "iterations: 16908\ncpu: 41108.65613910575 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/64",
+            "value": 41104.22338733442,
+            "unit": "ns/iter",
+            "extra": "iterations: 16975\ncpu: 41064.49201767304 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/1024",
+            "value": 41349.92609051622,
+            "unit": "ns/iter",
+            "extra": "iterations: 17102\ncpu: 41302.36738393168 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/16384",
+            "value": 41277.80329994157,
+            "unit": "ns/iter",
+            "extra": "iterations: 16970\ncpu: 41217.85509723038 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteFrame/65536",
+            "value": 42780.02620220032,
+            "unit": "ns/iter",
+            "extra": "iterations: 16449\ncpu: 42735.79883275577 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/0",
+            "value": 3936.5440659106384,
+            "unit": "ns/iter",
+            "extra": "iterations: 177938\ncpu: 3935.864087491151 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/64",
+            "value": 3953.055945952051,
+            "unit": "ns/iter",
+            "extra": "iterations: 177028\ncpu: 3952.6088076462515 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/1024",
+            "value": 3980.611475643457,
+            "unit": "ns/iter",
+            "extra": "iterations: 175415\ncpu: 3980.2065957871355 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/16384",
+            "value": 4541.899127130313,
+            "unit": "ns/iter",
+            "extra": "iterations: 154204\ncpu: 4541.292015771326 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_ReadFrameAlloc/65536",
+            "value": 7916.390694414624,
+            "unit": "ns/iter",
+            "extra": "iterations: 88463\ncpu: 7915.391813526571 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/0",
+            "value": 3934.620945767538,
+            "unit": "ns/iter",
+            "extra": "iterations: 177993\ncpu: 3934.2319473237685 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/64",
+            "value": 3953.2838380873736,
+            "unit": "ns/iter",
+            "extra": "iterations: 177182\ncpu: 3952.8323193100878 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/1024",
+            "value": 3989.0876631497335,
+            "unit": "ns/iter",
+            "extra": "iterations: 175912\ncpu: 3988.5066396834773 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_WriteReadRoundTrip/16384",
+            "value": 4541.306276677141,
+            "unit": "ns/iter",
+            "extra": "iterations: 154158\ncpu: 4540.66161989647 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_PeekFrameHeader",
+            "value": 1.3518734668925076,
+            "unit": "ns/iter",
+            "extra": "iterations: 506201873\ncpu: 1.3517077701527984 ns\nthreads: 1"
+          },
+          {
+            "name": "BM_MultiFramePipeline/64",
+            "value": 89.34399272123517,
+            "unit": "us/iter",
+            "extra": "iterations: 7831\ncpu: 89.33050402247471 us\nthreads: 1"
+          },
+          {
+            "name": "BM_MultiFramePipeline/1024",
+            "value": 20.463823154323084,
+            "unit": "us/iter",
+            "extra": "iterations: 34188\ncpu: 20.46160167310173 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/0",
+            "value": 38.241082884695835,
+            "unit": "us/iter",
+            "extra": "iterations: 76528\ncpu: 9.51708006219947 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/64",
+            "value": 38.541428222512316,
+            "unit": "us/iter",
+            "extra": "iterations: 71241\ncpu: 9.431312685111127 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/1024",
+            "value": 39.48891705998269,
+            "unit": "us/iter",
+            "extra": "iterations: 65469\ncpu: 9.727912890070122 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallLatency/16384",
+            "value": 43.30199834903209,
+            "unit": "us/iter",
+            "extra": "iterations: 57542\ncpu: 10.526211445552839 us\nthreads: 1"
+          },
+          {
+            "name": "BM_CallThroughput",
+            "value": 38.14409812429069,
+            "unit": "us/iter",
+            "extra": "iterations: 59924\ncpu: 9.084458430678815 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ConnectDisconnect",
+            "value": 352.3488329519441,
+            "unit": "us/iter",
+            "extra": "iterations: 2185\ncpu: 314.1575867276891 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/1",
+            "value": 39.07042431490541,
+            "unit": "us/iter",
+            "extra": "iterations: 77763\ncpu: 10.00873682856883 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/2",
+            "value": 80.5392551613718,
+            "unit": "us/iter",
+            "extra": "iterations: 35601\ncpu: 20.007600910086875 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/4",
+            "value": 161.41517335501482,
+            "unit": "us/iter",
+            "extra": "iterations: 17219\ncpu: 39.92154463093084 us\nthreads: 1"
+          },
+          {
+            "name": "BM_ParallelClients/8",
+            "value": 320.94191366906415,
+            "unit": "us/iter",
+            "extra": "iterations: 8618\ncpu: 79.33063413785123 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/0",
+            "value": 0.9111266657751238,
+            "unit": "us/iter",
+            "extra": "iterations: 762708\ncpu: 0.9110449320054372 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/64",
+            "value": 0.9191142797426123,
+            "unit": "us/iter",
+            "extra": "iterations: 755952\ncpu: 0.9190618160941425 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/1024",
+            "value": 1.0183994432636496,
+            "unit": "us/iter",
+            "extra": "iterations: 697278\ncpu: 1.0183026454297976 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyLatency/16384",
+            "value": 0.02196313834799115,
+            "unit": "us/iter",
+            "extra": "iterations: 31396531\ncpu: 0.021959227183410823 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/1",
+            "value": 0.9054829798562303,
+            "unit": "us/iter",
+            "extra": "iterations: 753137\ncpu: 0.9054032891758076 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/2",
+            "value": 2.6256894509832325,
+            "unit": "us/iter",
+            "extra": "iterations: 287259\ncpu: 2.6253808096526132 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/4",
+            "value": 8.361512110808892,
+            "unit": "us/iter",
+            "extra": "iterations: 84181\ncpu: 8.050176429360546 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/8",
+            "value": 22.71213465571994,
+            "unit": "us/iter",
+            "extra": "iterations: 33374\ncpu: 21.811126026248036 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyBroadcast/16",
+            "value": 47.37681701646339,
+            "unit": "us/iter",
+            "extra": "iterations: 15914\ncpu: 45.369890285283645 us\nthreads: 1"
+          },
+          {
+            "name": "BM_NotifyThroughput",
+            "value": 0.9196327218768233,
+            "unit": "us/iter",
+            "extra": "iterations: 752084\ncpu: 0.9195371088867674 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/64",
+            "value": 38.447066313655014,
+            "unit": "us/iter",
+            "extra": "iterations: 68553\ncpu: 9.823441687453453 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/1024",
+            "value": 38.322086344983745,
+            "unit": "us/iter",
+            "extra": "iterations: 75789\ncpu: 9.295603082241522 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/16384",
+            "value": 42.492308481756766,
+            "unit": "us/iter",
+            "extra": "iterations: 67038\ncpu: 10.643146006742427 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Aether_RoundTrip/65536",
+            "value": 51.31668584592331,
+            "unit": "us/iter",
+            "extra": "iterations: 65331\ncpu: 11.49556481609028 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/64",
+            "value": 15.120929392989549,
+            "unit": "us/iter",
+            "extra": "iterations: 87725\ncpu: 7.250854078084976 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/1024",
+            "value": 15.46249701187248,
+            "unit": "us/iter",
+            "extra": "iterations: 87513\ncpu: 7.795584096077141 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/16384",
+            "value": 14.217643232830925,
+            "unit": "us/iter",
+            "extra": "iterations: 73199\ncpu: 8.280147556660609 us\nthreads: 1"
+          },
+          {
+            "name": "BM_UDS_RoundTrip/65536",
+            "value": 27.248021615949956,
+            "unit": "us/iter",
+            "extra": "iterations: 38120\ncpu: 18.089950760755567 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/64",
+            "value": 21.837121191156463,
+            "unit": "us/iter",
+            "extra": "iterations: 99735\ncpu: 7.804459056499745 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/1024",
+            "value": 22.37554490213711,
+            "unit": "us/iter",
+            "extra": "iterations: 92323\ncpu: 8.108763894154206 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/16384",
+            "value": 25.45613953368166,
+            "unit": "us/iter",
+            "extra": "iterations: 58029\ncpu: 10.791405676472136 us\nthreads: 1"
+          },
+          {
+            "name": "BM_Pipe_RoundTrip/65536",
+            "value": 31.827783508158433,
+            "unit": "us/iter",
+            "extra": "iterations: 30888\ncpu: 23.63477256539742 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/64",
+            "value": 33.477476422806426,
+            "unit": "us/iter",
+            "extra": "iterations: 38533\ncpu: 18.552212545091347 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/1024",
+            "value": 26.354721789972544,
+            "unit": "us/iter",
+            "extra": "iterations: 43442\ncpu: 16.188188734404587 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/16384",
+            "value": 34.62228834440423,
+            "unit": "us/iter",
+            "extra": "iterations: 36283\ncpu: 19.802640051814876 us\nthreads: 1"
+          },
+          {
+            "name": "BM_TCP_RoundTrip/65536",
+            "value": 44.770953286232626,
+            "unit": "us/iter",
+            "extra": "iterations: 21514\ncpu: 31.5712136748166 us\nthreads: 1"
           }
         ]
       }
