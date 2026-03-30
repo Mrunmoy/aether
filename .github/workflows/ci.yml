@@ -29,18 +29,16 @@ jobs:
       - name: Build (README path)
         run: python3 build.py -e
 
-      # Step 2: Run the echo example server and client (end-to-end validation)
-      - name: Run echo example (server + client)
+      # Step 2: Run the README-documented typed example end to end
+      - name: Run device monitor example (server + client)
         timeout-minutes: 1
         run: |
-          echo "=== Starting echo_server ==="
-          # Use timeout to ensure server terminates even if signal handling fails
-          timeout 30 ./build/examples/echo/echo_server &
+          echo "=== Starting device_monitor_server ==="
+          timeout 30 ./build/examples/echo/device_monitor_server &
           SERVER_PID=$!
 
-          # Ensure server is stopped even if client fails
           cleanup() {
-            echo "=== Stopping echo_server ==="
+            echo "=== Stopping device_monitor_server ==="
             kill $SERVER_PID 2>/dev/null || true
             wait $SERVER_PID 2>/dev/null || true
           }
@@ -48,22 +46,43 @@ jobs:
 
           sleep 0.5
 
-          echo "=== Running echo_client ==="
-          ./build/examples/echo/echo_client
+          echo "=== Running device_monitor_client ==="
+          OUTPUT=$(./build/examples/echo/device_monitor_client 2>&1)
           CLIENT_EXIT=$?
+          echo "$OUTPUT"
 
           if [ $CLIENT_EXIT -ne 0 ]; then
-            echo "ERROR: echo_client failed with exit code $CLIENT_EXIT"
+            echo "ERROR: device_monitor_client failed with exit code $CLIENT_EXIT"
             exit 1
           fi
-          echo "SUCCESS: Echo example completed successfully"
+
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] device count: 2"; then
+            echo "ERROR: Missing expected device count output"
+            exit 1
+          fi
+
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] waiting briefly for notifications"; then
+            echo "ERROR: Missing notification wait line"
+            exit 1
+          fi
+
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] notification:"; then
+            echo "ERROR: Missing notification output"
+            exit 1
+          fi
+
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] disconnected\\."; then
+            echo "ERROR: Missing disconnect output"
+            exit 1
+          fi
+
+          echo "SUCCESS: DeviceMonitor example completed successfully"
 
       # Step 3: Validate ipcgen code generation workflow
       - name: Validate ipcgen codegen workflow
         run: |
           echo "=== Testing ipcgen with DeviceMonitor.idl ==="
-          # ipcgen is an in-tree Python module (tools/ipcgen), not installed via pip
-          PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/quickstart_gen/
+          python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/quickstart_gen/
 
           echo "=== Checking generated files ==="
           test -f /tmp/quickstart_gen/DeviceMonitorTypes.h || (echo "Missing DeviceMonitorTypes.h" && exit 1)
@@ -113,8 +132,8 @@ jobs:
       # Step 2: Validate codegen command from README.md
       - name: Validate codegen command works
         run: |
-          echo "=== Testing: PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen ==="
-          PYTHONPATH=tools:$PYTHONPATH python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/validate_codegen/
+          echo "=== Testing: python3 -m tools.ipcgen ==="
+          python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/validate_codegen/
           
           # Verify expected files were generated
           test -f /tmp/validate_codegen/DeviceMonitorTypes.h || (echo "FAIL: DeviceMonitorTypes.h not generated" && exit 1)
@@ -165,17 +184,15 @@ jobs:
           
           echo "SUCCESS: All example READMEs have required structure"
 
-      # Step 4: Run echo example and verify expected output patterns
-      - name: Run echo example and verify output
+      # Step 4: Run the README-documented typed example and verify output
+      - name: Run device monitor example and verify output
         timeout-minutes: 1
         run: |
-          echo "=== Testing echo example produces expected output patterns ==="
+          echo "=== Testing device monitor example produces expected output patterns ==="
           
-          # Start echo_server in background
-          timeout 30 ./build/examples/echo/echo_server &
+          timeout 30 ./build/examples/echo/device_monitor_server &
           SERVER_PID=$!
           
-          # Cleanup function
           cleanup() {
             kill $SERVER_PID 2>/dev/null || true
             wait $SERVER_PID 2>/dev/null || true
@@ -184,27 +201,35 @@ jobs:
           
           sleep 0.5
           
-          # Run echo_client and capture output
-          OUTPUT=$(./build/examples/echo/echo_client 2>&1)
+          OUTPUT=$(./build/examples/echo/device_monitor_client 2>&1)
           echo "$OUTPUT"
           
-          # Verify expected output patterns
-          if ! echo "$OUTPUT" | grep -q "Connected to echo service"; then
-            echo "FAIL: Missing 'Connected to echo service' in output"
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] device count: 2"; then
+            echo "FAIL: Missing device count output"
             exit 1
           fi
           
-          if ! echo "$OUTPUT" | grep -q 'sent: "Hello"'; then
-            echo "FAIL: Missing expected echo output pattern"
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] device 0:"; then
+            echo "FAIL: Missing device 0 output"
             exit 1
           fi
           
-          if ! echo "$OUTPUT" | grep -q "Disconnected"; then
-            echo "FAIL: Missing 'Disconnected' in output"
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] waiting briefly for notifications"; then
+            echo "FAIL: Missing wait-for-notifications line"
+            exit 1
+          fi
+
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] notification:"; then
+            echo "FAIL: Missing notification output"
+            exit 1
+          fi
+
+          if ! echo "$OUTPUT" | grep -q "\\[client\\] disconnected\\."; then
+            echo "FAIL: Missing disconnect output"
             exit 1
           fi
           
-          echo "SUCCESS: Echo example output matches expected patterns"
+          echo "SUCCESS: Device monitor example output matches expected patterns"
 
       # Step 5: Run c-echo example and verify expected output patterns
       - name: Run c-echo example and verify output
