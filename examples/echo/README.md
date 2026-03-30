@@ -16,7 +16,11 @@ From the repo root:
 
 ```bash
 python3 build.py -e
+
+# Terminal 1
 ./build/examples/echo/device_monitor_server
+
+# Terminal 2
 ./build/examples/echo/device_monitor_client
 ```
 
