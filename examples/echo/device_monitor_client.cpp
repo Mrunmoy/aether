@@ -1,3 +1,5 @@
+// Resolves to gen/client/DeviceMonitor.h via CMake include path.
+// The server includes the same name but gets gen/server/DeviceMonitor.h.
 #include "DeviceMonitor.h"
 
 #include <chrono>
