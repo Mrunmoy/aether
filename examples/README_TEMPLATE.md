@@ -37,6 +37,8 @@ If it does not use IDL:
 If the example uses code generation:
 - show the exact command
 - list the generated outputs
+- explicitly say whether the generated files are already checked in, so the
+  reader knows whether regeneration is required for a first run
 
 If it does not:
 - say that explicitly
@@ -77,4 +79,6 @@ Show the main lines a user should expect to see.
 - Always say which directory commands run from.
 - State platform restrictions near the top, not at the end.
 - Be explicit about generated code versus user-written code.
+- Say whether `python3` can be replaced with `py -3` on Windows if that is the
+  intended equivalent command.
 - Do not assume the reader already knows the runtime classes.
