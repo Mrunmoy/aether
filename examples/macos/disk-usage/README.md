@@ -1,81 +1,105 @@
 # Disk Usage Monitor Example
 
-A simulated disk/volume usage monitor built on the Aether IPC framework. The
-device server maintains three simulated volumes — no platform-specific filesystem
-APIs are required, so it compiles and runs on **any OS** (Linux, macOS, Windows).
+Monitor a simulated set of mounted volumes through typed RPC calls and low-space
+notifications.
 
-## IDL Overview
+## What You'll Learn
+- how to model inventory-style data with lookup and enumerate methods
+- how to use notifications for threshold-based warnings
+- how to build a small monitoring client around generated code
 
-The `DiskUsage` service exposes:
+## Prerequisites
+- repository root checkout
+- `python3 build.py -e`
 
-| Method           | Description                                |
-|------------------|--------------------------------------------|
-| `GetDiskUsage`   | Look up a volume by mount point            |
-| `GetVolumeCount` | Return the number of simulated volumes     |
-| `GetVolumeAt`    | Return volume info at a given index        |
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `DiskUsage.idl` | volume info and low-space notification contract |
+| `disk_device.cpp` | simulated volume state and threshold logic |
+| `disk_client.cpp` | CLI client for listing and querying volumes |
+| `disk_test.cpp` | example-level tests |
 
-Notification:
-- **`DiskSpaceLow`** — fired when a volume exceeds 90% usage (mount point, used percent, free bytes)
+## Step 1: Read the IDL
+`DiskUsage.idl` defines:
+- `VolumeInfo` as the shared struct
+- methods to get usage by mount point, count volumes, and fetch a volume by index
+- one notification, `DiskSpaceLow`, when a volume crosses the usage threshold
 
-## Simulated Volumes
-
-| Mount   | Filesystem | Total  | Used   | Usage |
-|---------|------------|--------|--------|-------|
-| `/`     | ext4       | 500 GB | 350 GB | 70%   |
-| `/home` | ext4       | 1 TB   | 800 GB | 80%   |
-| `/tmp`  | tmpfs      | 50 GB  | 5 GB   | 10%   |
-
-The server slowly increases usage on `/` by 1 GB every 3 seconds. When usage
-exceeds 90%, it broadcasts a `DiskSpaceLow` notification to all connected clients.
-
-## Building
-
-From the repository root:
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-cmake -B build -DAETHER_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
+python3 -m tools.ipcgen examples/macos/disk-usage/DiskUsage.idl --outdir examples/macos/disk-usage/gen
 ```
 
-## Running
+## Step 3: Review the User Code
+- `disk_device.cpp` owns the simulated volume list and low-space detection.
+- `disk_client.cpp` is a small REPL for querying the current inventory.
+- Aether handles request routing and notification delivery.
+
+## Build
+Run from the repository root:
 
 ```bash
-# Terminal 1 — start the simulated device
+python3 build.py -e
+```
+
+## Run
+Run from the repository root:
+
+```bash
+# Terminal 1
 ./build/examples/macos/disk-usage/disk_device
 
-# Terminal 2 — connect the CLI client
+# Terminal 2
 ./build/examples/macos/disk-usage/disk_client
 ```
 
-### Client Commands
+### Dashboard Commands
 
-```
-> list                   # Show all volumes with bar chart
-> check /                # Check a specific mount point
-> check /nonexistent     # Returns error for unknown mount
-> quit                   # Exit
+| Command | Description |
+|---------|-------------|
+| `list` | Show all volumes with usage summary |
+| `check <mount>` | Query a specific mount point (for example `check /`) |
+| `quit` | Disconnect and exit |
+
+## Expected Output
+Client session:
+
+```text
+> list
+Mount        Filesystem   Total      Used
+/            apfs         500 GB     350 GB
+> check /
 ```
 
-### Sample Output
+When a simulated volume crosses the limit, the client prints a `DiskSpaceLow`
+notification.
 
-```
-Mount        Filesystem   Total      Used       Free       Usage
------        ----------   -----      ----       ----       -----------------
-/            ext4         500 GB     350 GB     150 GB     [███████░░░]  70%
-/home        ext4         1.0 TB     800 GB     200 GB     [████████░░]  80%
-/tmp         tmpfs        50 GB      5 GB       45 GB      [█░░░░░░░░░]  10%
-```
+## What Just Happened
+The client queried a typed inventory of volumes and then stayed connected long
+enough to receive warnings. That pattern works well when you need both a
+current snapshot and asynchronous alerts from the same service.
 
-## Tests
+## Testing
+Run from the repository root (requires a build with `-e`):
 
 ```bash
-ctest --test-dir build --output-on-failure -R DiskUsageTest
+ctest --test-dir build --output-on-failure -R disk_tests
 ```
 
-The test suite covers:
-- `GetVolumeCount_ReturnsPositive`
-- `GetVolumeAt_ValidIndex` / `GetVolumeAt_InvalidIndex`
-- `GetDiskUsage_KnownMount` / `GetDiskUsage_UnknownMount`
-- `DiskSpaceLow_NotificationFires`
-- `UsedPercent_Consistent`
-- `RunLoop_Dispatch`
+## What To Modify Next
+- add another threshold tier such as a warning before the critical notification
+- point the service at real host filesystem data instead of the built-in simulation
+
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R disk_tests
+```
+
+## Related Examples
+- [`../battery-monitor/`](../battery-monitor/) for another monitor-style service
+- [`../../linux/sysmon/`](../../linux/sysmon/) for a host-backed monitor with real Linux metrics

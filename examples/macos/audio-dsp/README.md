@@ -1,62 +1,113 @@
 # Audio DSP — Simulated Effects Processor
 
-Demonstrates an IPC service that models a DSP effects processor with 8 effect
-slots, parameter control, and real-time signal level monitoring.
+Model a DSP effect chain with typed RPC calls for control and notifications for
+metering and clipping events.
 
-## IDL
+## What You'll Learn
+- how to represent a configurable processing chain in IDL
+- how to mix stateful control methods with real-time notifications
+- how to build a dashboard-style client for a more specialized domain
 
+## Prerequisites
+- repository root checkout
+- `python3 build.py -e`
+
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `AudioDsp.idl` | effect-chain contract and shared types |
+| `dsp_device.cpp` | simulated DSP device implementation |
+| `dsp_dashboard.cpp` | CLI dashboard for building and inspecting the chain |
+| `dsp_test.cpp` | example-level tests |
+
+## Step 1: Read the IDL
 `AudioDsp.idl` defines:
+- effect types such as EQ, compressor, reverb, delay, and limiter
+- `EffectSlot` and `SignalLevel` as shared structs
+- methods to add/remove effects, tweak parameters, and inspect the chain
+- notifications for clipping and level updates
 
-- **Enum** `EffectType` — EQ, Compressor, Reverb, Delay, Limiter
-- **Structs** — `EffectSlot` (slot state + 3 params + name), `SignalLevel` (peak/RMS/clipping)
-- **Service** `AudioDsp` — AddEffect, RemoveEffect, SetParameter, GetEffectSlot, GetSignalLevel, GetEffectCount
-- **Notifications** — ClipDetected, LevelUpdate
-
-## Build
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-cmake -B build -DMS_IPC_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
+python3 -m tools.ipcgen examples/macos/audio-dsp/AudioDsp.idl --outdir examples/macos/audio-dsp/gen
+```
+
+## Step 3: Review the User Code
+- `dsp_device.cpp` manages the simulated effect slots and periodically updates
+  the signal level.
+- `dsp_dashboard.cpp` is the interactive client for building a chain and
+  reading back state.
+- Aether handles typed marshaling and event delivery between them.
+
+## Build
+Run from the repository root:
+
+```bash
+python3 build.py -e
 ```
 
 ## Run
+Run from the repository root:
 
 ```bash
-# Terminal 1 — start the DSP device
+# Terminal 1
 ./build/examples/macos/audio-dsp/dsp_device
 
-# Terminal 2 — connect the dashboard
+# Terminal 2
 ./build/examples/macos/audio-dsp/dsp_dashboard
 ```
 
-### Dashboard commands
+### Dashboard Commands
 
 | Command | Description |
 |---------|-------------|
 | `add <slot> <eq\|comp\|reverb\|delay\|limiter> <name>` | Place effect in slot |
 | `remove <slot>` | Clear a slot |
-| `param <slot> <0-2> <value>` | Set parameter |
-| `level` | Show signal levels |
-| `chain` | Show full effect chain |
+| `param <slot> <0-2> <value>` | Set effect parameter |
+| `level` | Show current signal levels |
+| `chain` | Show the full effect chain |
 | `quit` | Exit |
 
-### Sample output
+## Expected Output
+Client:
 
-```
-=== DSP Effect Chain ===
-  Slot 0: [EQ        ] "Main EQ"  P1=2.5  P2=0.8  P3=1.0  [ON]
-  Slot 1: [Compressor] "Bus Comp"  P1=4.0  P2=0.5  P3=0.3  [ON]
-  Slot 2: (empty)
-  ...
-  Signal: Peak=-6.2dB  RMS=-12.4dB  [OK]
+```text
+> add 0 eq MainEQ
+> param 0 0 2.5
+> chain
+Slot 0: [EQ] "MainEQ"
+Signal: Peak=-6.2dB RMS=-12.4dB
 ```
 
-## Tests
+Notifications appear as the simulated signal level changes or clipping is hit.
+
+## What Just Happened
+This example treats the generated API as a control plane for a stateful device.
+Methods mutate and query the effect chain, while notifications expose live
+conditions without forcing the client to poll constantly.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
 
 ```bash
-ctest --test-dir build --output-on-failure -R AudioDspTest
+ctest --test-dir build --output-on-failure -R dsp_tests
 ```
 
-Tests cover slot management, parameter updates, effect counting, signal level
-queries, invalid slot handling, and both ClipDetected and LevelUpdate
-notifications.
+The suite covers slot management, parameter updates, effect counting, signal level queries, invalid slot handling, and ClipDetected and LevelUpdate notifications.
+
+## What To Modify Next
+- add another effect parameter or another notification such as bypass-state change
+- make the dashboard cache the current chain and redraw it on every notification
+
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R dsp_tests
+```
+
+## Related Examples
+- [`../ble-peripheral/`](../ble-peripheral/) for another stateful device with notifications
+- [`../../exhaust-analyzer/`](../../exhaust-analyzer/) for a fuller app-style example with a GUI

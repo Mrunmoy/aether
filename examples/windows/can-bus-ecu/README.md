@@ -1,74 +1,109 @@
 # CAN Bus ECU Example
 
-Simulates an automotive Engine Control Unit (ECU) exposing OBD-II PIDs over Aether IPC.
-The device is fully simulated — no hardware required — so it compiles on any platform.
+Model an automotive ECU with typed RPC access to PIDs and notifications for
+diagnostic trouble codes.
 
-## Components
+## What You'll Learn
+- how to use Aether for a richer protocol/domain model
+- how to mix inventory data, live readings, and fault notifications
+- how to build an interactive dashboard on top of generated bindings
 
-| Binary | Description |
-|--------|-------------|
-| `ecu_device` | Simulated ECU server with state-machine engine model |
-| `ecu_dashboard` | Interactive OBD-II dashboard CLI |
-| `ecu_tests` | Google Test suite for the CanBusEcu service |
+## Prerequisites
+- repository root checkout
+- `python3 build.py -e`
 
-## Supported OBD-II PIDs
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `CanBusEcu.idl` | PID, DTC, and vehicle info contract |
+| `ecu_device.cpp` | simulated vehicle state machine and fault injection |
+| `ecu_dashboard.cpp` | dashboard client for reading PIDs and DTCs |
+| `ecu_test.cpp` | example-level tests |
 
-| PID | Name | Range | Unit |
-|-----|------|-------|------|
-| 0x0C | Engine RPM | 0–8000 | RPM |
-| 0x0D | Vehicle Speed | 0–200 | km/h |
-| 0x05 | Coolant Temperature | 80–110 | °C |
-| 0x11 | Throttle Position | 0–100 | % |
-| 0x2F | Fuel Level | 0–100 | % |
+## Step 1: Read the IDL
+`CanBusEcu.idl` defines:
+- `PidReading`, `DtcEntry`, and `VehicleInfo`
+- methods to read a PID, enumerate DTCs, clear them, and fetch vehicle metadata
+- notifications for `CheckEngine` and `DtcCleared`
 
-## ECU State Machine
-
-The device cycles through four states every 3 seconds:
-
-```
-Idle → Accelerating → Cruising → Braking → Idle → …
-```
-
-Each state sets PID values:
-- **Idle**: RPM 800, Speed 0, Throttle 0%
-- **Accelerating**: RPM 4500, Speed 80, Throttle 70%
-- **Cruising**: RPM 2500, Speed 80, Throttle 25%
-- **Braking**: RPM 800, Speed 0, Throttle 0%
-
-Every 16 state transitions, a new DTC is injected and a `CheckEngine`
-notification is broadcast to connected clients.
-
-## Running
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-# Terminal 1 — start the ECU device
-./ecu_device
+python3 -m tools.ipcgen examples/windows/can-bus-ecu/CanBusEcu.idl --outdir examples/windows/can-bus-ecu/gen
+```
 
-# Terminal 2 — connect the dashboard
-./ecu_dashboard
+## Step 3: Review the User Code
+- `ecu_device.cpp` simulates the ECU state machine and injects trouble codes.
+- `ecu_dashboard.cpp` wraps the generated client API in a CLI dashboard.
+- Aether handles the typed client/server plumbing and notifications.
+
+## Build
+Run from the repository root:
+
+```bash
+python3 build.py -e
+```
+
+## Run
+Run from the repository root:
+
+```bash
+# Terminal 1
+./build/examples/windows/can-bus-ecu/ecu_device
+
+# Terminal 2
+./build/examples/windows/can-bus-ecu/ecu_dashboard
 ```
 
 ### Dashboard Commands
 
 | Command | Description |
 |---------|-------------|
-| `read <pid_hex>` | Read a single PID (e.g. `read 0c`) |
-| `dtc` | List stored DTCs |
+| `read <pid_hex>` | Read a single PID (e.g. `read 0c` for RPM) |
+| `dtc` | List stored Diagnostic Trouble Codes |
 | `clear` | Clear all DTCs |
-| `vin` | Show vehicle identification |
+| `vin` | Show vehicle identification info |
 | `dashboard` / `d` | Refresh the gauge display |
 | `quit` / `q` | Exit |
 
-## IDL
+## Expected Output
+Client session:
 
-The service is defined in `CanBusEcu.idl`. Generated code lives in `gen/`
-and should not be edited by hand.
+```text
+> read 0c
+Engine RPM: 4500 RPM
+> vin
+VIN: ...
+> dtc
+```
 
-## Building
+Periodically, the dashboard receives `CheckEngine` notifications as simulated
+faults are injected.
 
-This example is built as part of the Aether examples:
+## What Just Happened
+The server owned the ECU state machine and fault lifecycle, while the client
+used typed methods for queries and notifications for faults that appear on
+their own schedule. That pattern maps cleanly to many real device protocols.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
 
 ```bash
-python3 build.py -e      # Build library + examples
-python3 build.py -t       # Build + run all tests
+ctest --test-dir build --output-on-failure -R ecu_tests
 ```
+
+## What To Modify Next
+- add another PID or DTC severity to the IDL and regenerate
+- change the dashboard to keep a persistent list of active trouble codes
+
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R ecu_tests
+```
+
+## Related Examples
+- [`motor-controller/`](../motor-controller/) for another control-heavy device dashboard
+- [`process-monitor/`](../process-monitor/) for a monitoring-oriented dashboard in the same section

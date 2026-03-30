@@ -1,68 +1,111 @@
-# BLE Heart Rate Monitor (Simulated)
+# BLE Peripheral Example
 
-A simulated Bluetooth Low Energy (BLE) Heart Rate Monitor peripheral using Aether IPC. Demonstrates the GATT service model over shared-memory IPC with IDL-generated code.
+Use a simulated BLE-style peripheral to see how Aether can model hierarchical
+service and characteristic interactions with typed RPC calls.
 
-## GATT Profile
+## What You'll Learn
+- how to encode a GATT-like model in IDL structs and methods
+- how to represent reads, writes, and subscriptions in a generated client API
+- how to build a dashboard around a more nested domain model
 
-| Service                | UUID   | Characteristics                                                    |
-|------------------------|--------|--------------------------------------------------------------------|
-| Heart Rate Service     | 0x180D | Heart Rate Measurement (0x2A37) R/N, Body Sensor Location (0x2A38) R |
-| Battery Service        | 0x180F | Battery Level (0x2A19) R/N                                         |
+## Prerequisites
+- repository root checkout
+- `python3 build.py -e`
 
-**R** = Read, **N** = Notify
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `BlePeripheral.idl` | service/characteristic data model and API |
+| `ble_device.cpp` | simulated BLE database and notification source |
+| `ble_dashboard.cpp` | interactive client for discovery, reads, and subscriptions |
+| `ble_test.cpp` | example-level tests |
 
-## IDL
+## Step 1: Read the IDL
+`BlePeripheral.idl` defines:
+- `BleUuid`, `BleCharacteristic`, and `BleService`
+- methods to enumerate services, read characteristics, write values, and enable notifications
+- one notification, `CharacteristicChanged`, for subscribed updates
 
-The service interface is defined in [`BlePeripheral.idl`](BlePeripheral.idl) and generates typed server/client code under `gen/`.
-
-## Build & Run
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-# From repository root
-cmake -B build -DAETHER_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
+python3 -m tools.ipcgen examples/macos/ble-peripheral/BlePeripheral.idl --outdir examples/macos/ble-peripheral/gen
+```
 
-# Terminal 1 — start the device
+## Step 3: Review the User Code
+- `ble_device.cpp` owns the simulated BLE services, values, and update loop.
+- `ble_dashboard.cpp` wraps the generated client in a REPL for discovery,
+  reads, writes, and subscriptions.
+- Aether handles the transport and typed marshaling; the example focuses on the
+  application model.
+
+## Build
+Run from the repository root:
+
+```bash
+python3 build.py -e
+```
+
+## Run
+Run from the repository root:
+
+```bash
+# Terminal 1
 ./build/examples/macos/ble-peripheral/ble_device
 
-# Terminal 2 — connect the dashboard
+# Terminal 2
 ./build/examples/macos/ble-peripheral/ble_dashboard
 ```
 
-## Dashboard Commands
+### Dashboard Commands
 
-```
-> services                      — rediscover services
-> read <svc_idx> <char_idx>     — read a characteristic value
-> subscribe <svc_idx> <char_idx>   — enable notifications
-> unsubscribe <svc_idx> <char_idx> — disable notifications
-> quit                          — exit
-```
+| Command | Description |
+|---------|-------------|
+| `services` | Rediscover and list all services |
+| `read <svc_idx> <char_idx>` | Read a characteristic value |
+| `subscribe <svc_idx> <char_idx>` | Enable notifications for a characteristic |
+| `unsubscribe <svc_idx> <char_idx>` | Disable notifications |
+| `quit` | Exit |
 
-## Sample Output
+## Expected Output
+Client session:
 
-```
+```text
 Connected to BLE peripheral.
-
-Discovered 2 services:
-  [1] Heart Rate Service (0x180D) — 2 characteristics
-  [2] Battery Service (0x180F) — 1 characteristic
-
+Discovered 2 services
 > read 1 0
-  Heart Rate Measurement (0x2A37): 72 BPM [props=0x12, len=1]
+Heart Rate Measurement: 72 BPM
 > subscribe 1 0
-  Enabled notifications for char 0 of service 1
-
-  [notify] Heart Rate Measurement (0x2A37): 85 BPM
-  [notify] Heart Rate Measurement (0x2A37): 63 BPM
-> read 2 0
-  Battery Level (0x2A19): 100% [props=0x12, len=1]
+[notify] Heart Rate Measurement: 85 BPM
 ```
 
-## Tests
+## What Just Happened
+This example uses generated bindings for a more nested data model than the
+basic examples. The client still sees ordinary typed methods and notifications,
+but the IDL captures the hierarchy of service UUIDs, characteristics, and
+subscription-driven updates.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
 
 ```bash
-ctest --test-dir build --output-on-failure -R BlePeripheral
+ctest --test-dir build --output-on-failure -R ble_tests
 ```
 
-Tests verify service discovery, characteristic read/write, notification enable/disable, and error handling — all without the simulation thread.
+The suite verifies service discovery, characteristic read/write, notification enable/disable, and error handling.
+
+## What To Modify Next
+- add another characteristic and expose it through the dashboard
+- add client-side pretty-printing for UUIDs instead of index-based navigation
+
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R ble_tests
+```
+
+## Related Examples
+- [`../audio-dsp/`](../audio-dsp/) for another stateful dashboard-style service
+- [`../../echo/`](../../echo/) for the simpler generated client/server path

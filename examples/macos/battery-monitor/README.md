@@ -1,58 +1,97 @@
 # Battery Monitor Example
 
-A simulated battery/power monitor built on the Aether IPC framework. The device
-server simulates a battery draining and charging cycle — no platform-specific
-APIs are required, so it compiles and runs on **any OS** (Linux, macOS, Windows).
+Use a simulated battery and power-source model to see how Aether handles status
+queries plus threshold and source-change notifications.
 
-## IDL Overview
+## What You'll Learn
+- how to model health/status data as shared IDL structs
+- how to publish change notifications without client polling
+- how a small monitoring client can stay simple with typed bindings
 
-The `BatteryMonitor` service exposes:
+## Prerequisites
+- repository root checkout
+- `python3 build.py -e`
 
-| Method             | Description                           |
-|--------------------|---------------------------------------|
-| `GetBatteryStatus` | Returns full `BatteryStatus` struct   |
-| `GetPowerSource`   | Returns current `PowerSource` enum    |
-| `GetBatteryHealth` | Returns health percentage and cycles  |
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `BatteryMonitor.idl` | battery status, health, and notification contract |
+| `battery_device.cpp` | simulated battery lifecycle and event generation |
+| `battery_client.cpp` | CLI client that prints status and notifications |
+| `battery_test.cpp` | example-level regression coverage |
 
-Notifications:
-- **`BatteryLevelChanged`** — fired when charge percent or charge state changes
-- **`PowerSourceChanged`** — fired when the power source changes
+## Step 1: Read the IDL
+`BatteryMonitor.idl` defines:
+- `BatteryStatus` plus enums for power source and charge state
+- methods to fetch the current battery snapshot, source, and health metrics
+- notifications for level changes and power-source transitions
 
-## Building
-
-From the repository root:
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-cmake -B build -DAETHER_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
+python3 -m tools.ipcgen examples/macos/battery-monitor/BatteryMonitor.idl --outdir examples/macos/battery-monitor/gen
 ```
 
-## Running
+## Step 3: Review the User Code
+- `battery_device.cpp` simulates charging, discharging, and source changes.
+- `battery_client.cpp` connects to the generated client API and prints the
+  current status plus incoming notifications.
+- Aether handles connection management and typed message delivery.
+
+## Build
+Run from the repository root:
 
 ```bash
-# Terminal 1 — start the simulated device
+python3 build.py -e
+```
+
+## Run
+Run from the repository root:
+
+```bash
+# Terminal 1
 ./build/examples/macos/battery-monitor/battery_device
 
-# Terminal 2 — connect the CLI client
+# Terminal 2
 ./build/examples/macos/battery-monitor/battery_client
 ```
 
-### Sample Output
+## Expected Output
+Client output looks like:
 
+```text
+Battery: 78% [Discharging]
+Power: Battery | Health: 92% (500 cycles)
+Alert: Battery now 20% [Charging]
+Alert: Power source changed to AC
 ```
-  Battery: 78% [Discharging] ████████░░ 3.92V
-  Power:   Battery | Health: 92% (500 cycles)
-  Time remaining: 78 min
 
-  ⚡ Alert: Battery now 20% [Charging]
-  🔌 Alert: Power source changed to AC
-```
+## What Just Happened
+The device side owned the simulation and decided when a meaningful state change
+occurred. The client used typed methods for snapshots and notifications for
+changes, which is the common pattern for any monitor-style service.
 
-## Tests
+## Testing
+Run from the repository root (requires a build with `-e`):
 
 ```bash
-ctest --test-dir build --output-on-failure -R BatteryMonitor
+ctest --test-dir build --output-on-failure -R battery_tests
 ```
 
-The test suite covers all three RPC methods, both notification types, and
-RunLoop-based dispatch.
+The suite covers all three RPC methods, both notification types, and RunLoop-based dispatch.
+
+## What To Modify Next
+- add a low-battery threshold method so clients can configure alert policy
+- extend the client to log a full event history instead of printing one line at a time
+
+## Testing
+Run from the repository root:
+
+```bash
+ctest --test-dir build --output-on-failure -R battery_tests
+```
+
+## Related Examples
+- [`../disk-usage/`](../disk-usage/) for another monitor-style service
+- [`../../linux/sysmon/`](../../linux/sysmon/) for a Linux-backed real monitor rather than a simulation
