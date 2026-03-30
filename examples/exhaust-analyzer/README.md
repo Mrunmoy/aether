@@ -1,75 +1,102 @@
 # Exhaust Gas Analyzer Example
 
-A simulated car exhaust gas analyzer — the kind of device found in emissions
-testing stations and performance tuning shops. Demonstrates aether's
-code-generated RPC and live notification broadcast with a Qt5 GUI client.
+Build a richer desktop-style app: a generated IPC service, a simulation server,
+and a Qt dashboard client with live notifications.
 
-## Screenshots
+## What You'll Learn
+- how Aether-generated bindings scale beyond the small echo examples
+- how a GUI client consumes notifications and marshals them onto the UI thread
+- how to structure a simulation server around methods plus periodic updates
 
-**Disconnected** — gauges idle, waiting to connect to the analyzer service:
+## Prerequisites
+- repository root checkout
+- `nix` available so Qt5 is present in the dev environment
+- two terminals inside `nix develop`
 
-![Client offline](img/client-offline.png)
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `ExhaustAnalyzer.idl` | service, enum, and notification contract |
+| `gen/server/ExhaustAnalyzer.*` | generated server base class used by `exhaust_server.cpp` |
+| `gen/client/ExhaustAnalyzer.*` | generated client class used by `exhaust_client.cpp` |
+| `exhaust_server.cpp` | simulation logic, status transitions, and notification broadcast |
+| `exhaust_client.cpp` | Qt widgets, signal bridging, and client-side method calls |
 
-**Measuring** — live sensor data streaming at 10 Hz via IPC notifications:
+## Step 1: Read the IDL
+`ExhaustAnalyzer.idl` defines:
+- methods to query analyzer status and readings, then start or stop measurement
+- `AnalyzerStatus` and `GasReadings` as shared types
+- notifications for live readings and status changes
 
-![Client measuring](img/client-measuring.png)
+That gives you the same generated client/server split as `echo/`, but with a
+larger payload and a UI-driven client.
 
-## What it shows
-
-- **IDL-defined service** (`ExhaustAnalyzer.idl`) with RPC methods and push notifications
-- **Server** simulates 7 gas sensors (O₂, CO, CO₂, NOx, HC, λ, exhaust temp) with a state machine (Offline → Warming → Ready → Measuring)
-- **Qt5 client** receives live `ReadingsUpdated` notifications over shared-memory IPC and displays color-coded gauges (green/amber/red thresholds)
-- Thread-safe IPC-to-Qt signal crossing via `Qt::QueuedConnection`
-
-## Building
-
-Requires the nix dev environment for Qt5:
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-nix develop
-python3 build.py -e
+python3 -m tools.ipcgen examples/exhaust-analyzer/ExhaustAnalyzer.idl --outdir examples/exhaust-analyzer/gen
 ```
 
-## Running
+Generated outputs include:
+- `examples/exhaust-analyzer/gen/ExhaustAnalyzerTypes.h`
+- `examples/exhaust-analyzer/gen/server/ExhaustAnalyzer.h`
+- `examples/exhaust-analyzer/gen/server/ExhaustAnalyzer.cpp`
+- `examples/exhaust-analyzer/gen/client/ExhaustAnalyzer.h`
+- `examples/exhaust-analyzer/gen/client/ExhaustAnalyzer.cpp`
 
-Start the server in one terminal, client in another (both inside `nix develop`):
+## Step 3: Review the User Code
+- `exhaust_server.cpp` subclasses the generated server base and implements the
+  four handlers plus the sensor simulation loop.
+- `exhaust_client.cpp` subclasses the generated client, translates callbacks
+  into Qt signals, and updates the dashboard widgets.
+- Aether handles connection setup, message routing, request/response framing,
+  and notification delivery between the two processes.
+
+## Build
+Run from the repository root:
+
+```bash
+nix develop -c python3 build.py -e
+```
+
+## Run
+Run from the repository root:
 
 ```bash
 # Terminal 1
-./build/examples/exhaust-analyzer/exhaust_server
+nix develop -c ./build/examples/exhaust-analyzer/exhaust_server
 
 # Terminal 2
-./build/examples/exhaust-analyzer/exhaust_client
+nix develop -c ./build/examples/exhaust-analyzer/exhaust_client
 ```
 
-Click **CONNECT**, then **START** to begin live measurement.
+In the client window, click `CONNECT` and then `START`.
 
-## IDL interface
+## Expected Output
+Server terminal:
 
-```idl
-service ExhaustAnalyzer
-{
-    [method=1] int GetStatus([out] AnalyzerStatus status);
-    [method=2] int GetCurrentReadings([out] GasReadings readings);
-    [method=3] int StartMeasurement([out] bool started);
-    [method=4] int StopMeasurement([out] bool stopped);
-};
-
-notifications ExhaustAnalyzer
-{
-    [notify=1] void ReadingsUpdated([in] GasReadings readings);
-    [notify=2] void StatusChanged([in] AnalyzerStatus status);
-};
+```text
+Exhaust Gas Analyzer Service
+[analyzer] warming up...
+[analyzer] ready — waiting for clients
+[analyzer] measurement started — broadcasting at 10 Hz
 ```
 
-## Sensor channels
+Client window:
+- status moves from `OFFLINE` to `READY` and then `MEASURING`
+- gauges begin updating with live O2, CO, CO2, NOx, HC, lambda, and temperature values
 
-| Channel | Unit | Typical range |
-|---------|------|---------------|
-| O₂ | % | 0.5 – 2.0 |
-| CO | % | 0.5 – 3.0 |
-| CO₂ | % | 12 – 14 |
-| NOx | ppm | 500 – 2000 |
-| HC | ppm | 50 – 300 |
-| λ (Lambda) | — | 0.97 – 1.03 |
-| EGT | °C | 350 – 500 |
+## What Just Happened
+The IDL generated the RPC surface, but the interesting app behavior lives in
+two places: the server simulation and the Qt dashboard. The server publishes
+state transitions and sensor readings, and the client turns those notifications
+into UI updates on the Qt event loop.
+
+## What To Modify Next
+- add another gas channel or alarm notification to the IDL and regenerate
+- change the server simulation thresholds or warmup timing and observe the UI
+
+## Related Examples
+- [`../echo/`](../echo/) for the smaller generated client/server path
+- [`../sdk-usage/`](../sdk-usage/) if you want the same codegen model against a packaged SDK

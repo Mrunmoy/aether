@@ -1,71 +1,101 @@
 # FileWatcher Example
 
-A Linux directory watcher using `inotify`, demonstrating Aether IPC notifications.
+Use Linux `inotify` with generated Aether bindings to broadcast filesystem
+events to one or more clients.
 
-## Overview
+## What You'll Learn
+- how to map an OS event source into an Aether notification stream
+- how generated bindings work for a service with both methods and notifications
+- how to test a Linux-specific integration with the same host runtime
 
-The **FileWatcher** service watches directories for file creation, modification, and deletion events. When a change is detected, it broadcasts a `FileChanged` notification to all connected clients.
+## Prerequisites
+- Linux
+- repository root checkout
+- a directory you can create and delete files in during the demo
 
-### IDL
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `FileWatcher.idl` | service contract for watch management and file-change notifications |
+| `gen/server/FileWatcher.*` | generated server base class used by the device |
+| `gen/client/FileWatcher.*` | generated client class used by the CLI |
+| `filewatcher_device.cpp` | `inotify` integration and notification broadcast |
+| `filewatcher_client.cpp` | CLI client that subscribes and prints events |
+| `filewatcher_test.cpp` | regression coverage for the example service |
 
-```
-service FileWatcher {
-    int WatchDirectory([in] string[256] path, [out] uint32 watchId);
-    int UnwatchDirectory([in] uint32 watchId);
-    int GetWatchCount([out] uint32 count);
-};
+## Step 1: Read the IDL
+`FileWatcher.idl` defines:
+- methods to watch a directory, remove a watch, and query the active watch count
+- `FileEventType` plus `WatchEntry` as the shared types
+- one notification, `FileChanged`, for create/modify/delete events
 
-notifications FileWatcher {
-    void FileChanged([in] uint32 watchId, [in] FileEventType eventType,
-                     [in] string[256] filename);
-};
-```
-
-## Building
-
-From the repository root:
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DMS_IPC_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
-```
-
-## Running
-
-Start the server in one terminal:
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
+python3 -m tools.ipcgen examples/linux/file-watcher/FileWatcher.idl --outdir examples/linux/file-watcher/gen
+```
+
+Generated outputs include:
+- `examples/linux/file-watcher/gen/FileWatcherTypes.h`
+- `examples/linux/file-watcher/gen/server/FileWatcher.h`
+- `examples/linux/file-watcher/gen/server/FileWatcher.cpp`
+- `examples/linux/file-watcher/gen/client/FileWatcher.h`
+- `examples/linux/file-watcher/gen/client/FileWatcher.cpp`
+
+## Step 3: Review the User Code
+- `filewatcher_device.cpp` subclasses the generated server and converts
+  `inotify` events into `FileChanged` notifications.
+- `filewatcher_client.cpp` issues `WatchDirectory` once, then prints incoming
+  notifications until you stop it.
+- Aether handles the client/server transport, framing, and notification fan-out.
+
+## Build
+Run from the repository root:
+
+```bash
+python3 build.py -e
+```
+
+## Run
+Run from the repository root:
+
+```bash
+# Terminal 1
 ./build/examples/linux/file-watcher/filewatcher_device
+
+# Terminal 2
+./build/examples/linux/file-watcher/filewatcher_client /tmp/aether-watch
 ```
 
-Start the client in another terminal:
+Then create, edit, and delete files under `/tmp/aether-watch`.
 
-```bash
-./build/examples/linux/file-watcher/filewatcher_client /path/to/watch
-```
+## Expected Output
+Server:
 
-Then create, modify, or delete files in the watched directory.
-
-### Sample Output
-
-**Server:**
-```
+```text
 FileWatcher device running. Press Ctrl-C to stop.
-[device] WatchDirectory("/home/user/test") → watchId=1
-[device] event: watchId=1 type=1 file=newfile.txt
+[device] WatchDirectory("/tmp/aether-watch") -> watchId=1
 ```
 
-**Client:**
-```
-Watching "/home/user/test" (watchId=1)
-Listening for file events. Press Ctrl-C to stop.
-[Created] newfile.txt (watchId=1)
-[Modified] newfile.txt (watchId=1)
-[Deleted] newfile.txt (watchId=1)
+Client:
+
+```text
+Watching "/tmp/aether-watch" (watchId=1)
+[Created] demo.txt (watchId=1)
+[Modified] demo.txt (watchId=1)
+[Deleted] demo.txt (watchId=1)
 ```
 
-## Tests
+## What Just Happened
+The generated server and client code gave you a typed IPC surface, while the
+device code translated native `inotify` events into Aether notifications. This
+is the clearest example of plugging a real OS event source into the framework.
 
-```bash
-ctest --test-dir build --output-on-failure -R filewatcher
-```
+## What To Modify Next
+- add another notification for rename events
+- connect two clients at once and watch the same directory from both
+
+## Related Examples
+- [`../sysmon/`](../sysmon/) for another Linux-specific service with live alerts
+- [`../../echo/`](../../echo/) for the smaller cross-platform generated path

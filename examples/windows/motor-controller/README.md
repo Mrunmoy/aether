@@ -1,58 +1,85 @@
 # Motor Controller Example
 
-Simulated stepper motor controller using the Aether IPC framework.  The
-device is entirely software-simulated so it compiles and runs on any
-supported platform (Linux, macOS, Windows).
+Control a simulated stepper motor through typed methods and observe motion
+events through notifications.
 
-## Components
+## What You'll Learn
+- how to model commands and state queries for a device controller
+- how to emit completion, fault, and limit events as notifications
+- how a dashboard client can drive a simulation loop through generated APIs
 
-| Binary              | Description                                      |
-|---------------------|--------------------------------------------------|
-| `motor_device`      | IPC server — simulated stepper motor with trapezoidal motion profiles |
-| `motor_dashboard`   | Interactive CLI client for commanding the motor  |
-| `motor_tests`       | Google Test suite for the motor controller       |
+## Prerequisites
+- repository root checkout
+- `python3 build.py -e`
 
-## Simulated Motor
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `MotorController.idl` | homing, motion, status, and notification contract |
+| `motor_device.cpp` | simulated stepper motor state machine |
+| `motor_dashboard.cpp` | interactive control client |
+| `motor_test.cpp` | example-level tests |
 
-- **Position range:** −10 000 to +10 000 steps
-- **Limit switches:** Lower at −10 000, Upper at +10 000
-- **Max velocity:** 1 000 steps/s
-- **Acceleration:** 500 steps/s²
-- **Simulation tick:** 10 ms
+## Step 1: Read the IDL
+`MotorController.idl` defines:
+- methods to home, move, jog, stop, and query status
+- `MotorStatus` plus enums for motor state and active limit switch
+- notifications for motion complete, limit hits, and stall detection
 
-## Running
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-# Terminal 1 — start the motor device server
+python3 -m tools.ipcgen examples/windows/motor-controller/MotorController.idl --outdir examples/windows/motor-controller/gen
+```
+
+## Step 3: Review the User Code
+- `motor_device.cpp` simulates position, velocity, homing, and fault behavior.
+- `motor_dashboard.cpp` is the operator-facing REPL built on the generated client.
+- Aether handles connection, request dispatch, and notification delivery.
+
+## Build
+Run from the repository root:
+
+```bash
+python3 build.py -e
+```
+
+## Run
+Run from the repository root:
+
+```bash
+# Terminal 1
 ./build/examples/windows/motor-controller/motor_device
 
-# Terminal 2 — connect the dashboard
+# Terminal 2
 ./build/examples/windows/motor-controller/motor_dashboard
 ```
 
-### Dashboard commands
+## Expected Output
+Client session:
 
-| Command           | Description                                |
-|-------------------|--------------------------------------------|
-| `home`            | Start homing sequence (move to lower limit, zero position) |
-| `move <pos> [v]`  | Move to position at optional velocity (default 500 steps/s) |
-| `jog <vel>`       | Continuous motion at given velocity        |
-| `stop`            | Immediately halt the motor                 |
-| `status`          | Print full motor status                    |
-| `pos`             | Print current position                     |
-| `help`            | Show available commands                    |
-| `quit`            | Exit the dashboard                         |
-
-## Notifications
-
-The server broadcasts three notifications:
-
-- **MotionComplete(position)** — a MoveTo or Home finished
-- **LimitHit(which, position)** — a limit switch was activated
-- **StallDetected(position, velocity)** — motor stalled (position unchanged for 500 ms while velocity is non-zero)
-
-## Tests
-
-```bash
-ctest --test-dir build --output-on-failure -R MotorControllerTest
+```text
+> home
+> move 2500 500
+> status
+State: Moving
+Position: ...
 ```
+
+As the simulation runs, notifications report motion completion, limit hits, or
+stall events.
+
+## What Just Happened
+The client used typed commands to control the motor simulation, while the
+server decided when motion or fault events were important enough to push back
+as notifications. This is a clean example of RPC for control and events for
+telemetry.
+
+## What To Modify Next
+- add another command such as setting acceleration or jerk
+- teach the dashboard to subscribe and print a motion timeline
+
+## Related Examples
+- [`can-bus-ecu/`](../can-bus-ecu/) for another control-heavy dashboard
+- [`../../linux/gpio-controller/`](../../linux/gpio-controller/) for a simpler device-control example

@@ -1,91 +1,92 @@
 # SysMon — Linux System Monitor
 
-A Linux system monitor IPC service that reads `/proc` for real-time CPU,
-memory, and load average data. Demonstrates codegen-based RPC methods and
-server-to-client threshold notifications.
+Query live CPU, memory, and load data from `/proc`, then broadcast threshold
+alerts to connected clients.
 
-## IDL Overview
+## What You'll Learn
+- how to wrap a real Linux subsystem in a generated Aether service
+- how to combine request/response monitoring calls with alert notifications
+- how to keep a monitoring client simple while the server owns threshold logic
 
-**Methods:**
-| Method | Description |
-|--------|-------------|
-| `GetCpuUsage` | Returns user/system/idle/iowait/total CPU percentages |
-| `GetMemoryInfo` | Returns total/free/available/buffers/cached/used memory |
-| `GetLoadAverage` | Returns 1/5/15-min load averages and process counts |
+## Prerequisites
+- Linux
+- repository root checkout
+- `python3 build.py -e`
 
-**Notifications:**
-| Notification | Trigger |
-|-------------|---------|
-| `HighCpuAlert` | CPU usage exceeds 90% |
-| `LowMemoryAlert` | Memory usage exceeds 85% |
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `SysMon.idl` | CPU, memory, and load-average contract |
+| `sysmon_device.cpp` | `/proc` reader and alert logic |
+| `sysmon_client.cpp` | reporting client that prints the current snapshot |
+| `sysmon_test.cpp` | example-level regression coverage |
 
-## Building
+## Step 1: Read the IDL
+`SysMon.idl` defines:
+- `CpuUsage`, `MemoryInfo`, and `LoadAverage` structs
+- methods to fetch each current snapshot
+- `HighCpuAlert` and `LowMemoryAlert` notifications for threshold breaches
+
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-# From repository root
-python3 build.py -e                    # build all examples
-# or
-cmake -B build -DAETHER_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
+python3 -m tools.ipcgen examples/linux/sysmon/SysMon.idl --outdir examples/linux/sysmon/gen
 ```
 
-## Running
+## Step 3: Review the User Code
+- `sysmon_device.cpp` reads `/proc`, calculates percentages, and emits alert
+  notifications when its thresholds are exceeded.
+- `sysmon_client.cpp` queries the current snapshot and prints the result.
+- Aether handles all typed marshaling and callback delivery.
+
+## Build
+Run from the repository root:
 
 ```bash
-# Terminal 1 — start the server
+python3 build.py -e
+```
+
+## Run
+Run from the repository root:
+
+```bash
+# Terminal 1
 ./build/examples/linux/sysmon/sysmon_device
 
-# Terminal 2 — start the client
+# Terminal 2
 ./build/examples/linux/sysmon/sysmon_client
 ```
 
-## Running Tests
+## Expected Output
+Server:
 
-```bash
-ctest --test-dir build --output-on-failure -R SysMon
+```text
+SysMon service running
+CPU threshold: 90%
+Memory threshold: 85%
 ```
 
-## Sample Output
+Client:
 
-**Server:**
-```
-╔══════════════════════════════════════╗
-║  SysMon service running              ║
-║  Service name: sysmon                ║
-║  CPU threshold:  90%                 ║
-║  Memory threshold: 85%               ║
-║  Ctrl-C to stop                      ║
-╚══════════════════════════════════════╝
-```
-
-**Client:**
-```
+```text
 Connected to sysmon service.
-
-┌──────────────────────────────────────┐
-│ CPU Usage                            │
-├──────────────────────────────────────┤
-  User:            2.3 %
-  System:          1.1 %
-  IO Wait:         0.0 %
-  Idle:           96.6 %
-  Total:           3.4 %
-├──────────────────────────────────────┤
-│ Memory                               │
-├──────────────────────────────────────┤
-  Total:          15872.0 MB
-  Used:            8234.0 MB
-  Free:            2048.0 MB
-  Available:       7638.0 MB
-  Buffers:          512.0 MB
-  Cached:          5078.0 MB
-  Used:           51.9 %
-├──────────────────────────────────────┤
-│ Load Average                         │
-├──────────────────────────────────────┤
-  1 min:           0.45
-  5 min:           0.38
-  15 min:          0.42
-  Procs:          3 / 412
-└──────────────────────────────────────┘
+CPU Usage
+Memory
+Load Average
 ```
+
+If a threshold is breached, the client prints the corresponding alert.
+
+## What Just Happened
+The server turned live Linux system data into a typed RPC surface and layered
+policy on top by deciding when to emit alerts. That split is useful in real
+systems: clients stay simple, while the server owns the monitoring logic.
+
+## What To Modify Next
+- adjust the CPU or memory thresholds in the device and trigger alerts deliberately
+- add another `/proc`-backed metric such as disk I/O or network throughput
+
+## Related Examples
+- [`../file-watcher/`](../file-watcher/) for another Linux-specific service
+- [`../sensor-hub/`](../sensor-hub/) for a simulated monitoring-style service with notifications

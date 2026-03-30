@@ -1,46 +1,84 @@
 # Service Status Example
 
-Simulates a Windows service monitor over Aether IPC. The server maintains a list
-of simulated Windows services (Spooler, BITS, Windows Update, etc.) and
-periodically toggles their state, firing `ServiceStateChanged` notifications.
+Monitor a simulated set of background services with typed queries and
+state-change notifications.
 
-The device is fully simulated — no Windows APIs are used — so it compiles and
-runs on any platform.
+## What You'll Learn
+- how to model service inventory and state transitions in IDL
+- how to pair query methods with change notifications
+- how to build a small status client around generated code
 
-## Build
+## Prerequisites
+- repository root checkout
+- `python3 build.py -e`
+
+## Files That Matter
+| File | Why it matters |
+|------|----------------|
+| `ServiceStatus.idl` | service inventory and state-change contract |
+| `svcstat_device.cpp` | simulated service state transitions |
+| `svcstat_client.cpp` | CLI client for listing and querying services |
+| `svcstat_test.cpp` | example-level tests |
+
+## Step 1: Read the IDL
+`ServiceStatus.idl` defines:
+- `ServiceInfo` plus the `ServiceState` enum
+- methods to look up one service, count them, and enumerate them by index
+- one notification, `ServiceStateChanged`, when a service changes state
+
+## Step 2: Generate Code
+Run from the repository root:
 
 ```bash
-cmake -B build -DAETHER_BUILD_EXAMPLES=ON
-cmake --build build -j$(nproc)
+python3 -m tools.ipcgen examples/windows/service-status/ServiceStatus.idl --outdir examples/windows/service-status/gen
+```
+
+## Step 3: Review the User Code
+- `svcstat_device.cpp` owns the simulated service inventory and toggles state.
+- `svcstat_client.cpp` uses the generated client API for `list` and `status`
+  commands while listening for notifications.
+- Aether handles the transport, request dispatch, and notification delivery.
+
+## Build
+Run from the repository root:
+
+```bash
+python3 build.py -e
 ```
 
 ## Run
-
-Start the device (server) in one terminal:
+Run from the repository root:
 
 ```bash
+# Terminal 1
 ./build/examples/windows/service-status/svcstat_device
-```
 
-Connect the client in another:
-
-```bash
+# Terminal 2
 ./build/examples/windows/service-status/svcstat_client
 ```
 
-Client commands:
+## Expected Output
+Client session:
 
-| Command          | Description                        |
-| ---------------- | ---------------------------------- |
-| `list`           | List all services with status      |
-| `status <name>`  | Show details for a single service  |
-| `quit`           | Disconnect and exit                |
-
-State changes are printed automatically when the server fires a
-`ServiceStateChanged` notification.
-
-## Tests
-
-```bash
-ctest --test-dir build --output-on-failure -R ServiceStatusTest
+```text
+> list
+Spooler   Running
+BITS      Stopped
+> status Spooler
 ```
+
+As the simulation toggles service states, the client prints
+`ServiceStateChanged` notifications automatically.
+
+## What Just Happened
+The service exposed both a queryable inventory and an event stream. That is the
+same shape many operational tools need: inspect the current world, then watch
+for changes without polling constantly.
+
+## What To Modify Next
+- add start/stop control methods to move from pure monitoring to service control
+- add filtering in the client for only one watched service
+
+## Related Examples
+- [`process-monitor/`](../process-monitor/) for another lifecycle-monitor example
+- [`../../linux/file-watcher/`](../../linux/file-watcher/) for a notification-oriented service driven by real host events
