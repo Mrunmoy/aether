@@ -21,8 +21,6 @@ void handleSignal(int)
 class DeviceMonitorService : public aether::ipc::DeviceMonitor
 {
 public:
-    using DeviceMonitor::DeviceMonitor;
-
     DeviceMonitorService()
         : DeviceMonitor("device_monitor")
     {
@@ -67,9 +65,7 @@ private:
 int main()
 {
     std::signal(SIGINT, handleSignal);
-#if defined(SIGTERM)
     std::signal(SIGTERM, handleSignal);
-#endif
 
     DeviceMonitorService service;
     if (!service.start())
