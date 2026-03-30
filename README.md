@@ -23,6 +23,23 @@ Aether is an RPC framework that moves data through lock-free ring buffers in sha
 - `aether-lite` -- standalone C99 bare-metal runtime for Cortex-M / AVR targets
 - 287 tests (120 C++ / 167 Python), ASan + TSan in CI
 
+## Start Here
+
+The recommended path for new users:
+
+1. **Clone and build:**
+   ```bash
+   git clone --recursive https://github.com/Mrunmoy/aether.git
+   cd aether
+   python3 build.py -t
+   ```
+
+2. **Read the canonical example:** [`examples/echo/`](examples/echo/) walks through the full workflow -- raw `ServiceBase`/`ClientBase` usage, then IDL code generation with `ipcgen`, showing what you gain at each level. Start with the [example README](examples/echo/README.md).
+
+3. **Read Aether in 5 Minutes:** [`doc/AetherIn5Minutes.md`](doc/AetherIn5Minutes.md) explains the mental model -- what ipcgen generates, what the runtime handles, what you write, and the threading model.
+
+After that, look at the IDL section below to write your own service, or explore the other paths in [Choose Your Path](#choose-your-path).
+
 ## How It Works
 
 ### 1. Define your service in IDL
@@ -105,7 +122,7 @@ client.disconnect();
 **Build and test:**
 
 ```bash
-git clone --recursive https://github.com/Mrunmoy/ms-ipc.git aether
+git clone --recursive https://github.com/Mrunmoy/aether.git
 cd aether
 python3 build.py -t
 ```
@@ -202,6 +219,18 @@ target_link_libraries(my_server aether)
 
 See [`examples/echo/`](examples/echo/) for a source-build codegen example.
 
+## Choose Your Path
+
+| Path | When to use | Entry point |
+|------|-------------|-------------|
+| **C++ with codegen** (recommended) | You write both server and client in C++. | [`examples/echo/`](examples/echo/) |
+| **C API / SDK** | You distribute a pre-built library to consumers who may not use C++. | [`examples/sdk-usage/`](examples/sdk-usage/) |
+| **Python client** | You want a Python GUI or script talking to a C++ server. | `python3 -m ipcgen --backend python --outdir gen/` |
+| **aether-lite (MCU)** | Your server runs on a bare-metal microcontroller. | [`examples/mcu-firmware/`](examples/mcu-firmware/) |
+| **Serial / USB** | Desktop-to-device communication over a byte stream. | [`examples/serial-sensor/`](examples/serial-sensor/) |
+
+If you are unsure, start with the C++ codegen path. The other paths exist for specific integration scenarios and are documented in their respective example READMEs.
+
 ## Examples
 
 | Example | Description |
@@ -218,6 +247,7 @@ See [`examples/echo/`](examples/echo/) for a source-build codegen example.
 
 | Document | Contents |
 |----------|----------|
+| [AetherIn5Minutes.md](doc/AetherIn5Minutes.md) | Mental model, threading, ownership, common failures, anti-patterns |
 | [aether-hld.md](doc/aether-hld.md) | High-level design -- architecture and components |
 | [aether-lld.md](doc/aether-lld.md) | Low-level design -- APIs, wire protocol, threading |
 | [ipcgen-hld.md](doc/ipcgen-hld.md) | Code generator high-level design |
