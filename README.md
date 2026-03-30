@@ -73,7 +73,7 @@ notifications DeviceMonitor
 ### 2. Generate code
 
 ```bash
-python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir gen/
+PYTHONPATH=tools python3 -m ipcgen examples/echo/DeviceMonitor.idl --outdir gen/
 ```
 
 This produces five files: `DeviceMonitorTypes.h`, `server/DeviceMonitor.h`,
@@ -90,6 +90,14 @@ protected:
     int handleGetDeviceCount(uint32_t *count) override
     {
         *count = m_devices.size();
+        return IPC_SUCCESS;
+    }
+
+    int handleGetDeviceInfo(uint32_t deviceId, DeviceInfo *info) override
+    {
+        if (deviceId >= m_devices.size())
+            return 1; // application-defined error
+        *info = m_devices[deviceId];
         return IPC_SUCCESS;
     }
 };
@@ -129,7 +137,7 @@ specific scenarios:
 | Path | When to use | Start here |
 |------|-------------|------------|
 | **C API** | SDK distribution or non-C++ consumers | [`examples/sdk-usage/`](examples/sdk-usage/) |
-| **Python client** | Python GUI or script talking to a C++ server | `python3 -m ipcgen --backend python` |
+| **Python client** | Python GUI or script talking to a C++ server | `PYTHONPATH=tools python3 -m ipcgen --backend python` |
 | **aether-lite** | Bare-metal MCU (Cortex-M, AVR) with UART/USB | [`examples/mcu-firmware/`](examples/mcu-firmware/) |
 | **Serial transport** | Desktop-to-device over a byte stream | [`examples/serial-sensor/`](examples/serial-sensor/) |
 
@@ -142,7 +150,7 @@ python3 build.py -c -t        # clean rebuild + full test pass
 python3 build.py -e           # build + examples
 
 # CMake directly
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DMS_IPC_BUILD_EXAMPLES=ON
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_BUILD_EXAMPLES=ON
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 

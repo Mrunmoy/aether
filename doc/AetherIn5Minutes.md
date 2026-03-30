@@ -140,12 +140,13 @@ contract is maintained. This is handled internally.
 
 ## Ownership and Lifetime
 
-- **Shared memory** is created by the client during `connect()` and passed
-  to the server via FD passing (`SCM_RIGHTS` on Linux/macOS) or
-  `DuplicateHandle` on Windows. Both sides map the same region. On POSIX,
-  the memory is reclaimed when both file descriptors are closed. On Windows,
-  the named file mapping is reference-counted by the kernel and released
-  when both handles are closed.
+- **Shared memory** is created by the client during `connect()` and shared
+  with the server. On Linux and macOS, the file descriptor is passed via
+  `SCM_RIGHTS`. On Windows, the client creates a named file mapping and
+  sends the mapping name in the handshake; the server opens it with
+  `OpenFileMappingA()`. On POSIX, the memory is reclaimed when both file
+  descriptors are closed. On Windows, the kernel reference-counts the
+  mapping object and releases it when both handles are closed.
 
 - **Ring buffers** are placement-new'd into the shared memory region. They
   do not allocate heap memory. Their lifetime is tied to the shared memory
@@ -200,7 +201,8 @@ are case-sensitive. On Linux, the abstract socket namespace uses
 `\0aether_<name>`. On macOS, a pathname socket is created under `$TMPDIR`
 (or `/tmp/aether_<uid>/` as fallback) with the filename derived from an
 FNV-1a hash of the service name. On Windows, a named pipe at
-`\\.\pipe\aether_<name>` is used. Make sure the server calls `start()`
+`\\.\pipe\aether_<hash>` is used (the pipe name is derived from an FNV-1a
+hash of the service name, not the name itself). Make sure the server calls `start()`
 before the client calls `connect()`.
 
 **`IPC_ERR_TIMEOUT` on every call.**
