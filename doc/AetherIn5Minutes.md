@@ -128,7 +128,8 @@ run an event loop.
 **Important:** in RunLoop mode, `call()` blocks the calling thread while
 waiting for a response. If you call it from the RunLoop thread itself, it
 deadlocks -- the response can never be delivered because the RunLoop thread
-is blocked.
+is blocked. The workaround is to post the call to a worker thread and have
+it deliver the result back via `loop.executeOnRunLoop()`.
 
 ### The sendMutex rule
 
@@ -142,9 +143,11 @@ lock anything yourself.
 ## Ownership and Lifetime
 
 - **Shared memory** is created by the client during `connect()` and passed
-  to the server via FD passing (or `DuplicateHandle` on Windows). Both
-  sides mmap the same region. When either side disconnects, the OS
-  reclaims the shared memory when both file descriptors are closed.
+  to the server via FD passing (`SCM_RIGHTS` on Linux/macOS) or
+  `DuplicateHandle` on Windows. Both sides map the same region. On POSIX,
+  the memory is reclaimed when both file descriptors are closed. On
+  Windows, the named file mapping is reference-counted by the kernel and
+  released when both handles are closed.
 
 - **Ring buffers** are placement-new'd into the shared memory region. They
   do not allocate heap memory. Their lifetime is tied to the shared memory
@@ -179,6 +182,12 @@ All RPC methods return `int`. The convention:
 | -5 | `IPC_ERR_VERSION_MISMATCH` | Protocol version mismatch |
 | -6 | `IPC_ERR_RING_FULL` | Ring buffer has no space for the frame |
 | -7 | `IPC_ERR_STOPPED` | Service or client is shutting down |
+| -8 | `IPC_ERR_INVALID_ARGUMENT` | Bad parameter passed to a platform or API function |
+| -9 | `IPC_ERR_TRANSPORT` | Serial or custom transport-level failure |
+| -10 | `IPC_ERR_CRC` | CRC mismatch on a received frame (transport mode) |
+| -11 | `IPC_ERR_NOT_SUPPORTED` | Feature disabled at compile time |
+| -12 | `IPC_ERR_NO_SPACE` | Registration tables full |
+| -13 | `IPC_ERR_OVERFLOW` | Payload exceeds buffer capacity |
 
 Always check the return value. A disconnected peer is the most common
 runtime error and can happen at any time.
@@ -190,19 +199,24 @@ These are the situations new users hit most often.
 **"Connection refused" or `connect()` returns false.**
 The server is not running, or the service name doesn't match. Service names
 are case-sensitive. On Linux, the abstract socket namespace uses
-`\0aether_<name>`. On macOS, a file is created at `/tmp/aether_<name>`.
-Make sure the server calls `start()` before the client calls `connect()`.
+`\0aether_<name>`. On macOS, a pathname socket is created under `$TMPDIR`
+(or `/tmp/aether_<uid>/` as fallback) with the filename derived from an
+FNV-1a hash of the service name. On Windows, a named pipe at
+`\\.\pipe\aether_<name>` is used. Make sure the server calls `start()`
+before the client calls `connect()`.
 
 **`IPC_ERR_TIMEOUT` on every call.**
 The server handler is blocking or deadlocked. Check that your `handleXxx()`
 implementation returns promptly. In RunLoop mode, a slow handler blocks all
 other clients on the same loop.
 
-**`IPC_ERR_RING_FULL` when sending notifications.**
-The client is not reading fast enough. Each ring is 256 KB. If the client's
-receiver thread is blocked or the client is not processing notifications,
-the ring fills up. `sendNotify()` skips clients with full rings and returns
-the first error encountered.
+**Client disconnected during notification broadcast.**
+If a client's ring is full when `sendNotify()` tries to write, the runtime
+treats that client as unresponsive: it marks the client dead, shuts down
+its socket, and continues to the next client. The return value is
+`IPC_ERR_DISCONNECTED` (not `IPC_ERR_RING_FULL`) because the client is
+forcibly disconnected. Other connected clients still receive the
+notification normally.
 
 **Deadlock in RunLoop mode.**
 You called `client.call()` from the RunLoop thread. The response can only
@@ -211,9 +225,10 @@ response. Move `call()` to a worker thread, or use the threaded mode
 instead.
 
 **Server crashes with SIGPIPE.**
-On Linux, writing to a UDS after the peer disconnects raises SIGPIPE.
-Aether uses `MSG_NOSIGNAL` on all sends, so this should not happen with
-the current runtime. If you see it, check that you are not writing to a
+On POSIX systems, writing to a socket after the peer disconnects raises
+SIGPIPE. Aether suppresses this on Linux with `MSG_NOSIGNAL` on every
+send, and on macOS with `SO_NOSIGPIPE` set on each socket at creation
+time. If you still see SIGPIPE, check that you are not writing to a
 raw socket outside of Aether's API.
 
 **Generated code won't compile after IDL change.**
@@ -230,9 +245,12 @@ the receiver thread. This means other clients waiting for responses from
 this server will time out. Keep handlers fast.
 
 **Sharing a `ClientBase` across threads without understanding the model.**
-`call()` is thread-safe, but `connect()` and `disconnect()` are not. Call
-`connect()` once from one thread, then `call()` from as many threads as
-you need. Do not call `connect()` and `call()` concurrently.
+`call()` is thread-safe -- multiple threads can call it concurrently.
+`connect()` and `disconnect()` must not be called concurrently with each
+other or with `connect()` from another thread. Calling `disconnect()` while
+another thread is blocked in `call()` is safe: the pending call wakes up
+with `IPC_ERR_DISCONNECTED`. The typical pattern is: call `connect()` once
+from one thread, then `call()` from as many threads as needed.
 
 **Using raw `ServiceBase`/`ClientBase` instead of generated code.**
 The raw API requires manual byte packing, numeric message IDs, and

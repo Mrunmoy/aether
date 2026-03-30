@@ -29,7 +29,7 @@ The recommended path for new users:
 
 1. **Clone and build:**
    ```bash
-   git clone --recursive https://github.com/Mrunmoy/ms-ipc.git aether
+   git clone --recursive https://github.com/Mrunmoy/aether.git
    cd aether
    python3 build.py -t
    ```
@@ -122,7 +122,7 @@ client.disconnect();
 **Build and test:**
 
 ```bash
-git clone --recursive https://github.com/Mrunmoy/ms-ipc.git aether
+git clone --recursive https://github.com/Mrunmoy/aether.git
 cd aether
 python3 build.py -t
 ```
@@ -225,7 +225,7 @@ See [`examples/echo/`](examples/echo/) for a source-build codegen example.
 |------|-------------|-------------|
 | **C++ with codegen** (recommended) | You write both server and client in C++. | [`examples/echo/`](examples/echo/) |
 | **C API / SDK** | You distribute a pre-built library to consumers who may not use C++. | [`examples/sdk-usage/`](examples/sdk-usage/) |
-| **Python client** | You want a Python GUI or script talking to a C++ server. | `ipcgen --backend python` |
+| **Python client** | You want a Python GUI or script talking to a C++ server. | `python3 -m ipcgen --backend python --outdir gen/` |
 | **aether-lite (MCU)** | Your server runs on a bare-metal microcontroller. | [`examples/mcu-firmware/`](examples/mcu-firmware/) |
 | **Serial / USB** | Desktop-to-device communication over a byte stream. | [`examples/serial-sensor/`](examples/serial-sensor/) |
 
