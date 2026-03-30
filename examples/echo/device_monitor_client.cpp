@@ -61,7 +61,7 @@ int main()
     }
 
     std::printf("[client] waiting briefly for notifications...\n");
-    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     client.disconnect();
     std::printf("[client] disconnected.\n");
     return 0;

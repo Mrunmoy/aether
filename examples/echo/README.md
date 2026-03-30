@@ -20,16 +20,24 @@ python3 build.py -e
 ./build/examples/echo/device_monitor_client
 ```
 
-Expected client output looks like:
+The stable client output looks like:
 
 ```text
 [client] device count: 2
 [client] device 0: USB Audio Interface (vendor=0x1234 product=0x0001)
 [client] device 1: BLE Sensor Tag (vendor=0x4321 product=0x0002)
 [client] waiting briefly for notifications...
+[client] disconnected.
+```
+
+While the client is waiting, you should also see one or more notification lines:
+
+```text
 [client] notification: connected -> USB Audio Interface
 [client] notification: disconnected -> id=1
 ```
+
+The notification order depends on when the client joins the server's demo cycle.
 
 ## What this example teaches
 
@@ -46,11 +54,9 @@ The path is intentionally small:
 | You write | Aether generates or provides |
 |-----------|------------------------------|
 | [`DeviceMonitor.idl`](DeviceMonitor.idl) | [`gen/DeviceMonitorTypes.h`](gen/DeviceMonitorTypes.h) |
-| [`device_monitor_server.cpp`](device_monitor_server.cpp) | [`gen/server/DeviceMonitor.h`](gen/server/DeviceMonitor.h) |
-| [`device_monitor_client.cpp`](device_monitor_client.cpp) | [`gen/server/DeviceMonitor.cpp`](gen/server/DeviceMonitor.cpp) |
-| `CMakeLists.txt` target wiring | [`gen/client/DeviceMonitor.h`](gen/client/DeviceMonitor.h) |
-| | [`gen/client/DeviceMonitor.cpp`](gen/client/DeviceMonitor.cpp) |
-| | core runtime in `ServiceBase`, `ClientBase`, `Connection`, and `FrameIO` |
+| [`device_monitor_server.cpp`](device_monitor_server.cpp) | [`gen/server/DeviceMonitor.h`](gen/server/DeviceMonitor.h), [`gen/server/DeviceMonitor.cpp`](gen/server/DeviceMonitor.cpp) |
+| [`device_monitor_client.cpp`](device_monitor_client.cpp) | [`gen/client/DeviceMonitor.h`](gen/client/DeviceMonitor.h), [`gen/client/DeviceMonitor.cpp`](gen/client/DeviceMonitor.cpp) |
+| `CMakeLists.txt` target wiring | core runtime in `ServiceBase`, `ClientBase`, `Connection`, and `FrameIO` |
 
 ## The learning narrative
 
@@ -73,7 +79,7 @@ The generated files in [`gen/`](gen/) show the split clearly:
 To regenerate them from the repo root:
 
 ```bash
-python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
+python3 tools/ipcgen/__main__.py examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
 ```
 
 ### Step 3: inspect the user code
@@ -123,6 +129,12 @@ The same directory also includes [`echo_server.cpp`](echo_server.cpp) and
 
 They are useful to understand the runtime, but they are not the recommended
 starting point for new users.
+
+## More patterns
+
+The previous long-form example material now lives in the
+[IDL Cookbook](../../doc/idl-cookbook.md). Read that after this example if you
+want additional IDL patterns, RunLoop notes, and higher-level integration sketches.
 
 ## Why this is the recommended default
 

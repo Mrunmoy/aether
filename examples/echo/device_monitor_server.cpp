@@ -1,7 +1,6 @@
 #include "DeviceMonitor.h"
 
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -11,11 +10,11 @@
 namespace
 {
 
-std::atomic<bool> g_running{true};
+volatile std::sig_atomic_t g_running = 1;
 
 void handleSignal(int)
 {
-    g_running.store(false);
+    g_running = 0;
 }
 
 class DeviceMonitorService : public aether::ipc::DeviceMonitor
@@ -26,13 +25,22 @@ public:
     {
         std::strncpy(m_devices[0].name, "USB Audio Interface", sizeof(m_devices[0].name) - 1);
         std::strncpy(m_devices[1].name, "BLE Sensor Tag", sizeof(m_devices[1].name) - 1);
+        m_devices[0].name[sizeof(m_devices[0].name) - 1] = '\0';
+        m_devices[1].name[sizeof(m_devices[1].name) - 1] = '\0';
     }
 
-    void publishDemoNotifications()
+    void publishDeviceConnectedDemo()
     {
-        notifyDeviceConnected(m_devices[0]);
-        std::this_thread::sleep_for(std::chrono::milliseconds(400));
-        notifyDeviceDisconnected(m_devices[1].id);
+        const int rc = notifyDeviceConnected(m_devices[0]);
+        if (rc != aether::ipc::IPC_SUCCESS)
+            std::fprintf(stderr, "[server] notifyDeviceConnected failed: %d\n", rc);
+    }
+
+    void publishDeviceDisconnectedDemo()
+    {
+        const int rc = notifyDeviceDisconnected(m_devices[1].id);
+        if (rc != aether::ipc::IPC_SUCCESS)
+            std::fprintf(stderr, "[server] notifyDeviceDisconnected failed: %d\n", rc);
     }
 
 protected:
@@ -76,23 +84,25 @@ int main()
 
     std::printf("[server] device_monitor is running. Press Ctrl+C to stop.\n");
 
-    std::thread notifier([&service] {
-        while (g_running.load() && service.isRunning())
+    auto nextNotifyAt = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    bool sendConnected = true;
+    while (g_running != 0 && service.isRunning())
+    {
+        if (std::chrono::steady_clock::now() >= nextNotifyAt)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            if (!g_running.load() || !service.isRunning())
-                break;
-            service.publishDemoNotifications();
-        }
-    });
+            if (sendConnected)
+                service.publishDeviceConnectedDemo();
+            else
+                service.publishDeviceDisconnectedDemo();
 
-    while (g_running.load() && service.isRunning())
+            sendConnected = !sendConnected;
+            nextNotifyAt += std::chrono::seconds(1);
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     service.stop();
-    if (notifier.joinable())
-        notifier.join();
-
     std::printf("[server] stopped.\n");
     return 0;
 }
