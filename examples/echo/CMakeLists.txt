@@ -4,8 +4,28 @@ target_link_libraries(echo_server PRIVATE aether Threads::Threads)
 add_executable(echo_client echo_client.cpp)
 target_link_libraries(echo_client PRIVATE aether Threads::Threads)
 
+add_executable(device_monitor_server
+    device_monitor_server.cpp
+    gen/server/DeviceMonitor.cpp
+)
+target_include_directories(device_monitor_server PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/gen/server
+    ${CMAKE_CURRENT_SOURCE_DIR}/gen
+)
+target_link_libraries(device_monitor_server PRIVATE aether Threads::Threads)
+
+add_executable(device_monitor_client
+    device_monitor_client.cpp
+    gen/client/DeviceMonitor.cpp
+)
+target_include_directories(device_monitor_client PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/gen/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/gen
+)
+target_link_libraries(device_monitor_client PRIVATE aether Threads::Threads)
+
 # ── Code-gen examples (DeviceMonitor) ─────────────────────────────────
-# Generated from example/DeviceMonitor.idl via tools/ipcgen.py.
+# Generated from examples/echo/DeviceMonitor.idl via tools/ipcgen/__main__.py.
 # Server and client are separate executables because both sides define
 # aether::ipc::DeviceMonitor (same class name, different base classes).
 
