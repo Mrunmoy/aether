@@ -56,6 +56,19 @@ Run from the repository root:
 ./build/examples/windows/motor-controller/motor_dashboard
 ```
 
+### Dashboard Commands
+
+| Command | Description |
+|---------|-------------|
+| `home` | Start homing sequence (move to lower limit, zero position) |
+| `move <pos> [vel]` | Move to position at optional velocity (default 500 steps/s) |
+| `jog <vel>` | Continuous motion at given velocity |
+| `stop` | Immediately halt the motor |
+| `status` | Print full motor status |
+| `pos` | Print current position |
+| `help` | Show available commands |
+| `quit` | Exit the dashboard |
+
 ## Expected Output
 Client session:
 
@@ -75,6 +88,13 @@ The client used typed commands to control the motor simulation, while the
 server decided when motion or fault events were important enough to push back
 as notifications. This is a clean example of RPC for control and events for
 telemetry.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R motor_tests
+```
 
 ## What To Modify Next
 - add another command such as setting acceleration or jerk

@@ -59,6 +59,17 @@ Run from the repository root:
 ./build/examples/macos/audio-dsp/dsp_dashboard
 ```
 
+### Dashboard Commands
+
+| Command | Description |
+|---------|-------------|
+| `add <slot> <eq\|comp\|reverb\|delay\|limiter> <name>` | Place effect in slot |
+| `remove <slot>` | Clear a slot |
+| `param <slot> <0-2> <value>` | Set effect parameter |
+| `level` | Show current signal levels |
+| `chain` | Show the full effect chain |
+| `quit` | Exit |
+
 ## Expected Output
 Client:
 
@@ -76,6 +87,15 @@ Notifications appear as the simulated signal level changes or clipping is hit.
 This example treats the generated API as a control plane for a stateful device.
 Methods mutate and query the effect chain, while notifications expose live
 conditions without forcing the client to poll constantly.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R dsp_tests
+```
+
+The suite covers slot management, parameter updates, effect counting, signal level queries, invalid slot handling, and ClipDetected and LevelUpdate notifications.
 
 ## What To Modify Next
 - add another effect parameter or another notification such as bypass-state change

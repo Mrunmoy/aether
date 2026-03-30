@@ -82,6 +82,15 @@ for state changes that the device decides to emit on its own. That pattern
 shows up in many hardware-facing services: configure through calls, react
 through notifications.
 
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R gpio_tests
+```
+
+The suite covers pin configuration, read/write, error handling, interrupt notifications, and RunLoop dispatch.
+
 ## What To Modify Next
 - add another pin capability such as pull-up configuration
 - emit interrupt timestamps and surface them in the dashboard

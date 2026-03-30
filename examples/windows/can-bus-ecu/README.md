@@ -56,6 +56,17 @@ Run from the repository root:
 ./build/examples/windows/can-bus-ecu/ecu_dashboard
 ```
 
+### Dashboard Commands
+
+| Command | Description |
+|---------|-------------|
+| `read <pid_hex>` | Read a single PID (e.g. `read 0c` for RPM) |
+| `dtc` | List stored Diagnostic Trouble Codes |
+| `clear` | Clear all DTCs |
+| `vin` | Show vehicle identification info |
+| `dashboard` / `d` | Refresh the gauge display |
+| `quit` / `q` | Exit |
+
 ## Expected Output
 Client session:
 
@@ -74,6 +85,13 @@ faults are injected.
 The server owned the ECU state machine and fault lifecycle, while the client
 used typed methods for queries and notifications for faults that appear on
 their own schedule. That pattern maps cleanly to many real device protocols.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R ecu_tests
+```
 
 ## What To Modify Next
 - add another PID or DTC severity to the IDL and regenerate

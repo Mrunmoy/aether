@@ -92,6 +92,13 @@ The generated server and client code gave you a typed IPC surface, while the
 device code translated native `inotify` events into Aether notifications. This
 is the clearest example of plugging a real OS event source into the framework.
 
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R filewatcher_tests
+```
+
 ## What To Modify Next
 - add another notification for rename events
 - connect two clients at once and watch the same directory from both

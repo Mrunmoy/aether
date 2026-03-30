@@ -83,6 +83,13 @@ The server turned live Linux system data into a typed RPC surface and layered
 policy on top by deciding when to emit alerts. That split is useful in real
 systems: clients stay simple, while the server owns the monitoring logic.
 
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R sysmon_tests
+```
+
 ## What To Modify Next
 - adjust the CPU or memory thresholds in the device and trigger alerts deliberately
 - add another `/proc`-backed metric such as disk I/O or network throughput

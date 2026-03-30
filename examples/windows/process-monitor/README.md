@@ -76,6 +76,13 @@ The client can pull the current process snapshot through methods and then stay
 connected for lifecycle changes. That combination works well whenever a service
 has both current state and event history concerns.
 
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R procmon_tests
+```
+
 ## What To Modify Next
 - add a method for filtering by process name
 - keep a rolling event log in the client instead of printing notifications inline

@@ -82,6 +82,13 @@ Methods handle query and control flows, while notifications carry unsolicited
 events such as motion or fresh samples. It is a good bridge from the simple
 examples into more device-like service design.
 
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R sensor_tests
+```
+
 ## What To Modify Next
 - add another sensor reading such as magnetometer data
 - change the motion threshold and watch how notification frequency changes

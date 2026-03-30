@@ -58,6 +58,16 @@ Run from the repository root:
 ./build/examples/macos/ble-peripheral/ble_dashboard
 ```
 
+### Dashboard Commands
+
+| Command | Description |
+|---------|-------------|
+| `services` | Rediscover and list all services |
+| `read <svc_idx> <char_idx>` | Read a characteristic value |
+| `subscribe <svc_idx> <char_idx>` | Enable notifications for a characteristic |
+| `unsubscribe <svc_idx> <char_idx>` | Disable notifications |
+| `quit` | Exit |
+
 ## Expected Output
 Client session:
 
@@ -75,6 +85,15 @@ This example uses generated bindings for a more nested data model than the
 basic examples. The client still sees ordinary typed methods and notifications,
 but the IDL captures the hierarchy of service UUIDs, characteristics, and
 subscription-driven updates.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R ble_tests
+```
+
+The suite verifies service discovery, characteristic read/write, notification enable/disable, and error handling.
 
 ## What To Modify Next
 - add another characteristic and expose it through the dashboard

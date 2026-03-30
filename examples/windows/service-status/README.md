@@ -75,6 +75,13 @@ The service exposed both a queryable inventory and an event stream. That is the
 same shape many operational tools need: inspect the current world, then watch
 for changes without polling constantly.
 
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R svcstat_tests
+```
+
 ## What To Modify Next
 - add start/stop control methods to move from pure monitoring to service control
 - add filtering in the client for only one watched service

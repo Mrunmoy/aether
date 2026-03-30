@@ -87,6 +87,14 @@ Client window:
 - status moves from `OFFLINE` to `READY` and then `MEASURING`
 - gauges begin updating with live O2, CO, CO2, NOx, HC, lambda, and temperature values
 
+**Disconnected** — gauges idle, waiting to connect to the analyzer service:
+
+![Client offline](img/client-offline.png)
+
+**Measuring** — live sensor data streaming at 10 Hz via IPC notifications:
+
+![Client measuring](img/client-measuring.png)
+
 ## What Just Happened
 The IDL generated the RPC surface, but the interesting app behavior lives in
 two places: the server simulation and the Qt dashboard. The server publishes

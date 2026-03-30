@@ -56,6 +56,14 @@ Run from the repository root:
 ./build/examples/macos/disk-usage/disk_client
 ```
 
+### Client Commands
+
+| Command | Description |
+|---------|-------------|
+| `list` | Show all volumes with usage summary |
+| `check <mount>` | Query a specific mount point (e.g. `check /`) |
+| `quit` | Disconnect and exit |
+
 ## Expected Output
 Client session:
 
@@ -73,6 +81,13 @@ notification.
 The client queried a typed inventory of volumes and then stayed connected long
 enough to receive warnings. That pattern works well when you need both a
 current snapshot and asynchronous alerts from the same service.
+
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R disk_tests
+```
 
 ## What To Modify Next
 - add another threshold tier such as a warning before the critical notification

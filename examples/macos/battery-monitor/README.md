@@ -72,6 +72,15 @@ The device side owned the simulation and decided when a meaningful state change
 occurred. The client used typed methods for snapshots and notifications for
 changes, which is the common pattern for any monitor-style service.
 
+## Testing
+Run from the repository root (requires a build with `-e`):
+
+```bash
+ctest --test-dir build --output-on-failure -R battery_tests
+```
+
+The suite covers all three RPC methods, both notification types, and RunLoop-based dispatch.
+
 ## What To Modify Next
 - add a low-battery threshold method so clients can configure alert policy
 - extend the client to log a full event history instead of printing one line at a time
