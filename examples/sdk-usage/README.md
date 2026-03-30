@@ -56,8 +56,8 @@ python3 -m tools.ipcgen examples/sdk-usage/TemperatureSensor.idl \
     --outdir examples/sdk-usage/gen --backend c_api
 ```
 
-The generated wrappers are already checked in. Rerun this only after changing
-the IDL.
+The generated wrappers are already checked in. Rerun this command only after
+changing the IDL.
 
 This generates wrappers that:
 

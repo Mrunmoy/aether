@@ -17,7 +17,7 @@ and notifications.
 If this is your first time in the repo, use the source-build C++ path and the
 typed `echo` example. That is the canonical newcomer flow.
 
-**Prerequisites:** C++17 compiler, CMake 3.14+, Python 3, and Linux or macOS
+**Prerequisites:** C++17 compiler, CMake 3.14+, Python 3, and Linux, macOS,
 or Windows. If `python3` is not on your `PATH` on Windows, use `py -3`
 instead.
 
