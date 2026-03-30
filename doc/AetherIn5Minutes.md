@@ -40,16 +40,16 @@ when using codegen.
 The Aether runtime (`libaether.a`) manages everything below the generated
 code:
 
-- **Connection setup** -- UDS/named-pipe handshake, shared memory allocation,
+- **Connection setup** — UDS/named-pipe handshake, shared memory allocation,
   ring buffer placement
-- **Frame I/O** -- packing and unpacking the 24-byte wire header and payload
-- **Threading** -- accept loop, per-client receiver threads (or RunLoop
+- **Frame I/O** — packing and unpacking the 24-byte wire header and payload
+- **Threading** — accept loop, per-client receiver threads (or RunLoop
   dispatch)
-- **RPC correlation** -- matching responses to pending calls via sequence
+- **RPC correlation** — matching responses to pending calls via sequence
   numbers
-- **Notification broadcast** -- fanning out server notifications to all
+- **Notification broadcast** — fanning out server notifications to all
   connected clients
-- **Platform abstraction** -- Linux, macOS, and Windows under the same API
+- **Platform abstraction** — Linux, macOS, and Windows under the same API
 
 ### 3. What you write
 
@@ -69,7 +69,6 @@ protected:
 
 MyService svc("my_service");
 svc.start();
-// server is now accepting connections
 ```
 
 **Client side:** create the generated client, connect, call methods.
@@ -84,8 +83,8 @@ int rc = client.GetData(42, &info);
 client.disconnect();
 ```
 
-That is the complete pattern. Everything else -- shared memory, ring buffers,
-frame headers, sequence numbers -- is handled by the runtime.
+That is the complete pattern. Everything else — shared memory, ring buffers,
+frame headers, sequence numbers — is handled by the runtime.
 
 ## Threading Model
 
@@ -115,7 +114,7 @@ buffer, sends a wakeup signal, then sleeps on a condition variable until
 the receiver thread delivers the matching response (matched by sequence
 number) or the timeout expires.
 
-`call()` is thread-safe -- multiple threads can call it concurrently. Each
+`call()` is thread-safe — multiple threads can call it concurrently. Each
 gets its own sequence number and condition variable.
 
 ### RunLoop mode
@@ -125,29 +124,28 @@ provided, all dispatch happens on the RunLoop thread instead of spawning
 per-client threads. This is the preferred mode for applications that already
 run an event loop.
 
-**Important:** in RunLoop mode, `call()` blocks the calling thread while
-waiting for a response. If you call it from the RunLoop thread itself, it
-deadlocks -- the response can never be delivered because the RunLoop thread
-is blocked. The workaround is to post the call to a worker thread and have
-it deliver the result back via `loop.executeOnRunLoop()`.
+In RunLoop mode, `call()` still blocks the calling thread while waiting for
+a response. If you call it from the RunLoop thread itself, it deadlocks —
+the response can only be delivered by the RunLoop, which is blocked. The
+workaround is to post the call to a worker thread and have it deliver the
+result back via `loop.executeOnRunLoop()`.
 
 ### The sendMutex rule
 
 Each client connection has one `txRing` (server-to-client). This ring is
-SPSC -- single producer, single consumer. But the server writes to it from
+SPSC — single producer, single consumer. But the server writes to it from
 two paths: response frames from the receiver thread and notification frames
 from `sendNotify()`. The `sendMutex` serializes these writes so the SPSC
-contract is maintained. This is handled internally -- you do not need to
-lock anything yourself.
+contract is maintained. This is handled internally.
 
 ## Ownership and Lifetime
 
 - **Shared memory** is created by the client during `connect()` and passed
   to the server via FD passing (`SCM_RIGHTS` on Linux/macOS) or
   `DuplicateHandle` on Windows. Both sides map the same region. On POSIX,
-  the memory is reclaimed when both file descriptors are closed. On
-  Windows, the named file mapping is reference-counted by the kernel and
-  released when both handles are closed.
+  the memory is reclaimed when both file descriptors are closed. On Windows,
+  the named file mapping is reference-counted by the kernel and released
+  when both handles are closed.
 
 - **Ring buffers** are placement-new'd into the shared memory region. They
   do not allocate heap memory. Their lifetime is tied to the shared memory
@@ -240,12 +238,12 @@ Always regenerate the full set with one `ipcgen` invocation.
 
 **Calling `call()` from a handler.**
 Your `handleXxx()` runs on the receiver thread. If you create a client
-inside the handler and call another service synchronously, you are blocking
-the receiver thread. This means other clients waiting for responses from
-this server will time out. Keep handlers fast.
+inside the handler and call another service synchronously, you block the
+receiver thread. Other clients waiting for responses from this server will
+time out. Keep handlers fast.
 
 **Sharing a `ClientBase` across threads without understanding the model.**
-`call()` is thread-safe -- multiple threads can call it concurrently.
+`call()` is thread-safe — multiple threads can call it concurrently.
 `connect()` and `disconnect()` must not be called concurrently with each
 other or with `connect()` from another thread. Calling `disconnect()` while
 another thread is blocked in `call()` is safe: the pending call wakes up
@@ -282,8 +280,8 @@ for specific integration scenarios.
 
 ## Next Steps
 
-- [README.md](../README.md) -- quick start, build commands, examples
-- [aether-hld.md](aether-hld.md) -- full architecture and component design
-- [aether-lld.md](aether-lld.md) -- wire protocol, APIs, threading details
-- [ipcgen-hld.md](ipcgen-hld.md) -- IDL grammar and code generator design
-- [architecture-guide.md](architecture-guide.md) -- visual walkthrough with diagrams
+- [README.md](../README.md) — quick start, build commands, examples
+- [aether-hld.md](aether-hld.md) — full architecture and component design
+- [aether-lld.md](aether-lld.md) — wire protocol, APIs, threading details
+- [ipcgen-hld.md](ipcgen-hld.md) — IDL grammar and code generator design
+- [architecture-guide.md](architecture-guide.md) — visual walkthrough with diagrams
