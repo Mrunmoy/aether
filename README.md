@@ -50,7 +50,8 @@ python3 build.py -e
 ```
 
 > **Forgot `--recursive`?** Run `git submodule update --init --recursive` from
-> the repo root. The submodules provide Google Test and the Vortex event loop.
+> the repo root. The submodules provide Google Test, the Vortex event loop, and
+> the Ouroboros ring buffer used by the core IPC transport.
 
 That is enough for the first success. You do not need to regenerate code or
 edit any files before running the example.
@@ -164,8 +165,8 @@ rather than treating this page as a full index.
 ## Performance
 
 Aether's data path is a `memcpy` into a lock-free SPSC ring buffer plus a
-one-byte wakeup signal. There is no serialization, no syscall per message on
-the hot path, and no intermediate daemon.
+one-byte wakeup signal on the control socket. There is no serialization, no
+syscalls on the payload transfer path, and no intermediate daemon.
 
 Rough order-of-magnitude numbers (single-core, Linux, Release build):
 
@@ -174,9 +175,9 @@ Rough order-of-magnitude numbers (single-core, Linux, Release build):
 | Round-trip latency (64 B payload) | Low single-digit µs |
 | Round-trip latency (4 KB payload) | ~10 µs |
 | Ring buffer capacity | 256 KB per direction |
-| Max single-frame payload | Must fit in one ring slot |
+| Max single-frame payload | <= `kMaxPayload` (see `inc/FrameIO.h` / `inc/Types.h`) |
 
-Run the benchmarks by building with `-DAETHER_BUILD_BENCH=ON` and executing
+Run the benchmarks by building with `-DAETHER_BUILD_BENCHMARKS=ON` and executing
 the binaries under [`bench/`](bench/) to measure on your own hardware.
 
 ## License
