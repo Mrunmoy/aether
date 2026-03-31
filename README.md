@@ -6,11 +6,33 @@
 
 **Shared-memory IPC with IDL code generation for C++, Python, C API, and C99 firmware targets.**
 
+> **Status:** Pre-1.0. The C++ API and wire protocol are stable and used in
+> internal projects. The IDL grammar and codegen output may still change between
+> minor versions. Bug reports and feedback are welcome.
+
 Aether gives you a typed contract between processes on the same machine, and it
 reuses that same wire protocol for desktop-to-device links over serial or USB.
 The default path is simple: write IDL, generate C++ bindings, implement your
 handlers, and let the runtime take care of shared memory, framing, dispatch,
-and notifications.
+and notifications. If you want to understand the model before building, read
+[Aether in 5 Minutes](doc/AetherIn5Minutes.md).
+
+### Why Aether?
+
+Aether targets low-latency local IPC and desktop-to-device links, not
+distributed networking. It uses lock-free SPSC ring buffers in shared memory,
+so the data path is a `memcpy` plus a one-byte wakeup signal — no kernel
+round-trip per message. If you need cross-machine communication, use gRPC.
+If you need a typed contract between processes on the same host, or between a
+desktop app and an MCU over UART, Aether is designed for that.
+
+| | Aether | gRPC | D-Bus | Cap'n Proto |
+|---|---|---|---|---|
+| Transport | Shared memory, serial, USB | TCP/HTTP2 | Unix socket + daemon | Unix socket, TCP |
+| Latency | Microseconds (local) | Milliseconds | Hundreds of µs | Microseconds (local) |
+| Code generation | IDL → C++, C, Python, C99 | Protobuf → many languages | XML introspection | Cap'n Proto schema → many |
+| Embedded target | Yes (aether-lite, bare-metal C99) | No | No | No |
+| Dependency footprint | Zero runtime deps, ~50 KB static lib | Large (protobuf, gRPC libs) | libdbus | Cap'n Proto runtime |
 
 ## Start Here
 
@@ -26,6 +48,10 @@ git clone --recursive https://github.com/Mrunmoy/aether.git
 cd aether
 python3 build.py -e
 ```
+
+> **Forgot `--recursive`?** Run `git submodule update --init --recursive` from
+> the repo root. The submodules provide Google Test, the Vortex event loop, and
+> the Ouroboros ring buffer used by the core IPC transport.
 
 That is enough for the first success. You do not need to regenerate code or
 edit any files before running the example.
@@ -135,6 +161,24 @@ Use the docs in this order:
 
 For deeper design references, use the links from [doc/README.md](doc/README.md)
 rather than treating this page as a full index.
+
+## Performance
+
+Aether's data path is a `memcpy` into a lock-free SPSC ring buffer plus a
+one-byte wakeup signal on the control socket. There is no serialization, no
+syscalls on the payload transfer path, and no intermediate daemon.
+
+Rough order-of-magnitude numbers (single-core, Linux, Release build):
+
+| Metric | Typical range |
+|--------|---------------|
+| Round-trip latency (64 B payload) | Low single-digit µs |
+| Round-trip latency (4 KB payload) | ~10 µs |
+| Ring buffer capacity | 256 KB per direction |
+| Max single-frame payload | <= `kMaxPayload` (see `inc/FrameIO.h` / `inc/Types.h`) |
+
+Run the benchmarks by building with `-DAETHER_BUILD_BENCHMARKS=ON` and executing
+the binaries under [`bench/`](bench/) to measure on your own hardware.
 
 ## License
 

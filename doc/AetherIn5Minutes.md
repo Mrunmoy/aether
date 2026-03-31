@@ -280,6 +280,26 @@ transfer.
 If you are unsure, use the default C++ backend. The other backends exist
 for specific integration scenarios.
 
+## Performance Characteristics
+
+The shared-memory transport avoids syscalls on the data path. A `call()`
+writes the request frame into a lock-free SPSC ring buffer (`memcpy`), sends
+a one-byte wakeup signal, and blocks on a condition variable. The server
+reads from the ring, dispatches to your handler, writes the response into the
+reverse ring, and signals back. There is no serialization step — the payload
+is a flat `memcpy` of your struct.
+
+Rough order-of-magnitude numbers (single-core, Linux, Release build):
+
+| Metric | Typical range |
+|--------|---------------|
+| Round-trip latency (64 B payload) | Low single-digit µs |
+| Round-trip latency (4 KB payload) | ~10 µs |
+| Ring buffer capacity | 256 KB per direction |
+
+These numbers depend on hardware, OS, and system load. Run the benchmarks
+under [`bench/`](../bench/) to measure on your own machine.
+
 ## Next Steps
 
 - [README.md](../README.md) — quick start, build commands, examples
