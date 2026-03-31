@@ -34,30 +34,13 @@ desktop app and an MCU over UART, Aether is designed for that.
 | Embedded target | Yes (aether-lite, bare-metal C99) | No | No | No |
 | Dependency footprint | Zero runtime deps, ~50 KB static lib | Large (protobuf, gRPC libs) | libdbus | Cap'n Proto runtime |
 
+### The Basic Idea
+
+![Aether comic strip](doc/diagrams/cartoon_strip.png)
+
 ### RPC And Notification Flow
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Service Client
-    participant AR as Aether Runtime
-    participant S as Service Host
-
-    Note over C,S: Both processes share the same typed IDL contract
-
-    C->>AR: Typed RPC call<br/>e.g. GetDeviceInfo(id)
-    AR->>S: Request frame via shared memory<br/>+ wakeup signal
-    S->>S: Dispatch to generated server glue<br/>and user handler
-    S-->>AR: Response frame
-    AR-->>C: Typed RPC return value<br/>and out params
-
-    rect rgba(235, 245, 255, 0.8)
-        Note over S,C: Asynchronous path
-        S->>AR: sendNotify(...)
-        AR-->>C: Notification frame via shared memory<br/>+ wakeup signal
-        C->>C: Generated client callback<br/>or notification handler
-    end
-```
+![Aether RPC and notification flow](doc/diagrams/process_interaction.png)
 
 The same runtime supports both synchronous RPC and asynchronous notifications:
 the client issues typed method calls to the service host, and the service host
