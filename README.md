@@ -34,6 +34,18 @@ desktop app and an MCU over UART, Aether is designed for that.
 | Embedded target | Yes (aether-lite, bare-metal C99) | No | No | No |
 | Dependency footprint | Zero runtime deps, ~50 KB static lib | Large (protobuf, gRPC libs) | libdbus | Cap'n Proto runtime |
 
+### The Basic Idea
+
+![Aether comic strip](doc/diagrams/cartoon_strip.png)
+
+### RPC And Notification Flow
+
+![Aether RPC and notification flow](doc/diagrams/process_interaction.png)
+
+The same runtime supports both synchronous RPC and asynchronous notifications:
+the client issues typed method calls to the service host, and the service host
+can independently push state changes back to the client.
+
 ## Start Here
 
 If this is your first time in the repo, use the source-build C++ path and the
