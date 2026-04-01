@@ -130,3 +130,12 @@ Use this rule of thumb:
 - Want a richer application: [`exhaust-analyzer/`](exhaust-analyzer/)
 
 Everything else is best treated as domain-specific follow-on material.
+
+## Structure Decision
+
+The current filesystem layout is already aligned with the intended learning
+path: `echo/` first, then raw C and SDK usage, then transport and platform
+examples. That makes a physical directory reorg low-value churn right now.
+
+If we ever rename folders, it should be because the learning path itself has
+changed, not just to make the tree look more linear alphabetically.
