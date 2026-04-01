@@ -138,4 +138,4 @@ typed handlers.
 
 - [`../c-echo/`](../c-echo/) to see the same runtime used without code generation
 - [`../sdk-usage/`](../sdk-usage/) to see the packaged SDK workflow
-- [`../../doc/idl-cookbook.md`](../../doc/idl-cookbook.md) for additional IDL patterns
+- [`../../../doc/idl-cookbook.md`](../../../doc/idl-cookbook.md) for additional IDL patterns

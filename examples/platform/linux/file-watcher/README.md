@@ -113,4 +113,4 @@ ctest --test-dir build --output-on-failure -R filewatcher_tests
 
 ## Related Examples
 - [`../sysmon/`](../sysmon/) for another Linux-specific service with live alerts
-- [`../../echo/`](../../echo/) for the smaller cross-platform generated path
+- [`../../../getting-started/echo/`](../../../getting-started/echo/) for the smaller cross-platform generated path

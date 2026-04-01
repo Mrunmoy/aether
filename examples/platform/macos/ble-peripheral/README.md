@@ -108,4 +108,4 @@ ctest --test-dir build --output-on-failure -R ble_tests
 
 ## Related Examples
 - [`../audio-dsp/`](../audio-dsp/) for another stateful dashboard-style service
-- [`../../echo/`](../../echo/) for the simpler generated client/server path
+- [`../../../getting-started/echo/`](../../../getting-started/echo/) for the simpler generated client/server path

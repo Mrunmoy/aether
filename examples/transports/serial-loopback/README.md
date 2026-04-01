@@ -17,7 +17,7 @@ serial loopback instead of shared memory and sockets.
 | File | Why it matters |
 |------|----------------|
 | `serial_loopback.cpp` | creates the PTY pair, runs the echo server thread, and issues client RPC calls |
-| `../SerialTransport.h` | shared serial transport implementation used by the transport examples |
+| `../../SerialTransport.h` | shared serial transport implementation used by the transport examples |
 | `CMakeLists.txt` | defines the `serial_loopback` example target |
 
 ## Step 1: Read the IDL
@@ -75,4 +75,4 @@ to plug a non-default transport into the runtime.
 
 ## Related Examples
 - [`../serial-sensor/`](../serial-sensor/) for a host-to-device transport with an `aether-lite` endpoint
-- [`../c-echo/`](../c-echo/) for a raw API example that uses the default host transport instead
+- [`../../getting-started/c-echo/`](../../getting-started/c-echo/) for a raw API example that uses the default host transport instead

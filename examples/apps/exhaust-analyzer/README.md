@@ -116,5 +116,5 @@ into UI updates on the Qt event loop.
 - change the server simulation thresholds or warmup timing and observe the UI
 
 ## Related Examples
-- [`../echo/`](../echo/) for the smaller generated client/server path
-- [`../sdk-usage/`](../sdk-usage/) if you want the same codegen model against a packaged SDK
+- [`../../getting-started/echo/`](../../getting-started/echo/) for the smaller generated client/server path
+- [`../../getting-started/sdk-usage/`](../../getting-started/sdk-usage/) if you want the same codegen model against a packaged SDK

@@ -110,4 +110,4 @@ ctest --test-dir build --output-on-failure -R dsp_tests
 
 ## Related Examples
 - [`../ble-peripheral/`](../ble-peripheral/) for another stateful device with notifications
-- [`../../exhaust-analyzer/`](../../exhaust-analyzer/) for a fuller app-style example with a GUI
+- [`../../../apps/exhaust-analyzer/`](../../../apps/exhaust-analyzer/) for a fuller app-style example with a GUI

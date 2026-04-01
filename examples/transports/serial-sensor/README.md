@@ -19,7 +19,7 @@ Run a host-side C++ client against a simulated embedded device that speaks
 | `serial_sensor.cpp` | host-side C++ program that opens the PTY, performs the handshake, and calls device methods |
 | `sensor_device.c` | `aether-lite` device loop and request handlers |
 | `sensor_device.h` | service and method IDs shared between the host and simulated device |
-| `../SerialTransport.h` | serial framing and handshake implementation used on the host |
+| `../../SerialTransport.h` | serial framing and handshake implementation used on the host |
 
 ## Step 1: Read the IDL
 This example does not use the Python IDL generator.
