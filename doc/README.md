@@ -20,8 +20,8 @@ Everything below is for the next question after first success.
 
 ### 2. Mental model
 
-- [Aether in 5 Minutes](AetherIn5Minutes.md)
 - [Adoption Guide](AdoptionGuide.md)
+- [Aether in 5 Minutes](AetherIn5Minutes.md)
 
 Read this next if you want to understand:
 - what `ipcgen` generates
