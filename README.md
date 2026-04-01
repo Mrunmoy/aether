@@ -167,6 +167,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_SANITIZERS=thread
 Use the docs in this order:
 
 - [Documentation guide](doc/README.md)
+- [Adoption Guide](doc/AdoptionGuide.md)
 - [Aether in 5 Minutes](doc/AetherIn5Minutes.md)
 - [Examples guide](examples/README.md)
 - [Architecture guide](doc/architecture-guide.md)
