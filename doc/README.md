@@ -10,7 +10,7 @@ next question, then go deeper only when you need the detail.
 ### 1. First success
 
 - [Top-level README](../README.md)
-- [`examples/echo/`](../examples/echo/)
+- [`examples/getting-started/echo/`](../examples/getting-started/echo/)
 
 Use these if you want to clone the repo, run the recommended example, and
 confirm the framework works on your machine.

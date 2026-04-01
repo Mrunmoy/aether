@@ -34,7 +34,7 @@ jobs:
         timeout-minutes: 1
         run: |
           echo "=== Starting device_monitor_server ==="
-          timeout 30 ./build/examples/echo/device_monitor_server &
+          timeout 30 ./build/examples/getting-started/echo/device_monitor_server &
           SERVER_PID=$!
 
           cleanup() {
@@ -47,7 +47,7 @@ jobs:
           sleep 0.5
 
           echo "=== Running device_monitor_client ==="
-          OUTPUT=$(./build/examples/echo/device_monitor_client 2>&1)
+          OUTPUT=$(./build/examples/getting-started/echo/device_monitor_client 2>&1)
           CLIENT_EXIT=$?
           echo "$OUTPUT"
 
@@ -82,7 +82,7 @@ jobs:
       - name: Validate ipcgen codegen workflow
         run: |
           echo "=== Testing ipcgen with DeviceMonitor.idl ==="
-          python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/quickstart_gen/
+          python3 -m tools.ipcgen examples/getting-started/echo/DeviceMonitor.idl --outdir /tmp/quickstart_gen/
 
           echo "=== Checking generated files ==="
           test -f /tmp/quickstart_gen/DeviceMonitorTypes.h || (echo "Missing DeviceMonitorTypes.h" && exit 1)
@@ -133,7 +133,7 @@ jobs:
       - name: Validate codegen command works
         run: |
           echo "=== Testing: python3 -m tools.ipcgen ==="
-          python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir /tmp/validate_codegen/
+          python3 -m tools.ipcgen examples/getting-started/echo/DeviceMonitor.idl --outdir /tmp/validate_codegen/
           
           # Verify expected files were generated
           test -f /tmp/validate_codegen/DeviceMonitorTypes.h || (echo "FAIL: DeviceMonitorTypes.h not generated" && exit 1)
@@ -149,7 +149,7 @@ jobs:
           echo "=== Checking example READMEs for required sections ==="
           
           # Check core examples that should have full READMEs
-          for readme in examples/echo/README.md examples/c-echo/README.md examples/sdk-usage/README.md; do
+          for readme in examples/getting-started/echo/README.md examples/getting-started/c-echo/README.md examples/getting-started/sdk-usage/README.md; do
             echo "Checking $readme..."
             
             # Check file exists
@@ -190,7 +190,7 @@ jobs:
         run: |
           echo "=== Testing device monitor example produces expected output patterns ==="
           
-          timeout 30 ./build/examples/echo/device_monitor_server &
+          timeout 30 ./build/examples/getting-started/echo/device_monitor_server &
           SERVER_PID=$!
           
           cleanup() {
@@ -201,7 +201,7 @@ jobs:
           
           sleep 0.5
           
-          OUTPUT=$(./build/examples/echo/device_monitor_client 2>&1)
+          OUTPUT=$(./build/examples/getting-started/echo/device_monitor_client 2>&1)
           echo "$OUTPUT"
           
           if ! echo "$OUTPUT" | grep -q "\\[client\\] device count: 2"; then
@@ -238,7 +238,7 @@ jobs:
           echo "=== Testing c-echo example produces expected output patterns ==="
           
           # Start c_echo_server in background
-          timeout 30 ./build/examples/c-echo/c_echo_server &
+          timeout 30 ./build/examples/getting-started/c-echo/c_echo_server &
           SERVER_PID=$!
           
           # Cleanup function
@@ -251,7 +251,7 @@ jobs:
           sleep 0.5
           
           # Run c_echo_client and capture output
-          OUTPUT=$(./build/examples/c-echo/c_echo_client 2>&1)
+          OUTPUT=$(./build/examples/getting-started/c-echo/c_echo_client 2>&1)
           echo "$OUTPUT"
           
           # Verify expected output patterns
@@ -301,8 +301,8 @@ jobs:
 
       - name: Codegen tests
         run: |
-          build/examples/echo/codegen_server_tests
-          build/examples/echo/codegen_client_tests
+          build/examples/getting-started/echo/codegen_server_tests
+          build/examples/getting-started/echo/codegen_client_tests
 
       - name: ipcgen pytest suite
         run: |
@@ -353,8 +353,8 @@ jobs:
 
       - name: Sanitized codegen tests
         run: |
-          ${{ matrix.env }} build/examples/echo/codegen_server_tests --gtest_brief=1
-          ${{ matrix.env }} build/examples/echo/codegen_client_tests --gtest_brief=1
+          ${{ matrix.env }} build/examples/getting-started/echo/codegen_server_tests --gtest_brief=1
+          ${{ matrix.env }} build/examples/getting-started/echo/codegen_client_tests --gtest_brief=1
 
       - name: ipcgen pytest suite
         run: |
@@ -388,8 +388,8 @@ jobs:
       - name: Codegen tests
         timeout-minutes: 2
         run: |
-          build/examples/echo/codegen_server_tests
-          build/examples/echo/codegen_client_tests
+          build/examples/getting-started/echo/codegen_server_tests
+          build/examples/getting-started/echo/codegen_client_tests
 
       - name: ipcgen pytest suite
         run: |

@@ -1,9 +1,9 @@
 # IDL Cookbook
 
 This document preserves the broader example-oriented material that used to live
-in `examples/echo/README.md`.
+in `examples/getting-started/echo/README.md`.
 
-Use [examples/echo/README.md](../examples/echo/README.md) for the canonical
+Use [examples/getting-started/echo/README.md](../examples/getting-started/echo/README.md) for the canonical
 source-build path. Use this cookbook when you want additional IDL patterns,
 comparison material, and implementation sketches after the first successful run.
 
