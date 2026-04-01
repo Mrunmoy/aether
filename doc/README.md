@@ -21,12 +21,16 @@ Everything below is for the next question after first success.
 ### 2. Mental model
 
 - [Aether in 5 Minutes](AetherIn5Minutes.md)
+- [Adoption Guide](AdoptionGuide.md)
 
 Read this next if you want to understand:
 - what `ipcgen` generates
 - what the runtime handles
 - what code you write
 - threading, lifetime, common failures, and anti-patterns
+
+Use the Adoption Guide first if you are evaluating whether Aether is a good fit
+for a real project and want the short version before the deeper model.
 
 ### 3. Example navigation
 
