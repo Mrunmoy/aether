@@ -76,7 +76,7 @@ Default C++ backend produces 5 files: `FooTypes.h`, `server/Foo.h`, `server/Foo.
 
 **Python tests** (`tools/ipcgen/test/test_*.py`): Use `parse(idl_text)` fixture from `conftest.py`. End-to-end tests generate all files and assert on content. Name files `test_*.py`, one behavior per test.
 
-**Codegen tests** (`examples/echo/Codegen*Test.cpp`): Verify generated code actually works against the runtime.
+**Codegen tests** (`examples/getting-started/echo/Codegen*Test.cpp`): Verify generated code actually works against the runtime.
 
 ## Commit Style
 

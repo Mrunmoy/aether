@@ -72,12 +72,12 @@ Run the example in two terminals from the repository root:
 
 Terminal 1:
 ```bash
-./build/examples/echo/device_monitor_server
+./build/examples/getting-started/echo/device_monitor_server
 ```
 
 Terminal 2:
 ```bash
-./build/examples/echo/device_monitor_client
+./build/examples/getting-started/echo/device_monitor_client
 ```
 
 ## Verify
@@ -103,20 +103,20 @@ At that point you have already exercised:
 
 ## Understand
 
-The canonical example lives in [`examples/echo/`](examples/echo/). It walks
+The canonical example lives in [`examples/getting-started/echo/`](examples/getting-started/echo/). It walks
 through the full flow:
 
-1. read [`DeviceMonitor.idl`](examples/echo/DeviceMonitor.idl)
+1. read [`DeviceMonitor.idl`](examples/getting-started/echo/DeviceMonitor.idl)
 2. optionally regenerate code with:
 
    ```bash
-   python3 -m tools.ipcgen examples/echo/DeviceMonitor.idl --outdir examples/echo/gen
+   python3 -m tools.ipcgen examples/getting-started/echo/DeviceMonitor.idl --outdir examples/getting-started/echo/gen
    ```
 
-3. inspect the generated files in [`examples/echo/gen/`](examples/echo/gen/)
+3. inspect the generated files in [`examples/getting-started/echo/gen/`](examples/getting-started/echo/gen/)
 4. compare them with the user-written files:
-   - [`examples/echo/device_monitor_server.cpp`](examples/echo/device_monitor_server.cpp)
-   - [`examples/echo/device_monitor_client.cpp`](examples/echo/device_monitor_client.cpp)
+   - [`examples/getting-started/echo/device_monitor_server.cpp`](examples/getting-started/echo/device_monitor_server.cpp)
+   - [`examples/getting-started/echo/device_monitor_client.cpp`](examples/getting-started/echo/device_monitor_client.cpp)
 
 The generated files are already checked in, so regeneration is only needed
 after you change the IDL. If you want the short mental model before reading
@@ -128,11 +128,11 @@ Once the canonical path makes sense, use one of these next:
 
 | Goal | Start here |
 |------|------------|
-| See the raw runtime without code generation | [`examples/c-echo/`](examples/c-echo/) |
-| Consume a packaged SDK instead of building from source | [`examples/sdk-usage/`](examples/sdk-usage/) |
-| Understand custom transports | [`examples/serial-loopback/`](examples/serial-loopback/) |
-| Talk to an `aether-lite` device over serial | [`examples/serial-sensor/`](examples/serial-sensor/) |
-| Start from a firmware template | [`examples/mcu-firmware/`](examples/mcu-firmware/) |
+| See the raw runtime without code generation | [`examples/getting-started/c-echo/`](examples/getting-started/c-echo/) |
+| Consume a packaged SDK instead of building from source | [`examples/getting-started/sdk-usage/`](examples/getting-started/sdk-usage/) |
+| Understand custom transports | [`examples/transports/serial-loopback/`](examples/transports/serial-loopback/) |
+| Talk to an `aether-lite` device over serial | [`examples/transports/serial-sensor/`](examples/transports/serial-sensor/) |
+| Start from a firmware template | [`examples/transports/mcu-firmware/`](examples/transports/mcu-firmware/) |
 | Explore the full learning path | [Examples guide](examples/README.md) |
 
 Other integration paths are available, but they are intentionally not the first

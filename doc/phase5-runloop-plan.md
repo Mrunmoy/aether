@@ -673,8 +673,8 @@ via `GTEST_SKIP()`, plus 1 CApiTest (`AddSourceWithErrorCallback`) behind `#if` 
 `RunLoopModeNotSupportedOnWindows` tests on the else branch. Files affected:
 - `test/ServiceBaseTest.cpp` — 8 RunLoop tests guarded
 - `test/ClientBaseTest.cpp` — 5 RunLoop tests guarded
-- `examples/echo/CodeGenServerTest.cpp` — 1 RunLoop test guarded
-- `examples/echo/CodeGenClientTest.cpp` — 1 RunLoop test guarded
+- `examples/getting-started/echo/CodeGenServerTest.cpp` — 1 RunLoop test guarded
+- `examples/getting-started/echo/CodeGenClientTest.cpp` — 1 RunLoop test guarded
 
 ### Phase-by-Phase Test Plan
 
@@ -727,8 +727,8 @@ named pipe pairs instead of `CreatePipe` (anonymous pipes can't do IOCP).
 **Delete all `RunLoopModeNotSupportedOnWindows` stub tests from:**
 - `test/ServiceBaseTest.cpp`
 - `test/ClientBaseTest.cpp`
-- `examples/echo/CodeGenServerTest.cpp`
-- `examples/echo/CodeGenClientTest.cpp`
+- `examples/getting-started/echo/CodeGenServerTest.cpp`
+- `examples/getting-started/echo/CodeGenClientTest.cpp`
 
 **Existing tests that become cross-platform (15 total):**
 

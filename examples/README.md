@@ -9,7 +9,7 @@ finish it, then move to the next layer of complexity.
 
 ### 1. Canonical source-build path
 
-Start with [`echo/`](echo/).
+Start with [`getting-started/echo/`](getting-started/echo/).
 
 It is the default newcomer example because it shows the full Aether source-build
 workflow:
@@ -21,7 +21,7 @@ workflow:
 
 ### 2. Raw C API
 
-Move to [`c-echo/`](c-echo/) next if you want to see the runtime without code
+Move to [`getting-started/c-echo/`](getting-started/c-echo/) next if you want to see the runtime without code
 generation.
 
 It shows:
@@ -33,7 +33,7 @@ It shows:
 
 ### 3. SDK consumer path
 
-Read [`sdk-usage/`](sdk-usage/) if your real project will consume a packaged
+Read [`getting-started/sdk-usage/`](getting-started/sdk-usage/) if your real project will consume a packaged
 SDK tarball instead of building Aether from source.
 
 It shows:
@@ -48,55 +48,55 @@ It shows:
 
 | Example | Use it when | What it teaches |
 |---------|-------------|-----------------|
-| [`echo/`](echo/) | You want the recommended first success | IDL, code generation, typed C++ client/server, runtime mental model |
-| [`c-echo/`](c-echo/) | You want the lowest-level host API | Raw C API, manual service/message IDs, no codegen |
-| [`sdk-usage/`](sdk-usage/) | You ship or consume a prebuilt SDK | `c_api` backend, SDK-only build, generated wrappers without the source tree |
+| [`getting-started/echo/`](getting-started/echo/) | You want the recommended first success | IDL, code generation, typed C++ client/server, runtime mental model |
+| [`getting-started/c-echo/`](getting-started/c-echo/) | You want the lowest-level host API | Raw C API, manual service/message IDs, no codegen |
+| [`getting-started/sdk-usage/`](getting-started/sdk-usage/) | You ship or consume a prebuilt SDK | `c_api` backend, SDK-only build, generated wrappers without the source tree |
 
 ### Transports and embedded flow
 
 | Example | Use it when | What it teaches |
 |---------|-------------|-----------------|
-| [`serial-loopback/`](serial-loopback/) | You want to understand `ITransport` without hardware | PTY-backed transport, framing over a byte stream, `TransportClientBase` |
-| [`serial-sensor/`](serial-sensor/) | You want host-to-device communication | Host C++ client talking to a simulated `aether-lite` device over serial framing |
-| [`mcu-firmware/`](mcu-firmware/) | You need a firmware starting point | Bare-metal `aether-lite` integration pattern for UART-based devices |
+| [`transports/serial-loopback/`](transports/serial-loopback/) | You want to understand `ITransport` without hardware | PTY-backed transport, framing over a byte stream, `TransportClientBase` |
+| [`transports/serial-sensor/`](transports/serial-sensor/) | You want host-to-device communication | Host C++ client talking to a simulated `aether-lite` device over serial framing |
+| [`transports/mcu-firmware/`](transports/mcu-firmware/) | You need a firmware starting point | Bare-metal `aether-lite` integration pattern for UART-based devices |
 
 ### Application-style examples
 
 | Example | Use it when | What it teaches |
 |---------|-------------|-----------------|
-| [`exhaust-analyzer/`](exhaust-analyzer/) | You want a richer desktop app | Qt GUI, generated code in a larger application, structs/enums/notifications |
+| [`apps/exhaust-analyzer/`](apps/exhaust-analyzer/) | You want a richer desktop app | Qt GUI, generated code in a larger application, structs/enums/notifications |
 
 ### Platform and domain examples
 
-These examples are best after you already understand `echo/`. They are useful
+These examples are best after you already understand `getting-started/echo/`. They are useful
 for domain patterns, not for the first successful run.
 
 #### Linux
 
 | Example | What it shows |
 |---------|---------------|
-| [`linux/sysmon/`](linux/sysmon/) | Linux `/proc` monitoring with notifications |
-| [`linux/file-watcher/`](linux/file-watcher/) | `inotify`-based notifications for file changes |
-| [`linux/gpio-controller/`](linux/gpio-controller/) | Simulated GPIO control and pin-change notifications |
-| [`linux/sensor-hub/`](linux/sensor-hub/) | Simulated multi-sensor aggregation and alarm notifications |
+| [`platform/linux/sysmon/`](platform/linux/sysmon/) | Linux `/proc` monitoring with notifications |
+| [`platform/linux/file-watcher/`](platform/linux/file-watcher/) | `inotify`-based notifications for file changes |
+| [`platform/linux/gpio-controller/`](platform/linux/gpio-controller/) | Simulated GPIO control and pin-change notifications |
+| [`platform/linux/sensor-hub/`](platform/linux/sensor-hub/) | Simulated multi-sensor aggregation and alarm notifications |
 
 #### macOS
 
 | Example | What it shows |
 |---------|---------------|
-| [`macos/battery-monitor/`](macos/battery-monitor/) | Simulated battery monitoring and threshold notifications |
-| [`macos/disk-usage/`](macos/disk-usage/) | Simulated disk-usage reporting and scan notifications |
-| [`macos/ble-peripheral/`](macos/ble-peripheral/) | Simulated BLE service/characteristic interactions |
-| [`macos/audio-dsp/`](macos/audio-dsp/) | Simulated DSP control, metering, and fault notifications |
+| [`platform/macos/battery-monitor/`](platform/macos/battery-monitor/) | Simulated battery monitoring and threshold notifications |
+| [`platform/macos/disk-usage/`](platform/macos/disk-usage/) | Simulated disk-usage reporting and scan notifications |
+| [`platform/macos/ble-peripheral/`](platform/macos/ble-peripheral/) | Simulated BLE service/characteristic interactions |
+| [`platform/macos/audio-dsp/`](platform/macos/audio-dsp/) | Simulated DSP control, metering, and fault notifications |
 
 #### Windows
 
 | Example | What it shows |
 |---------|---------------|
-| [`windows/service-status/`](windows/service-status/) | Simulated service control and state-change notifications |
-| [`windows/process-monitor/`](windows/process-monitor/) | Simulated process lifecycle and resource queries |
-| [`windows/can-bus-ecu/`](windows/can-bus-ecu/) | Simulated ECU RPC and bus-status notifications |
-| [`windows/motor-controller/`](windows/motor-controller/) | Simulated motor control, motion commands, and fault notifications |
+| [`platform/windows/service-status/`](platform/windows/service-status/) | Simulated service control and state-change notifications |
+| [`platform/windows/process-monitor/`](platform/windows/process-monitor/) | Simulated process lifecycle and resource queries |
+| [`platform/windows/can-bus-ecu/`](platform/windows/can-bus-ecu/) | Simulated ECU RPC and bus-status notifications |
+| [`platform/windows/motor-controller/`](platform/windows/motor-controller/) | Simulated motor control, motion commands, and fault notifications |
 
 ## README Contract
 
@@ -121,12 +121,12 @@ The standard format for new or rewritten examples lives in
 
 Use this rule of thumb:
 
-- Want the default path: [`echo/`](echo/)
-- Want the raw API: [`c-echo/`](c-echo/)
-- Want the SDK path: [`sdk-usage/`](sdk-usage/)
-- Want transport internals: [`serial-loopback/`](serial-loopback/)
-- Want host plus embedded flow: [`serial-sensor/`](serial-sensor/)
-- Want firmware: [`mcu-firmware/`](mcu-firmware/)
-- Want a richer application: [`exhaust-analyzer/`](exhaust-analyzer/)
+- Want the default path: [`getting-started/echo/`](getting-started/echo/)
+- Want the raw API: [`getting-started/c-echo/`](getting-started/c-echo/)
+- Want the SDK path: [`getting-started/sdk-usage/`](getting-started/sdk-usage/)
+- Want transport internals: [`transports/serial-loopback/`](transports/serial-loopback/)
+- Want host plus embedded flow: [`transports/serial-sensor/`](transports/serial-sensor/)
+- Want firmware: [`transports/mcu-firmware/`](transports/mcu-firmware/)
+- Want a richer application: [`apps/exhaust-analyzer/`](apps/exhaust-analyzer/)
 
 Everything else is best treated as domain-specific follow-on material.

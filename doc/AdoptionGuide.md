@@ -16,8 +16,8 @@ operational model, guarantees, and common traps easy to evaluate quickly.
   wakeups happen over a small control channel.
 - **Cross-platform runtime**: Linux, macOS, and Windows share the same public
   runtime model.
-- **Warning-free CI**: the project keeps warnings at zero and treats warnings
-  as errors in active work.
+- **Warnings-as-errors in CI**: CI builds compile with warnings treated as
+  errors, so new warnings fail the build.
 
 ## Threading Guarantees
 
@@ -29,7 +29,9 @@ operational model, guarantees, and common traps easy to evaluate quickly.
 - In default threaded mode, service handlers run on per-client receiver
   threads. If multiple handlers touch shared state, you must synchronize it.
 - In RunLoop mode, dispatch moves onto the RunLoop thread. Do not call
-  synchronous `call()` from that same RunLoop thread; it deadlocks.
+  synchronous `call()` from that same RunLoop thread; it prevents
+  `onDataReady()` from running and the call will typically block until its
+  timeout expires.
 
 ## Ownership And Lifetime
 

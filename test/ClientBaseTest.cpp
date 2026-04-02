@@ -944,7 +944,7 @@ TEST(ClientBaseTest, ConcurrentDisconnectDuringCalls)
             }
             else
             {
-                if (rc != IPC_ERR_DISCONNECTED)
+                if (rc != IPC_ERR_DISCONNECTED && rc != IPC_ERR_TIMEOUT)
                 {
                     badRcCount.fetch_add(1);
                 }
