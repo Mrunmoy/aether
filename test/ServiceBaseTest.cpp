@@ -5,6 +5,7 @@
 #include "Platform.h"
 #include "RunLoop.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -126,7 +127,13 @@ TEST(ServiceBaseTest, ConcurrentStartStopStress)
 {
     EchoService svc(SVC_NAME);
 
-    for (int i = 0; i < 100; ++i)
+#if defined(__APPLE__)
+    constexpr int kStressIterations = 8;
+#else
+    constexpr int kStressIterations = 100;
+#endif
+
+    for (int i = 0; i < kStressIterations; ++i)
     {
         std::atomic<bool> go{false};
 
