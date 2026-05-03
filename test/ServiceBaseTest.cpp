@@ -5,6 +5,7 @@
 #include "Platform.h"
 #include "RunLoop.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <thread>
@@ -120,6 +121,51 @@ TEST(ServiceBaseTest, StartAndStop)
 
     svc.stop();
     EXPECT_FALSE(svc.isRunning());
+}
+
+TEST(ServiceBaseTest, ConcurrentStartStopStress)
+{
+    EchoService svc(SVC_NAME);
+
+#if defined(__APPLE__)
+    constexpr int kStressIterations = 8;
+#else
+    constexpr int kStressIterations = 100;
+#endif
+
+    for (int i = 0; i < kStressIterations; ++i)
+    {
+        std::atomic<bool> go{false};
+
+        std::thread starter([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            (void)svc.start();
+        });
+
+        std::thread stopper([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            svc.stop();
+        });
+
+        go.store(true, std::memory_order_release);
+        starter.join();
+        stopper.join();
+
+        svc.stop();
+        EXPECT_FALSE(svc.isRunning());
+    }
+
+    ASSERT_TRUE(svc.start());
+    EXPECT_TRUE(svc.isRunning());
+    svc.stop();
 }
 
 // ═════════════════════════════════════════════════════════════════════

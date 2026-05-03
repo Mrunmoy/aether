@@ -29,4 +29,8 @@ target_include_directories(filewatcher_tests PRIVATE
 target_link_libraries(filewatcher_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-gtest_discover_tests(filewatcher_tests)
+if(AETHER_SANITIZERS)
+    add_test(NAME filewatcher_tests COMMAND filewatcher_tests)
+else()
+    gtest_discover_tests(filewatcher_tests)
+endif()

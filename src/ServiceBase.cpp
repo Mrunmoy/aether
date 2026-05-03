@@ -51,6 +51,8 @@ namespace aether::ipc
 
     bool ServiceBase::start()
     {
+        std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMutex);
+
         if (m_running.load(std::memory_order_acquire))
         {
             return false; // already started
@@ -90,6 +92,8 @@ namespace aether::ipc
 
     void ServiceBase::stop()
     {
+        std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMutex);
+
         if (!m_running.exchange(false))
         {
             return;

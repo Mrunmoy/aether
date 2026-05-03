@@ -29,12 +29,14 @@ target_include_directories(ble_tests PRIVATE
 target_link_libraries(ble_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-if(WIN32)
+if(WIN32 OR AETHER_SANITIZERS)
     add_test(NAME ble_tests COMMAND ble_tests)
-    set_tests_properties(ble_tests PROPERTIES
-        ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
-    )
+    if(WIN32)
+        set_tests_properties(ble_tests PROPERTIES
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
+        )
+    endif()
 else()
     gtest_discover_tests(ble_tests)
 endif()

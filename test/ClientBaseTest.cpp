@@ -6,6 +6,7 @@
 #include "ServiceBase.h"
 #include "RunLoop.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <condition_variable>
@@ -153,6 +154,59 @@ TEST(ClientBaseTest, ConnectAndDisconnect)
 
     client.disconnect();
     EXPECT_FALSE(client.isConnected());
+
+    svc.stop();
+}
+
+TEST(ClientBaseTest, ConcurrentConnectDisconnectStress)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+#if defined(__APPLE__)
+    constexpr int kStressIterations = 8;
+#else
+    constexpr int kStressIterations = 100;
+#endif
+
+    for (int i = 0; i < kStressIterations; ++i)
+    {
+        ClientBase client(SVC_NAME);
+        std::atomic<bool> go{false};
+
+        std::thread connector([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            (void)client.connect();
+        });
+
+        std::thread disconnector([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            client.disconnect();
+        });
+
+        go.store(true, std::memory_order_release);
+        connector.join();
+        disconnector.join();
+
+        if (client.isConnected())
+        {
+            const std::vector<uint8_t> request = {'O', 'K'};
+            std::vector<uint8_t> response;
+            EXPECT_EQ(client.call(1, 1, request, &response), IPC_SUCCESS);
+            EXPECT_EQ(response, request);
+        }
+
+        client.disconnect();
+        EXPECT_FALSE(client.isConnected());
+    }
 
     svc.stop();
 }

@@ -101,6 +101,7 @@ namespace aether::ipc
 
         std::atomic<bool> m_running{false};
         std::thread m_acceptThread;
+        std::mutex m_lifecycleMutex; // serializes start()/stop() transitions
 
         std::atomic<uint32_t> m_maxClients{0}; // 0 = unlimited
 

@@ -31,4 +31,8 @@ target_include_directories(sysmon_tests PRIVATE
 target_link_libraries(sysmon_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-gtest_discover_tests(sysmon_tests)
+if(AETHER_SANITIZERS)
+    add_test(NAME sysmon_tests COMMAND sysmon_tests)
+else()
+    gtest_discover_tests(sysmon_tests)
+endif()

@@ -20,12 +20,14 @@ target_include_directories(ecu_tests PRIVATE
 target_link_libraries(ecu_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-if(WIN32)
+if(WIN32 OR AETHER_SANITIZERS)
     add_test(NAME ecu_tests COMMAND ecu_tests)
-    set_tests_properties(ecu_tests PROPERTIES
-        ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
-    )
+    if(WIN32)
+        set_tests_properties(ecu_tests PROPERTIES
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
+        )
+    endif()
 else()
     gtest_discover_tests(ecu_tests)
 endif()

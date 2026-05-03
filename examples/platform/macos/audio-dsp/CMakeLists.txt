@@ -20,12 +20,14 @@ target_include_directories(dsp_tests PRIVATE
 target_link_libraries(dsp_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-if(WIN32)
+if(WIN32 OR AETHER_SANITIZERS)
     add_test(NAME dsp_tests COMMAND dsp_tests)
-    set_tests_properties(dsp_tests PROPERTIES
-        ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
-    )
+    if(WIN32)
+        set_tests_properties(dsp_tests PROPERTIES
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
+        )
+    endif()
 else()
     gtest_discover_tests(dsp_tests)
 endif()

@@ -19,12 +19,11 @@ namespace aether::ipc
 
     bool TransportClientBase::connect(std::unique_ptr<ITransport> transport)
     {
-        // Atomically claim the "not running" → "connecting" transition.
-        // If two threads race on connect(), only one wins the CAS.
-        bool expected = false;
-        if (!m_running.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMutex);
+
+        if (m_running.load(std::memory_order_acquire))
         {
-            return false; // already connected or connecting
+            return false;
         }
 
         if (m_receiverThread.joinable())
@@ -34,30 +33,25 @@ namespace aether::ipc
 
         if (!transport || !transport->connected())
         {
-            m_running.store(false, std::memory_order_release);
             return false;
         }
 
-        // Publish m_transport under m_sendMutex so call() — which reads
-        // m_transport under the same lock — never sees a stale pointer.
-        // During the brief window between the CAS above and this assignment,
-        // call() may observe m_running==true but m_transport==null; its
-        // existing null-check under m_sendMutex safely returns DISCONNECTED.
         {
             std::lock_guard<std::mutex> slock(m_sendMutex);
             m_transport = std::move(transport);
         }
 
+        m_running.store(true, std::memory_order_release);
         m_receiverThread = std::thread([this] { receiverLoop(); });
         return true;
     }
 
     void TransportClientBase::disconnect()
     {
+        std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMutex);
+
         bool wasRunning = m_running.exchange(false);
 
-        // Read m_transport under m_sendMutex to synchronize with
-        // connect() which assigns m_transport under the same lock.
         {
             std::lock_guard<std::mutex> slock(m_sendMutex);
             if (wasRunning && m_transport)

@@ -64,6 +64,41 @@ TEST(TransportClientBaseTest, ConnectWithMockTransport)
     EXPECT_FALSE(client.isConnected());
 }
 
+TEST(TransportClientBaseTest, ConcurrentConnectDisconnectStress)
+{
+    for (int i = 0; i < 100; ++i)
+    {
+        TestTransportClient client("test");
+        std::atomic<bool> go{false};
+
+        std::thread connector([&]
+        {
+            auto transport = std::make_unique<MockTransport>();
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            (void)client.connect(std::move(transport));
+        });
+
+        std::thread disconnector([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            client.disconnect();
+        });
+
+        go.store(true, std::memory_order_release);
+        connector.join();
+        disconnector.join();
+
+        client.disconnect();
+        EXPECT_FALSE(client.isConnected());
+    }
+}
+
 TEST(TransportClientBaseTest, ConnectNullTransportFails)
 {
     TestTransportClient client("test");

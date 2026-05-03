@@ -50,18 +50,22 @@ target_include_directories(codegen_client_tests PRIVATE
 target_link_libraries(codegen_client_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-if(WIN32)
+if(WIN32 OR AETHER_SANITIZERS)
     add_test(NAME codegen_server_tests COMMAND codegen_server_tests)
-    set_tests_properties(codegen_server_tests PROPERTIES
-        ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
-    )
+    if(WIN32)
+        set_tests_properties(codegen_server_tests PROPERTIES
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
+        )
+    endif()
 
     add_test(NAME codegen_client_tests COMMAND codegen_client_tests)
-    set_tests_properties(codegen_client_tests PROPERTIES
-        ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
-    )
+    if(WIN32)
+        set_tests_properties(codegen_client_tests PROPERTIES
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:aether_shared>\;$<TARGET_FILE_DIR:vortex_shared>"
+        )
+    endif()
 else()
     gtest_discover_tests(codegen_server_tests)
     gtest_discover_tests(codegen_client_tests)

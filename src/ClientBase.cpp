@@ -34,6 +34,8 @@ namespace aether::ipc
 
     bool ClientBase::connect()
     {
+        std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMutex);
+
         if (m_running.load(std::memory_order_acquire))
         {
             return false;
@@ -77,6 +79,8 @@ namespace aether::ipc
 
     void ClientBase::disconnect()
     {
+        std::lock_guard<std::mutex> lifecycleLock(m_lifecycleMutex);
+
         bool wasRunning = m_running.exchange(false);
 
         if (m_loop)

@@ -20,4 +20,8 @@ target_include_directories(gpio_tests PRIVATE
 target_link_libraries(gpio_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-gtest_discover_tests(gpio_tests)
+if(AETHER_SANITIZERS)
+    add_test(NAME gpio_tests COMMAND gpio_tests)
+else()
+    gtest_discover_tests(gpio_tests)
+endif()

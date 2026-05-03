@@ -87,6 +87,7 @@ namespace aether::ipc
         std::atomic<bool> m_running{false};
         std::atomic<uint32_t> m_nextSeq{1};
         std::thread m_receiverThread;
+        std::mutex m_lifecycleMutex; // serializes connect()/disconnect() transitions
         std::mutex m_sendMutex;
         std::mutex m_pendingMutex;
         std::unordered_map<uint32_t, std::shared_ptr<PendingCall>> m_pending;
