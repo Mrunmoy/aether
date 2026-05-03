@@ -3,7 +3,7 @@
 	url = https://github.com/google/googletest.git
 [submodule "deps/ouroboros"]
 	path = deps/ouroboros
-	url = git@github.com:Mrunmoy/Ouroboros.git
+	url = https://github.com/Mrunmoy/Ouroboros.git
 [submodule "deps/vortex"]
 	path = deps/vortex
-	url = git@github.com:Mrunmoy/Vortex.git
+	url = https://github.com/Mrunmoy/Vortex.git
