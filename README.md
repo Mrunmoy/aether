@@ -164,6 +164,13 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_SANITIZERS=address,undefined
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_SANITIZERS=thread
 ```
 
+> **ThreadSanitizer note:** on some Ubuntu 22.04/HWE kernel setups, older TSan
+> runtimes can fail at process startup with `FATAL: ThreadSanitizer: unexpected
+> memory mapping` before any test code runs. If that happens, retry the TSan
+> binary or `ctest` under `setarch "$(uname -m)" -R ...`, use a runner with a
+> lower `vm.mmap_rnd_bits`, or switch the sanitizer job to a newer Clang/GCC
+> toolchain.
+
 ## Documentation
 
 Use the docs in this order:
