@@ -10,6 +10,12 @@
 > internal projects. The IDL grammar and codegen output may still change between
 > minor versions. Bug reports and feedback are welcome.
 
+> **Important sanitizer note:** if you use **ThreadSanitizer** on Ubuntu 22.04
+> with newer HWE kernels, you may hit `FATAL: ThreadSanitizer: unexpected
+> memory mapping` before any test code runs. This is a known runtime/kernel
+> address-layout issue with older TSan runtimes, not an Aether-specific crash.
+> See [Build And Test](#build-and-test) below for the practical workarounds.
+
 Aether gives you a typed contract between processes on the same machine, and it
 reuses that same wire protocol for desktop-to-device links over serial or USB.
 The default path is simple: write IDL, generate C++ bindings, implement your
@@ -164,12 +170,28 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_SANITIZERS=address,undefined
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_SANITIZERS=thread
 ```
 
-> **ThreadSanitizer note:** on some Ubuntu 22.04/HWE kernel setups, older TSan
-> runtimes can fail at process startup with `FATAL: ThreadSanitizer: unexpected
-> memory mapping` before any test code runs. If that happens, retry the TSan
-> binary or `ctest` under `setarch "$(uname -m)" -R ...`, use a runner with a
-> lower `vm.mmap_rnd_bits`, or switch the sanitizer job to a newer Clang/GCC
-> toolchain.
+### ThreadSanitizer on Ubuntu 22.04 / HWE kernels
+
+On some Ubuntu 22.04 setups with newer HWE kernels, **older TSan runtimes may
+fail before test execution starts** with:
+
+```text
+FATAL: ThreadSanitizer: unexpected memory mapping
+```
+
+If you hit that startup failure, the practical workarounds are:
+
+```bash
+setarch "$(uname -m)" -R ctest --test-dir build --output-on-failure
+```
+
+Or run TSan on a runner/toolchain combination that avoids the older runtime
+issue:
+
+1. use a newer Clang/GCC sanitizer runtime
+2. use a runner with lower `vm.mmap_rnd_bits`
+
+ASan/UBSan is unaffected by this note.
 
 ## Documentation
 
