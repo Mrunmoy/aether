@@ -1,93 +1,79 @@
-# Copilot Instructions for ms-ipc
+# Copilot Instructions for Aether
 
-## Architecture Overview
+## Build and test commands
 
-ms-ipc is a shared-memory IPC framework for Linux with an IDL-based code generator. The transport uses lock-free SPSC ring buffers (from `deps/ms-ringbuffer`) for the data plane and a Unix domain socket for the control plane (connection handshake, FD passing, wakeup signals).
-
-**Layers (bottom to top):**
-1. **Platform** (`inc/Platform.h`, `src/PlatformLinux.cpp`) — Linux OS abstractions: UDS abstract-namespace sockets, `memfd_create` shared memory, `SCM_RIGHTS` FD passing, 1-byte wakeup signals.
-2. **Connection** (`inc/Connection.h`, `src/Connection.cpp`) — Handshake protocol; sets up shared memory and places `IpcRing` objects (from `deps/ms-ringbuffer`) into it. Each connection has two 256 KB rings (tx/rx).
-3. **FrameIO** (`inc/FrameIO.h`, `src/FrameIO.cpp`) — Inline frame read/write on ring buffers. Wire frames have a 24-byte `FrameHeader` (version, flags, serviceId, messageId, seq, payloadBytes, aux) followed by a variable-length payload. All values are native endian.
-4. **ServiceBase / ClientBase** (`inc/ServiceBase.h`, `inc/ClientBase.h`, `src/`) — Server and client runtime. ServiceBase runs an accept loop and per-client receiver threads (or integrates with `deps/ms-runloop` for event-driven dispatch). ClientBase manages sequence-number correlation for synchronous `call()`.
-5. **Generated Code** (`tools/ipcgen/`) — IDL → 5 C++ files: `*Types.h`, `server/*.h`, `server/*.cpp`, `client/*.h`, `client/*.cpp`. Service IDs are FNV-1a 32-bit hashes of the service name.
-
-**Key constraint:** `IpcRing` is SPSC (single-producer/single-consumer). `ServiceBase::ClientConn` uses a `sendMutex` to serialize all server→client ring writes from `receiverLoop` (responses), `sendNotify` (notifications), and `onClientReady` (RunLoop responses). Do not write to a client's `txRing` without holding `sendMutex`.
-
-**Threading model:** By default, ServiceBase spawns one accept thread and one receiver thread per connected client. Passing a `RunLoop*` to the constructor switches to a single event-driven thread (epoll-based) via `deps/ms-runloop`.
-
-## Build, Test, and Development Commands
+The standard entry point is the root `build.py` helper. Repo docs use `python3`; on Windows use `py -3` if `python3` is not on `PATH`.
 
 ```bash
-# Standard workflow
-python3 build.py              # build library → build/
-python3 build.py -t           # build + run all C++ tests (ctest) + Python tests (pytest)
-python3 build.py -c -t        # clean rebuild + full test pass
+python3 build.py                 # build the core library into build/
+python3 build.py -e              # build the library plus examples
+python3 build.py -t              # build examples, run all C++ tests, then run ipcgen pytest
+python3 build.py -c -t           # clean rebuild + full test pass
+python3 build.py -p              # build examples and package the SDK tarball
+python3 build.py -c -t --sanitizers address,undefined
+python3 build.py -c -t --sanitizers thread
+```
 
-# Manual CMake (useful for Debug builds)
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DMS_IPC_BUILD_EXAMPLES=ON
+Direct CMake is useful when you need a specific config. The current option name is `AETHER_BUILD_EXAMPLES` (some older docs still say `MS_IPC_BUILD_EXAMPLES`).
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAETHER_BUILD_EXAMPLES=ON
 cmake --build build -j$(nproc)
-
-# C++ tests — run the full suite
 ctest --test-dir build --output-on-failure
+```
 
-# C++ tests — run a single test by name (regex match)
-ctest --test-dir build --output-on-failure -R ServiceBaseTest
+Run one test instead of the full suite:
 
-# Python tests — run the full suite
-python3 -m pytest tools/ipcgen/test/ -v
-
-# Python tests — run a single test
+```bash
+ctest --test-dir build --output-on-failure -R ServiceBaseTest.SingleRequestResponse
+ctest --test-dir build --output-on-failure -R CodeGenClientTest.GetDeviceCount
+./build/test/ipc_tests --gtest_filter=ServiceBaseTest.SingleRequestResponse
+./build/examples/getting-started/echo/codegen_client_tests --gtest_filter=CodeGenClientTest.GetDeviceCount
 python3 -m pytest tools/ipcgen/test/test_parser.py::TestParser::test_minimal_service -v
 ```
 
-## Naming and Coding Conventions
+There is no standalone linter target. The CMake build enforces warnings-as-errors (`-Wall -Wextra -Wpedantic -Werror` on GCC/Clang, `/W4 /WX` on MSVC).
 
-- **C++ standard:** C++17. All public types in namespace `ms::ipc`; platform primitives in `ms::ipc::platform`.
-- **Indentation:** 4 spaces; Allman brace style (opening brace on its own line).
-- **Types:** `PascalCase` (classes, structs, enums, test files like `ConnectionTest.cpp`).
-- **Functions/methods:** `camelCase` (`connectToServer`, `acceptLoop`).
-- **Member variables:** `m_` prefix (`m_serviceName`, `m_clients`, `m_running`).
-- **Constants:** `kCamelCase` (`kRingSize`, `kMaxPayload`, `kSocketTimeoutMs`).
-- **Headers:** `#pragma once`, no implementation in headers except inline FrameIO helpers.
-- **Wire types:** Use fixed-size integers (`uint32_t`, `uint16_t`); POD structs only; no `std::string` in wire format — use bounded `char[N+1]` arrays.
-- **Payloads:** `std::vector<uint8_t>` for variable-length data above the wire layer.
-- **Error handling:** No exceptions. Return negative `IpcError` codes for framework errors, `0` (`IPC_SUCCESS`) for success, positive integers for application-defined errors.
+Code generation commands that show up throughout the docs:
 
-## IDL Code Generation
-
-The IDL supports: `enum`, `struct`, `service` (methods), and `notifications` blocks.
-
-**Run the generator:**
 ```bash
-python3 -m ipcgen path/to/Foo.idl --outdir path/to/gen
+python3 -m tools.ipcgen examples/getting-started/echo/DeviceMonitor.idl --outdir examples/getting-started/echo/gen
+python3 -m tools.ipcgen path/to/Foo.idl --outdir gen --backend c_api
+python3 -m tools.ipcgen path/to/Foo.idl --outdir gen --backend python
+python3 -m tools.ipcgen path/to/Foo.idl --outdir gen --backend aether_lite
 ```
-This produces: `FooTypes.h`, `server/Foo.h`, `server/Foo.cpp`, `client/Foo.h`, `client/Foo.cpp`.
 
-**Generated server class:** inherits `ServiceBase`, exposes pure-virtual `handleXxx()` methods for the user to implement and concrete `notifyXxx()` methods for broadcasting notifications.
+## High-level architecture
 
-**Generated client class:** inherits `ClientBase`, exposes typed RPC methods (`Foo(args..., timeoutMs)`) and virtual `onXxx()` callbacks for incoming notifications.
+Aether is a cross-platform IPC framework that uses shared memory for the hot path and IDL code generation for the user-facing API. The runtime stack is:
 
-The emitter adds server-side payload size guards (rejects undersized requests) and value-initializes all `[out]` params before calling the handler. Client-side notification dispatch guards against truncated payloads.
+1. **Platform** (`Platform.h`, `PlatformLinux.cpp`, `PlatformMac.cpp`, `PlatformWindows.cpp`) wraps local sockets, shared memory, handle passing, signaling, and peer-credential checks.
+2. **Connection** (`Connection.h/.cpp`) performs the client/server handshake and maps a shared-memory region with two `IpcRing` instances: client->server and server->client.
+3. **FrameIO** (`FrameIO.h/.cpp`) reads and writes a 24-byte `FrameHeader` plus payload. The same frame format is reused across shared-memory IPC and stream transports.
+4. **ServiceBase / ClientBase** implement the default threaded runtime and the optional `RunLoop`-driven mode for deterministic single-thread dispatch.
+5. **Generated code** from `tools/ipcgen/` sits above the runtime and is the normal integration path: IDL defines the contract, generated code handles marshalling/dispatch, and user code fills in handlers and callbacks.
 
-## Testing Patterns
+The runtime is split into a control plane and a data plane. Payload bytes move through shared-memory SPSC rings; the control channel is only for handshake metadata and wakeup signals. For non-shared-memory links, `ITransport` plus `TransportClientBase` reuse the exact same frame protocol over serial/USB-style byte streams.
 
-**C++ tests** (Google Test, `test/*.cpp`):
-- Define a local fixture service (e.g., `EchoService : public ServiceBase`) inside the test file.
-- Use `SVC_NAME` macro (`::testing::UnitTest::GetInstance()->current_test_info()->name()`) to get a unique per-test service name to avoid socket collisions.
-- Use `settle()` (a short sleep) to let async threads complete before asserting.
-- Test files are `PascalCase`: `ServiceBaseTest.cpp`, `ClientBaseTest.cpp`.
+There are four codegen targets with different integration stories:
 
-**Python tests** (pytest, `tools/ipcgen/test/test_*.py`):
-- Use the `parse(idl_text)` fixture from `conftest.py` for unit tests; inspect AST fields directly.
-- End-to-end tests generate all 5 files and assert on file content.
-- Test error cases by passing invalid IDL and checking exception messages.
-- Name files `test_*.py` and keep each test focused on one behavior.
+- **C++ backend**: typed client/server glue for source builds, built on `ServiceBase` and `ClientBase`
+- **c_api backend**: wrappers around the stable C API in `inc/aether_ipc.h`
+- **python backend**: typed Python client stubs layered over the C API
+- **aether_lite backend**: C99 dispatch tables for bare-metal MCU firmware
 
-## Commit Guidelines
+`inc/aether_ipc.h` is the only installed public SDK header. The richer C++ headers in `inc/` are for source-build/runtime work inside this repo, and the Python backend goes through the C API rather than calling C++ internals directly.
 
-Short, imperative commit subjects focused on observable behavior:
-- ✅ `Return first error from sendNotify, not last`
-- ✅ `Harden IPC layer against dead peers`
-- ❌ `Fix bug` / `Refactor code`
+## Key conventions and repo-specific patterns
 
-PR descriptions should state the problem, summarize the fix, note any wire-format or codegen impact, and list the validation commands run.
+- The canonical learning and debugging path is `examples/getting-started/echo/`. It is the repo's default "first success" flow and the example most docs assume.
+- Generated example output is checked into the repository. Only rerun `tools.ipcgen` after changing an `.idl` file, and regenerate the full output set together rather than editing generated files by hand.
+- `IpcRing` is **single-producer/single-consumer**. Any code that writes server->client frames must serialize access to a connection's `txRing` with `ServiceBase::ClientConn::sendMutex`. Client-side shared-memory sends are similarly serialized with `ClientBase::m_sendMutex`.
+- Aether treats disconnects and timeouts as part of the normal contract. Do not add exception-based flows; framework errors are negative codes, success is `0`, and application-defined handler errors may be positive.
+- Default mode is threaded: one accept thread plus one receiver thread per client. Passing `ms::RunLoop*` switches service/client objects into single-thread event-driven mode. Do not issue synchronous `call()` from the same RunLoop thread that must deliver the response.
+- The shared-memory transport and the stream transport share the same wire format. If a change touches `FrameHeader`, framing, or error semantics, inspect both the shared-memory path (`ClientBase`/`ServiceBase`) and the transport path (`ITransport`, `TransportClientBase`).
+- `TransportClientBase` has an important lifetime rule: derived destructors should call `disconnect()` before their own members are destroyed, because notifications can still arrive on the receiver thread until disconnect joins it.
+- Core C++ tests define small local services or stubs inside the test file. Use the `SVC_NAME` macro to get a unique per-test service name and `settle()` to give async threads time to drain before asserting.
+- Python `ipcgen` tests use the shared `parse()` helper from `tools/ipcgen/test/conftest.py`, and emitter tests often assert directly on generated text rather than compiling it.
+- `test/vendor/googletest` is a required submodule for C++ tests. Clone with `--recursive` or run `git submodule sync --recursive && git submodule update --init --recursive` before assuming a broken test configuration.
+- Style is consistent across the repo: C++17, Allman braces, `PascalCase` types, `camelCase` functions, `m_` members, `kCamelCase` constants, `#pragma once`, fixed-size wire types, and no `std::string` in wire payload structs.

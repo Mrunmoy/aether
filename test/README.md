@@ -8,6 +8,7 @@ Python tests use pytest.
 Google Test is a git submodule under `test/vendor/googletest`. Clone with `--recursive` or run:
 
 ```bash
+git submodule sync --recursive
 git submodule update --init --recursive
 ```
 

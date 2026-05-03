@@ -62,8 +62,10 @@ python3 build.py -e
 ```
 
 > **Forgot `--recursive`?** Run `git submodule update --init --recursive` from
-> the repo root. The submodules provide Google Test, the Vortex event loop, and
-> the Ouroboros ring buffer used by the core IPC transport.
+> the repo root. If your clone previously picked up older SSH-based submodule
+> URLs, run `git submodule sync --recursive` first, then rerun the update
+> command. The submodules provide Google Test, the Vortex event loop, and the
+> Ouroboros ring buffer used by the core IPC transport.
 
 That is enough for the first success. You do not need to regenerate code or
 edit any files before running the example.
