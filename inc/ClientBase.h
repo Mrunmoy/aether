@@ -88,6 +88,7 @@ namespace aether::ipc
         Connection m_conn;
         std::atomic<bool> m_running{false};
         std::thread m_receiverThread;
+        std::mutex m_lifecycleMutex; // serializes connect()/disconnect() transitions
 
         std::mutex m_handlerMutex; // guards RunLoop handler execution
         std::mutex m_sendMutex;   // serializes txRing writes (SPSC invariant)

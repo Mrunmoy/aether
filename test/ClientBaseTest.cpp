@@ -157,6 +157,53 @@ TEST(ClientBaseTest, ConnectAndDisconnect)
     svc.stop();
 }
 
+TEST(ClientBaseTest, ConcurrentConnectDisconnectStress)
+{
+    EchoService svc(SVC_NAME);
+    ASSERT_TRUE(svc.start());
+
+    for (int i = 0; i < 100; ++i)
+    {
+        ClientBase client(SVC_NAME);
+        std::atomic<bool> go{false};
+
+        std::thread connector([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            (void)client.connect();
+        });
+
+        std::thread disconnector([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            client.disconnect();
+        });
+
+        go.store(true, std::memory_order_release);
+        connector.join();
+        disconnector.join();
+
+        if (client.isConnected())
+        {
+            const std::vector<uint8_t> request = {'O', 'K'};
+            std::vector<uint8_t> response;
+            EXPECT_EQ(client.call(1, 1, request, &response), IPC_SUCCESS);
+            EXPECT_EQ(response, request);
+        }
+
+        client.disconnect();
+        EXPECT_FALSE(client.isConnected());
+    }
+
+    svc.stop();
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Single echo call
 // ═════════════════════════════════════════════════════════════════════

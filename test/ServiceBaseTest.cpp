@@ -122,6 +122,45 @@ TEST(ServiceBaseTest, StartAndStop)
     EXPECT_FALSE(svc.isRunning());
 }
 
+TEST(ServiceBaseTest, ConcurrentStartStopStress)
+{
+    EchoService svc(SVC_NAME);
+
+    for (int i = 0; i < 100; ++i)
+    {
+        std::atomic<bool> go{false};
+
+        std::thread starter([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            (void)svc.start();
+        });
+
+        std::thread stopper([&]
+        {
+            while (!go.load(std::memory_order_acquire))
+            {
+                std::this_thread::yield();
+            }
+            svc.stop();
+        });
+
+        go.store(true, std::memory_order_release);
+        starter.join();
+        stopper.join();
+
+        svc.stop();
+        EXPECT_FALSE(svc.isRunning());
+    }
+
+    ASSERT_TRUE(svc.start());
+    EXPECT_TRUE(svc.isRunning());
+    svc.stop();
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Single echo request/response
 // ═════════════════════════════════════════════════════════════════════

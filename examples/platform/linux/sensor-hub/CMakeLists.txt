@@ -29,4 +29,8 @@ target_include_directories(sensor_tests PRIVATE
 target_link_libraries(sensor_tests PRIVATE aether GTest::gtest_main Threads::Threads)
 
 include(GoogleTest)
-gtest_discover_tests(sensor_tests)
+if(AETHER_SANITIZERS)
+    add_test(NAME sensor_tests COMMAND sensor_tests)
+else()
+    gtest_discover_tests(sensor_tests)
+endif()
